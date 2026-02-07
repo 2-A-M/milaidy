@@ -58,9 +58,9 @@ jobs:
       fail-fast: false
       matrix:
         platform:
-          # macos-13 is Intel; macos-14+ is Apple Silicon
+          # macos-14 (ARM64) cross-compiles x64 via Rosetta
           - name: macOS (Intel)
-            runner: macos-13
+            runner: macos-14
             electron-args: --mac --x64
             artifact-glob: "*.dmg"
             artifact-name: macos-x64
