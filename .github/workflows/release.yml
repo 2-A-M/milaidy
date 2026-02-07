@@ -125,6 +125,16 @@ jobs:
         working-directory: apps/app/electron
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS code signing (Developer ID Application certificate)
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # macOS notarization (Apple notarytool)
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Windows code signing (optional — only used on Windows runners)
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -132,6 +142,7 @@ jobs:
           name: desktop-${{ matrix.platform.artifact-name }}
           path: |
             apps/app/electron/dist/*.dmg
+            apps/app/electron/dist/*.zip
             apps/app/electron/dist/*.exe
             apps/app/electron/dist/*.AppImage
             apps/app/electron/dist/*.deb
@@ -163,6 +174,7 @@ jobs:
           mkdir -p release-files
           find release-artifacts -type f \( \
             -name "*.dmg" -o \
+            -name "*.zip" -o \
             -name "*.exe" -o \
             -name "*.AppImage" -o \
             -name "*.deb" \

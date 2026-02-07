@@ -290,7 +290,7 @@ bun run dev
 
 ```typescript
 const config: CapacitorConfig = {
-  appId: 'ai.milaidy.app',
+  appId: 'com.miladyai.milaidy',
   appName: 'Milaidy',
   webDir: 'dist',
   server: {

@@ -27,18 +27,17 @@ The override ensures all transitive references resolve to the `next` tag:
 "@elizaos/plugin-cli": "next"
 ```
 
-### `@elizaos/computeruse` override (new)
+### `@elizaos/computeruse` override (resolved)
 
-`@elizaos/computeruse` is an optional peer dependency of `@elizaos/plugin-computeruse`.
-It's a native Rust addon (napi-rs) that hasn't been published to npm yet. Since
-`plugin-computeruse` works in MCP mode without it, we redirect the unresolvable
-peer dep to `@elizaos/core` so the resolver is satisfied:
+`@elizaos/computeruse` (the native napi-rs addon) is now published to npm (v0.24.22+).
+The override pins the minimum version to satisfy `@elizaos/plugin-computeruse`'s peer
+dependency (`>=0.24.20`). On macOS ARM64, the native `@elizaos/computeruse-darwin-arm64`
+binary is installed automatically. Other platforms fall back to MCP mode until their
+platform packages are published via the `release-computeruse-npm` workflow in `eliza/.github/workflows/`.
 
 ```json
-"@elizaos/computeruse": "npm:@elizaos/core@next"
+"@elizaos/computeruse": ">=0.24.22"
 ```
-
-Remove this override once `@elizaos/computeruse` is published to npm.
 
 ---
 
