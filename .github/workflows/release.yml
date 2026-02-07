@@ -144,8 +144,8 @@ jobs:
         working-directory: apps/app/electron
 
       # ── Code signing & notarization ────────────────────────────────────
-      # macOS: electron-builder auto-notarizes when hardenedRuntime is true
-      # and the APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD env vars are set.
+      # macOS: electron-builder v25+ notarizes via the "notarize": true
+      # config in electron-builder.config.json when these env vars are set.
       #
       # Required GitHub Secrets for Gatekeeper-clean macOS builds:
       #   CSC_LINK                     – base64-encoded .p12 signing certificate
