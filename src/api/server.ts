@@ -5,45 +5,47 @@
  * ElizaOS AgentRuntime. Default port: 2138. In dev mode, the Vite UI
  * dev server proxies /api and /ws here (see scripts/dev-ui.mjs).
  */
-import http from "node:http";
-import fs from "node:fs";
-import path from "node:path";
+
 import crypto from "node:crypto";
+import fs from "node:fs";
+import http from "node:http";
+import path from "node:path";
 import {
-  AgentRuntime,
+  type AgentRuntime,
   ChannelType,
+  type Content,
   createMessageMemory,
   logger,
   stringToUuid,
-  type Content,
   type UUID,
 } from "@elizaos/core";
 import {
-  loadMilaidyConfig,
-  saveMilaidyConfig,
   configFileExists,
+  loadMilaidyConfig,
   type MilaidyConfig,
+  saveMilaidyConfig,
 } from "../config/config.js";
-import { CharacterSchema } from "../config/zod-schema.js";
-import {
-  resolveDefaultAgentWorkspaceDir,
-} from "../providers/workspace.js";
 import { resolveStateDir } from "../config/paths.js";
-import { validatePluginConfig, type PluginParamInfo } from "./plugin-validation.js";
+import { CharacterSchema } from "../config/zod-schema.js";
+import { resolveDefaultAgentWorkspaceDir } from "../providers/workspace.js";
 import {
-  generateWalletKeys,
-  generateWalletForChain,
-  importWallet,
-  validatePrivateKey,
-  getWalletAddresses,
+  type PluginParamInfo,
+  validatePluginConfig,
+} from "./plugin-validation.js";
+import {
   fetchEvmBalances,
   fetchEvmNfts,
   fetchSolanaBalances,
   fetchSolanaNfts,
+  generateWalletForChain,
+  generateWalletKeys,
+  getWalletAddresses,
+  importWallet,
+  validatePrivateKey,
   type WalletBalancesResponse,
-  type WalletNftsResponse,
-  type WalletConfigStatus,
   type WalletChain,
+  type WalletConfigStatus,
+  type WalletNftsResponse,
 } from "./wallet.js";
 
 // ---------------------------------------------------------------------------
@@ -58,7 +60,9 @@ interface AutonomyServiceLike {
 }
 
 /** Helper to retrieve the AutonomyService from a runtime (may be null). */
-function getAutonomySvc(runtime: AgentRuntime | null): AutonomyServiceLike | null {
+function getAutonomySvc(
+  runtime: AgentRuntime | null,
+): AutonomyServiceLike | null {
   if (!runtime) return null;
   return runtime.getService("AUTONOMY") as AutonomyServiceLike | null;
 }
@@ -66,7 +70,13 @@ function getAutonomySvc(runtime: AgentRuntime | null): AutonomyServiceLike | nul
 interface ServerState {
   runtime: AgentRuntime | null;
   config: MilaidyConfig;
-  agentState: "not_started" | "running" | "paused" | "stopped" | "restarting" | "error";
+  agentState:
+    | "not_started"
+    | "running"
+    | "paused"
+    | "stopped"
+    | "restarting"
+    | "error";
   agentName: string;
   model: string | undefined;
   startedAt: number | undefined;
@@ -128,9 +138,14 @@ function findOwnPackageRoot(startDir: string): string {
     const pkgPath = path.join(dir, "package.json");
     if (fs.existsSync(pkgPath)) {
       try {
-        const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8")) as Record<string, unknown>;
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8")) as Record<
+          string,
+          unknown
+        >;
         if (pkg.name === "milaidy") return dir;
-      } catch { /* keep searching */ }
+      } catch {
+        /* keep searching */
+      }
     }
     const parent = path.dirname(dir);
     if (parent === dir) break;
@@ -181,7 +196,11 @@ function buildParamDefs(
       required: Boolean(def.required),
       sensitive,
       default: def.default as string | undefined,
-      currentValue: isSet ? (sensitive ? maskValue(envValue!) : envValue!) : null,
+      currentValue: isSet
+        ? sensitive
+          ? maskValue(envValue!)
+          : envValue!
+        : null,
       isSet,
     };
   });
@@ -199,53 +218,109 @@ function discoverPluginsFromManifest(): PluginEntry[] {
 
   if (fs.existsSync(manifestPath)) {
     try {
-      const index = JSON.parse(fs.readFileSync(manifestPath, "utf-8")) as PluginIndex;
-      return index.plugins.map((p) => {
-        const category = categorizePlugin(p.id);
-        const envKey = p.envKey;
-        const configured = envKey ? Boolean(process.env[envKey]) : p.configKeys.length === 0;
-        const parameters = p.pluginParameters ? buildParamDefs(p.pluginParameters) : [];
-        const paramInfos: PluginParamInfo[] = parameters.map((pd) => ({
-          key: pd.key, required: pd.required, sensitive: pd.sensitive,
-          type: pd.type, description: pd.description, default: pd.default,
-        }));
-        const validation = validatePluginConfig(p.id, category, envKey, p.configKeys, undefined, paramInfos);
+      const index = JSON.parse(
+        fs.readFileSync(manifestPath, "utf-8"),
+      ) as PluginIndex;
+      return index.plugins
+        .map((p) => {
+          const category = categorizePlugin(p.id);
+          const envKey = p.envKey;
+          const configured = envKey
+            ? Boolean(process.env[envKey])
+            : p.configKeys.length === 0;
+          const parameters = p.pluginParameters
+            ? buildParamDefs(p.pluginParameters)
+            : [];
+          const paramInfos: PluginParamInfo[] = parameters.map((pd) => ({
+            key: pd.key,
+            required: pd.required,
+            sensitive: pd.sensitive,
+            type: pd.type,
+            description: pd.description,
+            default: pd.default,
+          }));
+          const validation = validatePluginConfig(
+            p.id,
+            category,
+            envKey,
+            p.configKeys,
+            undefined,
+            paramInfos,
+          );
 
-        return {
-          id: p.id,
-          name: p.name,
-          description: p.description,
-          enabled: false,
-          configured,
-          envKey,
-          category,
-          configKeys: p.configKeys,
-          parameters,
-          validationErrors: validation.errors,
-          validationWarnings: validation.warnings,
-        };
-      }).sort((a, b) => a.name.localeCompare(b.name));
+          return {
+            id: p.id,
+            name: p.name,
+            description: p.description,
+            enabled: false,
+            configured,
+            envKey,
+            category,
+            configKeys: p.configKeys,
+            parameters,
+            validationErrors: validation.errors,
+            validationWarnings: validation.warnings,
+          };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
     } catch (err) {
-      logger.debug(`[milaidy-api] Failed to read plugins.json: ${err instanceof Error ? err.message : err}`);
+      logger.debug(
+        `[milaidy-api] Failed to read plugins.json: ${err instanceof Error ? err.message : err}`,
+      );
     }
   }
 
   // Fallback: no manifest found
-  logger.debug("[milaidy-api] plugins.json not found — run `npm run generate:plugins`");
+  logger.debug(
+    "[milaidy-api] plugins.json not found — run `npm run generate:plugins`",
+  );
   return [];
 }
 
-function categorizePlugin(id: string): "ai-provider" | "connector" | "database" | "feature" {
+function categorizePlugin(
+  id: string,
+): "ai-provider" | "connector" | "database" | "feature" {
   const aiProviders = [
-    "openai", "anthropic", "groq", "xai", "ollama", "openrouter",
-    "google-genai", "local-ai", "vercel-ai-gateway", "deepseek",
-    "together", "mistral", "cohere", "perplexity", "qwen", "minimax",
+    "openai",
+    "anthropic",
+    "groq",
+    "xai",
+    "ollama",
+    "openrouter",
+    "google-genai",
+    "local-ai",
+    "vercel-ai-gateway",
+    "deepseek",
+    "together",
+    "mistral",
+    "cohere",
+    "perplexity",
+    "qwen",
+    "minimax",
   ];
   const connectors = [
-    "telegram", "discord", "slack", "whatsapp", "signal", "imessage",
-    "bluebubbles", "farcaster", "bluesky", "matrix", "nostr", "msteams",
-    "mattermost", "google-chat", "feishu", "line", "zalo", "zalouser",
-    "tlon", "twitch", "nextcloud-talk", "instagram",
+    "telegram",
+    "discord",
+    "slack",
+    "whatsapp",
+    "signal",
+    "imessage",
+    "bluebubbles",
+    "farcaster",
+    "bluesky",
+    "matrix",
+    "nostr",
+    "msteams",
+    "mattermost",
+    "google-chat",
+    "feishu",
+    "line",
+    "zalo",
+    "zalouser",
+    "tlon",
+    "twitch",
+    "nextcloud-talk",
+    "instagram",
   ];
   const databases = ["sql", "localdb", "inmemorydb"];
 
@@ -269,10 +344,14 @@ type SkillPreferencesMap = Record<string, boolean>;
  * Load persisted skill preferences from the agent's database.
  * Returns an empty map when the runtime or database isn't available.
  */
-async function loadSkillPreferences(runtime: AgentRuntime | null): Promise<SkillPreferencesMap> {
+async function loadSkillPreferences(
+  runtime: AgentRuntime | null,
+): Promise<SkillPreferencesMap> {
   if (!runtime) return {};
   try {
-    const prefs = await runtime.getCache<SkillPreferencesMap>(SKILL_PREFS_CACHE_KEY);
+    const prefs = await runtime.getCache<SkillPreferencesMap>(
+      SKILL_PREFS_CACHE_KEY,
+    );
     return prefs ?? {};
   } catch {
     return {};
@@ -282,11 +361,16 @@ async function loadSkillPreferences(runtime: AgentRuntime | null): Promise<Skill
 /**
  * Persist skill preferences to the agent's database.
  */
-async function saveSkillPreferences(runtime: AgentRuntime, prefs: SkillPreferencesMap): Promise<void> {
+async function saveSkillPreferences(
+  runtime: AgentRuntime,
+  prefs: SkillPreferencesMap,
+): Promise<void> {
   try {
     await runtime.setCache(SKILL_PREFS_CACHE_KEY, prefs);
   } catch (err) {
-    logger.debug(`[milaidy-api] Failed to save skill preferences: ${err instanceof Error ? err.message : err}`);
+    logger.debug(
+      `[milaidy-api] Failed to save skill preferences: ${err instanceof Error ? err.message : err}`,
+    );
   }
 }
 
@@ -349,7 +433,14 @@ async function discoverSkills(
       const service = runtime.getService("AGENT_SKILLS_SERVICE");
       // eslint-disable-next-line -- runtime service is loosely typed; cast via unknown
       const svc = service as unknown as
-        | { getLoadedSkills?: () => Array<{ slug: string; name: string; description: string; source: string }> }
+        | {
+            getLoadedSkills?: () => Array<{
+              slug: string;
+              name: string;
+              description: string;
+              source: string;
+            }>;
+          }
         | undefined;
       if (svc && typeof svc.getLoadedSkills === "function") {
         const loadedSkills = svc.getLoadedSkills();
@@ -366,7 +457,9 @@ async function discoverSkills(
         }
       }
     } catch {
-      logger.debug("[milaidy-api] AgentSkillsService not available, falling back to filesystem scan");
+      logger.debug(
+        "[milaidy-api] AgentSkillsService not available, falling back to filesystem scan",
+      );
     }
   }
 
@@ -375,13 +468,18 @@ async function discoverSkills(
 
   // Bundled skills from the @elizaos/skills package
   try {
-    const skillsPkg = await import("@elizaos/skills") as { getSkillsDir: () => string };
+    // @ts-expect-error — optional dependency; may not ship type declarations
+    const skillsPkg = (await import("@elizaos/skills")) as {
+      getSkillsDir: () => string;
+    };
     const bundledDir = skillsPkg.getSkillsDir();
     if (bundledDir && fs.existsSync(bundledDir)) {
       skillsDirs.push(bundledDir);
     }
   } catch {
-    logger.debug("[milaidy-api] @elizaos/skills not available for skill discovery");
+    logger.debug(
+      "[milaidy-api] @elizaos/skills not available for skill discovery",
+    );
   }
 
   // Workspace-local skills
@@ -411,11 +509,23 @@ async function discoverSkills(
 /**
  * Recursively scan a directory for SKILL.md files, applying config filtering.
  */
-function scanSkillsDir(dir: string, skills: SkillEntry[], seen: Set<string>, config: MilaidyConfig, dbPrefs: SkillPreferencesMap): void {
+function scanSkillsDir(
+  dir: string,
+  skills: SkillEntry[],
+  seen: Set<string>,
+  config: MilaidyConfig,
+  dbPrefs: SkillPreferencesMap,
+): void {
   if (!fs.existsSync(dir)) return;
 
   for (const entry of fs.readdirSync(dir)) {
-    if (entry.startsWith(".") || entry === "node_modules" || entry === "src" || entry === "dist") continue;
+    if (
+      entry.startsWith(".") ||
+      entry === "node_modules" ||
+      entry === "src" ||
+      entry === "dist"
+    )
+      continue;
 
     const entryPath = path.join(dir, entry);
     let stat: fs.Stats;
@@ -444,8 +554,10 @@ function scanSkillsDir(dir: string, skills: SkillEntry[], seen: Set<string>, con
           const fmBlock = fmMatch[1];
           const nameMatch = /^name:\s*(.+)$/m.exec(fmBlock);
           const descMatch = /^description:\s*(.+)$/m.exec(fmBlock);
-          if (nameMatch) skillName = nameMatch[1].trim().replace(/^["']|["']$/g, "");
-          if (descMatch) description = descMatch[1].trim().replace(/^["']|["']$/g, "");
+          if (nameMatch)
+            skillName = nameMatch[1].trim().replace(/^["']|["']$/g, "");
+          if (descMatch)
+            description = descMatch[1].trim().replace(/^["']|["']$/g, "");
         }
 
         // Fallback to heading / first paragraph
@@ -453,7 +565,12 @@ function scanSkillsDir(dir: string, skills: SkillEntry[], seen: Set<string>, con
           const lines = content.split("\n");
           const heading = lines.find((l) => l.trim().startsWith("#"));
           if (heading) skillName = heading.replace(/^#+\s*/, "").trim();
-          const descLine = lines.find((l) => l.trim() && !l.trim().startsWith("#") && !l.trim().startsWith("---"));
+          const descLine = lines.find(
+            (l) =>
+              l.trim() &&
+              !l.trim().startsWith("#") &&
+              !l.trim().startsWith("---"),
+          );
           description = descLine?.trim() ?? "";
         }
 
@@ -463,7 +580,9 @@ function scanSkillsDir(dir: string, skills: SkillEntry[], seen: Set<string>, con
           description: description.slice(0, 200),
           enabled: resolveSkillEnabled(entry, config, dbPrefs),
         });
-      } catch { /* skip unreadable */ }
+      } catch {
+        /* skip unreadable */
+      }
     } else {
       // Recurse into subdirectories for nested skill groups
       scanSkillsDir(entryPath, skills, seen, config, dbPrefs);
@@ -486,7 +605,11 @@ function readBody(req: http.IncomingMessage): Promise<string> {
       totalBytes += c.length;
       if (totalBytes > MAX_BODY_BYTES) {
         req.destroy();
-        reject(new Error(`Request body exceeds maximum size (${MAX_BODY_BYTES} bytes)`));
+        reject(
+          new Error(
+            `Request body exceeds maximum size (${MAX_BODY_BYTES} bytes)`,
+          ),
+        );
         return;
       }
       chunks.push(c);
@@ -508,7 +631,8 @@ async function readJsonBody<T = Record<string, unknown>>(
   try {
     raw = await readBody(req);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Failed to read request body";
+    const msg =
+      err instanceof Error ? err.message : "Failed to read request body";
     error(res, msg, 413);
     return null;
   }
@@ -557,17 +681,94 @@ function getProviderOptions(): Array<{
   description: string;
 }> {
   return [
-    { id: "elizacloud", name: "Eliza Cloud", envKey: null, pluginName: "@elizaos/plugin-elizacloud", keyPrefix: null, description: "Free credits to start, but they run out." },
-    { id: "anthropic", name: "Anthropic", envKey: "ANTHROPIC_API_KEY", pluginName: "@elizaos/plugin-anthropic", keyPrefix: "sk-ant-", description: "Claude models." },
-    { id: "openai", name: "OpenAI", envKey: "OPENAI_API_KEY", pluginName: "@elizaos/plugin-openai", keyPrefix: "sk-", description: "GPT models." },
-    { id: "openrouter", name: "OpenRouter", envKey: "OPENROUTER_API_KEY", pluginName: "@elizaos/plugin-openrouter", keyPrefix: "sk-or-", description: "Access multiple models via one API key." },
-    { id: "gemini", name: "Gemini", envKey: "GOOGLE_API_KEY", pluginName: "@elizaos/plugin-google-genai", keyPrefix: null, description: "Google's Gemini models." },
-    { id: "grok", name: "Grok", envKey: "XAI_API_KEY", pluginName: "@elizaos/plugin-xai", keyPrefix: "xai-", description: "xAI's Grok models." },
-    { id: "groq", name: "Groq", envKey: "GROQ_API_KEY", pluginName: "@elizaos/plugin-groq", keyPrefix: "gsk_", description: "Fast inference." },
-    { id: "deepseek", name: "DeepSeek", envKey: "DEEPSEEK_API_KEY", pluginName: "@elizaos/plugin-deepseek", keyPrefix: "sk-", description: "DeepSeek models." },
-    { id: "mistral", name: "Mistral", envKey: "MISTRAL_API_KEY", pluginName: "@elizaos/plugin-mistral", keyPrefix: null, description: "Mistral AI models." },
-    { id: "together", name: "Together AI", envKey: "TOGETHER_API_KEY", pluginName: "@elizaos/plugin-together", keyPrefix: null, description: "Open-source model hosting." },
-    { id: "ollama", name: "Ollama (local)", envKey: null, pluginName: "@elizaos/plugin-ollama", keyPrefix: null, description: "Local models, no API key needed." },
+    {
+      id: "elizacloud",
+      name: "Eliza Cloud",
+      envKey: null,
+      pluginName: "@elizaos/plugin-elizacloud",
+      keyPrefix: null,
+      description: "Free credits to start, but they run out.",
+    },
+    {
+      id: "anthropic",
+      name: "Anthropic",
+      envKey: "ANTHROPIC_API_KEY",
+      pluginName: "@elizaos/plugin-anthropic",
+      keyPrefix: "sk-ant-",
+      description: "Claude models.",
+    },
+    {
+      id: "openai",
+      name: "OpenAI",
+      envKey: "OPENAI_API_KEY",
+      pluginName: "@elizaos/plugin-openai",
+      keyPrefix: "sk-",
+      description: "GPT models.",
+    },
+    {
+      id: "openrouter",
+      name: "OpenRouter",
+      envKey: "OPENROUTER_API_KEY",
+      pluginName: "@elizaos/plugin-openrouter",
+      keyPrefix: "sk-or-",
+      description: "Access multiple models via one API key.",
+    },
+    {
+      id: "gemini",
+      name: "Gemini",
+      envKey: "GOOGLE_API_KEY",
+      pluginName: "@elizaos/plugin-google-genai",
+      keyPrefix: null,
+      description: "Google's Gemini models.",
+    },
+    {
+      id: "grok",
+      name: "Grok",
+      envKey: "XAI_API_KEY",
+      pluginName: "@elizaos/plugin-xai",
+      keyPrefix: "xai-",
+      description: "xAI's Grok models.",
+    },
+    {
+      id: "groq",
+      name: "Groq",
+      envKey: "GROQ_API_KEY",
+      pluginName: "@elizaos/plugin-groq",
+      keyPrefix: "gsk_",
+      description: "Fast inference.",
+    },
+    {
+      id: "deepseek",
+      name: "DeepSeek",
+      envKey: "DEEPSEEK_API_KEY",
+      pluginName: "@elizaos/plugin-deepseek",
+      keyPrefix: "sk-",
+      description: "DeepSeek models.",
+    },
+    {
+      id: "mistral",
+      name: "Mistral",
+      envKey: "MISTRAL_API_KEY",
+      pluginName: "@elizaos/plugin-mistral",
+      keyPrefix: null,
+      description: "Mistral AI models.",
+    },
+    {
+      id: "together",
+      name: "Together AI",
+      envKey: "TOGETHER_API_KEY",
+      pluginName: "@elizaos/plugin-together",
+      keyPrefix: null,
+      description: "Open-source model hosting.",
+    },
+    {
+      id: "ollama",
+      name: "Ollama (local)",
+      envKey: null,
+      pluginName: "@elizaos/plugin-ollama",
+      keyPrefix: null,
+      description: "Local models, no API key needed.",
+    },
   ];
 }
 
@@ -586,7 +787,10 @@ async function handleRequest(
   ctx?: RequestContext,
 ): Promise<void> {
   const method = req.method ?? "GET";
-  const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+  const url = new URL(
+    req.url ?? "/",
+    `http://${req.headers.host ?? "localhost"}`,
+  );
   const pathname = url.pathname;
 
   // CORS preflight
@@ -657,21 +861,26 @@ async function handleRequest(
 
     if (body.provider && body.providerApiKey) {
       if (!config.env) config.env = {};
-      const providerOpt = getProviderOptions().find((p) => p.id === body.provider);
+      const providerOpt = getProviderOptions().find(
+        (p) => p.id === body.provider,
+      );
       if (providerOpt?.envKey) {
-        (config.env as Record<string, string>)[providerOpt.envKey] = body.providerApiKey as string;
+        (config.env as Record<string, string>)[providerOpt.envKey] =
+          body.providerApiKey as string;
         process.env[providerOpt.envKey] = body.providerApiKey as string;
       }
     }
 
     if (body.telegramBotToken) {
       if (!config.env) config.env = {};
-      (config.env as Record<string, string>).TELEGRAM_BOT_TOKEN = body.telegramBotToken as string;
+      (config.env as Record<string, string>).TELEGRAM_BOT_TOKEN =
+        body.telegramBotToken as string;
       process.env.TELEGRAM_BOT_TOKEN = body.telegramBotToken as string;
     }
     if (body.discordBotToken) {
       if (!config.env) config.env = {};
-      (config.env as Record<string, string>).DISCORD_API_TOKEN = body.discordBotToken as string;
+      (config.env as Record<string, string>).DISCORD_API_TOKEN =
+        body.discordBotToken as string;
       process.env.DISCORD_API_TOKEN = body.discordBotToken as string;
     }
 
@@ -682,16 +891,22 @@ async function handleRequest(
 
         if (!process.env.EVM_PRIVATE_KEY) {
           if (!config.env) config.env = {};
-          (config.env as Record<string, string>).EVM_PRIVATE_KEY = walletKeys.evmPrivateKey;
+          (config.env as Record<string, string>).EVM_PRIVATE_KEY =
+            walletKeys.evmPrivateKey;
           process.env.EVM_PRIVATE_KEY = walletKeys.evmPrivateKey;
-          logger.info(`[milaidy-api] Generated EVM wallet: ${walletKeys.evmAddress}`);
+          logger.info(
+            `[milaidy-api] Generated EVM wallet: ${walletKeys.evmAddress}`,
+          );
         }
 
         if (!process.env.SOLANA_PRIVATE_KEY) {
           if (!config.env) config.env = {};
-          (config.env as Record<string, string>).SOLANA_PRIVATE_KEY = walletKeys.solanaPrivateKey;
+          (config.env as Record<string, string>).SOLANA_PRIVATE_KEY =
+            walletKeys.solanaPrivateKey;
           process.env.SOLANA_PRIVATE_KEY = walletKeys.solanaPrivateKey;
-          logger.info(`[milaidy-api] Generated Solana wallet: ${walletKeys.solanaAddress}`);
+          logger.info(
+            `[milaidy-api] Generated Solana wallet: ${walletKeys.solanaAddress}`,
+          );
         }
       } catch (err) {
         logger.warn(`[milaidy-api] Failed to generate wallet keys: ${err}`);
@@ -710,7 +925,12 @@ async function handleRequest(
     state.agentState = "running";
     state.startedAt = Date.now();
     const detectedModel = state.runtime
-      ? (state.runtime.plugins.find((p) => p.name.includes("anthropic") || p.name.includes("openai") || p.name.includes("groq"))?.name ?? "unknown")
+      ? (state.runtime.plugins.find(
+          (p) =>
+            p.name.includes("anthropic") ||
+            p.name.includes("openai") ||
+            p.name.includes("groq"),
+        )?.name ?? "unknown")
       : "unknown";
     state.model = detectedModel;
 
@@ -740,7 +960,10 @@ async function handleRequest(
     state.agentState = "stopped";
     state.startedAt = undefined;
     state.model = undefined;
-    json(res, { ok: true, status: { state: state.agentState, agentName: state.agentName } });
+    json(res, {
+      ok: true,
+      status: { state: state.agentState, agentName: state.agentName },
+    });
     return;
   }
 
@@ -787,7 +1010,11 @@ async function handleRequest(
   // ── POST /api/agent/restart ────────────────────────────────────────────
   if (method === "POST" && pathname === "/api/agent/restart") {
     if (!ctx?.onRestart) {
-      error(res, "Restart is not supported in this mode (no restart handler registered)", 501);
+      error(
+        res,
+        "Restart is not supported in this mode (no restart handler registered)",
+        501,
+      );
       return;
     }
 
@@ -808,12 +1035,20 @@ async function handleRequest(
         state.startedAt = Date.now();
         json(res, {
           ok: true,
-          status: { state: state.agentState, agentName: state.agentName, startedAt: state.startedAt },
+          status: {
+            state: state.agentState,
+            agentName: state.agentName,
+            startedAt: state.startedAt,
+          },
         });
       } else {
         // Restore previous state instead of permanently stuck in "error"
         state.agentState = previousState;
-        error(res, "Restart handler returned null — runtime failed to re-initialize", 500);
+        error(
+          res,
+          "Restart handler returned null — runtime failed to re-initialize",
+          500,
+        );
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -833,8 +1068,11 @@ async function handleRequest(
         try {
           await state.runtime.stop();
         } catch (stopErr) {
-          const msg = stopErr instanceof Error ? stopErr.message : String(stopErr);
-          logger.warn(`[milaidy-api] Error stopping runtime during reset: ${msg}`);
+          const msg =
+            stopErr instanceof Error ? stopErr.message : String(stopErr);
+          logger.warn(
+            `[milaidy-api] Error stopping runtime during reset: ${msg}`,
+          );
         }
         state.runtime = null;
       }
@@ -916,12 +1154,17 @@ async function handleRequest(
     if (state.runtime) {
       const c = state.runtime.character;
       if (body.name != null) c.name = body.name as string;
-      if (body.bio != null) c.bio = Array.isArray(body.bio) ? body.bio as string[] : [String(body.bio)];
+      if (body.bio != null)
+        c.bio = Array.isArray(body.bio)
+          ? (body.bio as string[])
+          : [String(body.bio)];
       if (body.system != null) c.system = body.system as string;
       if (body.adjectives != null) c.adjectives = body.adjectives as string[];
       if (body.topics != null) c.topics = body.topics as string[];
-      if (body.style != null) c.style = body.style as NonNullable<typeof c.style>;
-      if (body.postExamples != null) c.postExamples = body.postExamples as string[];
+      if (body.style != null)
+        c.style = body.style as NonNullable<typeof c.style>;
+      if (body.postExamples != null)
+        c.postExamples = body.postExamples as string[];
     }
     if (body.name) {
       state.agentName = body.name as string;
@@ -934,19 +1177,83 @@ async function handleRequest(
   if (method === "GET" && pathname === "/api/character/schema") {
     json(res, {
       fields: [
-        { key: "name", type: "string", label: "Name", description: "Agent display name", maxLength: 100 },
-        { key: "username", type: "string", label: "Username", description: "Agent username for platforms", maxLength: 50 },
-        { key: "bio", type: "string | string[]", label: "Bio", description: "Biography — single string or array of points" },
-        { key: "system", type: "string", label: "System Prompt", description: "System prompt defining core behavior", maxLength: 10000 },
-        { key: "adjectives", type: "string[]", label: "Adjectives", description: "Personality adjectives (e.g. curious, witty)" },
-        { key: "topics", type: "string[]", label: "Topics", description: "Topics the agent is knowledgeable about" },
-        { key: "style", type: "object", label: "Style", description: "Communication style guides", children: [
-          { key: "all", type: "string[]", label: "All", description: "Style guidelines for all responses" },
-          { key: "chat", type: "string[]", label: "Chat", description: "Style guidelines for chat responses" },
-          { key: "post", type: "string[]", label: "Post", description: "Style guidelines for social media posts" },
-        ]},
-        { key: "messageExamples", type: "array", label: "Message Examples", description: "Example conversations demonstrating the agent's voice" },
-        { key: "postExamples", type: "string[]", label: "Post Examples", description: "Example social media posts" },
+        {
+          key: "name",
+          type: "string",
+          label: "Name",
+          description: "Agent display name",
+          maxLength: 100,
+        },
+        {
+          key: "username",
+          type: "string",
+          label: "Username",
+          description: "Agent username for platforms",
+          maxLength: 50,
+        },
+        {
+          key: "bio",
+          type: "string | string[]",
+          label: "Bio",
+          description: "Biography — single string or array of points",
+        },
+        {
+          key: "system",
+          type: "string",
+          label: "System Prompt",
+          description: "System prompt defining core behavior",
+          maxLength: 10000,
+        },
+        {
+          key: "adjectives",
+          type: "string[]",
+          label: "Adjectives",
+          description: "Personality adjectives (e.g. curious, witty)",
+        },
+        {
+          key: "topics",
+          type: "string[]",
+          label: "Topics",
+          description: "Topics the agent is knowledgeable about",
+        },
+        {
+          key: "style",
+          type: "object",
+          label: "Style",
+          description: "Communication style guides",
+          children: [
+            {
+              key: "all",
+              type: "string[]",
+              label: "All",
+              description: "Style guidelines for all responses",
+            },
+            {
+              key: "chat",
+              type: "string[]",
+              label: "Chat",
+              description: "Style guidelines for chat responses",
+            },
+            {
+              key: "post",
+              type: "string[]",
+              label: "Post",
+              description: "Style guidelines for social media posts",
+            },
+          ],
+        },
+        {
+          key: "messageExamples",
+          type: "array",
+          label: "Message Examples",
+          description: "Example conversations demonstrating the agent's voice",
+        },
+        {
+          key: "postExamples",
+          type: "string[]",
+          label: "Post Examples",
+          description: "Example social media posts",
+        },
       ],
     });
     return;
@@ -960,7 +1267,10 @@ async function handleRequest(
       for (const plugin of state.plugins) {
         const suffix = `plugin-${plugin.id}`;
         plugin.enabled = loadedNames.some(
-          (name) => name === plugin.id || name === suffix || name.endsWith(`/${suffix}`),
+          (name) =>
+            name === plugin.id ||
+            name === suffix ||
+            name.endsWith(`/${suffix}`),
         );
       }
     }
@@ -971,14 +1281,27 @@ async function handleRequest(
         const envValue = process.env[param.key];
         param.isSet = Boolean(envValue && envValue.trim());
         param.currentValue = param.isSet
-          ? (param.sensitive ? maskValue(envValue!) : envValue!)
+          ? param.sensitive
+            ? maskValue(envValue!)
+            : envValue!
           : null;
       }
       const paramInfos: PluginParamInfo[] = plugin.parameters.map((p) => ({
-        key: p.key, required: p.required, sensitive: p.sensitive,
-        type: p.type, description: p.description, default: p.default,
+        key: p.key,
+        required: p.required,
+        sensitive: p.sensitive,
+        type: p.type,
+        description: p.description,
+        default: p.default,
       }));
-      const validation = validatePluginConfig(plugin.id, plugin.category, plugin.envKey, plugin.configKeys, undefined, paramInfos);
+      const validation = validatePluginConfig(
+        plugin.id,
+        plugin.category,
+        plugin.envKey,
+        plugin.configKeys,
+        undefined,
+        paramInfos,
+      );
       plugin.validationErrors = validation.errors;
       plugin.validationWarnings = validation.warnings;
     }
@@ -990,7 +1313,10 @@ async function handleRequest(
   // ── PUT /api/plugins/:id ────────────────────────────────────────────────
   if (method === "PUT" && pathname.startsWith("/api/plugins/")) {
     const pluginId = pathname.slice("/api/plugins/".length);
-    const body = await readJsonBody<{ enabled?: boolean; config?: Record<string, string> }>(req, res);
+    const body = await readJsonBody<{
+      enabled?: boolean;
+      config?: Record<string, string>;
+    }>(req, res);
     if (!body) return;
 
     const plugin = state.plugins.find((p) => p.id === pluginId);
@@ -1003,17 +1329,31 @@ async function handleRequest(
       plugin.enabled = body.enabled;
     }
     if (body.config) {
-      const pluginParamInfos: PluginParamInfo[] = plugin.parameters.map((p) => ({
-        key: p.key, required: p.required, sensitive: p.sensitive,
-        type: p.type, description: p.description, default: p.default,
-      }));
+      const pluginParamInfos: PluginParamInfo[] = plugin.parameters.map(
+        (p) => ({
+          key: p.key,
+          required: p.required,
+          sensitive: p.sensitive,
+          type: p.type,
+          description: p.description,
+          default: p.default,
+        }),
+      );
       const configValidation = validatePluginConfig(
-        pluginId, plugin.category, plugin.envKey,
-        Object.keys(body.config), body.config, pluginParamInfos,
+        pluginId,
+        plugin.category,
+        plugin.envKey,
+        Object.keys(body.config),
+        body.config,
+        pluginParamInfos,
       );
 
       if (!configValidation.valid) {
-        json(res, { ok: false, plugin, validationErrors: configValidation.errors }, 422);
+        json(
+          res,
+          { ok: false, plugin, validationErrors: configValidation.errors },
+          422,
+        );
         return;
       }
 
@@ -1027,10 +1367,21 @@ async function handleRequest(
 
     // Refresh validation
     const refreshParamInfos: PluginParamInfo[] = plugin.parameters.map((p) => ({
-      key: p.key, required: p.required, sensitive: p.sensitive,
-      type: p.type, description: p.description, default: p.default,
+      key: p.key,
+      required: p.required,
+      sensitive: p.sensitive,
+      type: p.type,
+      description: p.description,
+      default: p.default,
     }));
-    const updated = validatePluginConfig(pluginId, plugin.category, plugin.envKey, plugin.configKeys, undefined, refreshParamInfos);
+    const updated = validatePluginConfig(
+      pluginId,
+      plugin.category,
+      plugin.envKey,
+      plugin.configKeys,
+      undefined,
+      refreshParamInfos,
+    );
     plugin.validationErrors = updated.errors;
     plugin.validationWarnings = updated.warnings;
 
@@ -1040,20 +1391,32 @@ async function handleRequest(
 
   // ── GET /api/registry/plugins ──────────────────────────────────────────
   if (method === "GET" && pathname === "/api/registry/plugins") {
-    const { getRegistryPlugins } = await import("../services/registry-client.js");
+    const { getRegistryPlugins } = await import(
+      "../services/registry-client.js"
+    );
     try {
       const registry = await getRegistryPlugins();
       const plugins = Array.from(registry.values());
       json(res, { count: plugins.length, plugins });
     } catch (err) {
-      error(res, `Failed to fetch registry: ${err instanceof Error ? err.message : String(err)}`, 502);
+      error(
+        res,
+        `Failed to fetch registry: ${err instanceof Error ? err.message : String(err)}`,
+        502,
+      );
     }
     return;
   }
 
   // ── GET /api/registry/plugins/:name ─────────────────────────────────────
-  if (method === "GET" && pathname.startsWith("/api/registry/plugins/") && pathname.length > "/api/registry/plugins/".length) {
-    const name = decodeURIComponent(pathname.slice("/api/registry/plugins/".length));
+  if (
+    method === "GET" &&
+    pathname.startsWith("/api/registry/plugins/") &&
+    pathname.length > "/api/registry/plugins/".length
+  ) {
+    const name = decodeURIComponent(
+      pathname.slice("/api/registry/plugins/".length),
+    );
     const { getPluginInfo } = await import("../services/registry-client.js");
 
     try {
@@ -1064,7 +1427,11 @@ async function handleRequest(
       }
       json(res, { plugin: info });
     } catch (err) {
-      error(res, `Failed to look up plugin: ${err instanceof Error ? err.message : String(err)}`, 502);
+      error(
+        res,
+        `Failed to look up plugin: ${err instanceof Error ? err.message : String(err)}`,
+        502,
+      );
     }
     return;
   }
@@ -1081,11 +1448,17 @@ async function handleRequest(
 
     try {
       const limitParam = url.searchParams.get("limit");
-      const limit = limitParam ? Math.min(Math.max(Number(limitParam), 1), 50) : 15;
+      const limit = limitParam
+        ? Math.min(Math.max(Number(limitParam), 1), 50)
+        : 15;
       const results = await searchPlugins(query, limit);
       json(res, { query, count: results.length, results });
     } catch (err) {
-      error(res, `Search failed: ${err instanceof Error ? err.message : String(err)}`, 502);
+      error(
+        res,
+        `Search failed: ${err instanceof Error ? err.message : String(err)}`,
+        502,
+      );
     }
     return;
   }
@@ -1098,7 +1471,11 @@ async function handleRequest(
       const registry = await refreshRegistry();
       json(res, { ok: true, count: registry.size });
     } catch (err) {
-      error(res, `Refresh failed: ${err instanceof Error ? err.message : String(err)}`, 502);
+      error(
+        res,
+        `Refresh failed: ${err instanceof Error ? err.message : String(err)}`,
+        502,
+      );
     }
     return;
   }
@@ -1106,7 +1483,10 @@ async function handleRequest(
   // ── POST /api/plugins/install ───────────────────────────────────────────
   // Install a plugin from the registry and restart the agent.
   if (method === "POST" && pathname === "/api/plugins/install") {
-    const body = await readJsonBody<{ name: string; autoRestart?: boolean }>(req, res);
+    const body = await readJsonBody<{ name: string; autoRestart?: boolean }>(
+      req,
+      res,
+    );
     if (!body) return;
     const pluginName = body.name?.trim();
 
@@ -1132,8 +1512,12 @@ async function handleRequest(
         const { requestRestart } = await import("../runtime/restart.js");
         // Defer the restart so the HTTP response is sent first
         setTimeout(() => {
-          Promise.resolve(requestRestart(`Plugin ${result.pluginName} installed`)).catch((err) => {
-            logger.error(`[api] Restart after install failed: ${err instanceof Error ? err.message : String(err)}`);
+          Promise.resolve(
+            requestRestart(`Plugin ${result.pluginName} installed`),
+          ).catch((err) => {
+            logger.error(
+              `[api] Restart after install failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
           });
         }, 500);
       }
@@ -1151,14 +1535,21 @@ async function handleRequest(
           : `${result.pluginName} installed.`,
       });
     } catch (err) {
-      error(res, `Install failed: ${err instanceof Error ? err.message : String(err)}`, 500);
+      error(
+        res,
+        `Install failed: ${err instanceof Error ? err.message : String(err)}`,
+        500,
+      );
     }
     return;
   }
 
   // ── POST /api/plugins/uninstall ─────────────────────────────────────────
   if (method === "POST" && pathname === "/api/plugins/uninstall") {
-    const body = await readJsonBody<{ name: string; autoRestart?: boolean }>(req, res);
+    const body = await readJsonBody<{ name: string; autoRestart?: boolean }>(
+      req,
+      res,
+    );
     if (!body) return;
     const pluginName = body.name?.trim();
 
@@ -1180,8 +1571,12 @@ async function handleRequest(
       if (body.autoRestart !== false && result.requiresRestart) {
         const { requestRestart } = await import("../runtime/restart.js");
         setTimeout(() => {
-          Promise.resolve(requestRestart(`Plugin ${pluginName} uninstalled`)).catch((err) => {
-            logger.error(`[api] Restart after uninstall failed: ${err instanceof Error ? err.message : String(err)}`);
+          Promise.resolve(
+            requestRestart(`Plugin ${pluginName} uninstalled`),
+          ).catch((err) => {
+            logger.error(
+              `[api] Restart after uninstall failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
           });
         }, 500);
       }
@@ -1195,7 +1590,11 @@ async function handleRequest(
           : `${pluginName} uninstalled.`,
       });
     } catch (err) {
-      error(res, `Uninstall failed: ${err instanceof Error ? err.message : String(err)}`, 500);
+      error(
+        res,
+        `Uninstall failed: ${err instanceof Error ? err.message : String(err)}`,
+        500,
+      );
     }
     return;
   }
@@ -1203,13 +1602,19 @@ async function handleRequest(
   // ── GET /api/plugins/installed ──────────────────────────────────────────
   // List plugins that were installed from the registry at runtime.
   if (method === "GET" && pathname === "/api/plugins/installed") {
-    const { listInstalledPlugins } = await import("../services/plugin-installer.js");
+    const { listInstalledPlugins } = await import(
+      "../services/plugin-installer.js"
+    );
 
     try {
       const installed = await listInstalledPlugins();
       json(res, { count: installed.length, plugins: installed });
     } catch (err) {
-      error(res, `Failed to list installed plugins: ${err instanceof Error ? err.message : String(err)}`, 500);
+      error(
+        res,
+        `Failed to list installed plugins: ${err instanceof Error ? err.message : String(err)}`,
+        500,
+      );
     }
     return;
   }
@@ -1223,11 +1628,21 @@ async function handleRequest(
   // ── POST /api/skills/refresh ──────────────────────────────────────────
   if (method === "POST" && pathname === "/api/skills/refresh") {
     try {
-      const workspaceDir = state.config.agents?.defaults?.workspace ?? resolveDefaultAgentWorkspaceDir();
-      state.skills = await discoverSkills(workspaceDir, state.config, state.runtime);
+      const workspaceDir =
+        state.config.agents?.defaults?.workspace ??
+        resolveDefaultAgentWorkspaceDir();
+      state.skills = await discoverSkills(
+        workspaceDir,
+        state.config,
+        state.runtime,
+      );
       json(res, { ok: true, skills: state.skills });
     } catch (err) {
-      error(res, `Failed to refresh skills: ${err instanceof Error ? err.message : err}`, 500);
+      error(
+        res,
+        `Failed to refresh skills: ${err instanceof Error ? err.message : err}`,
+        500,
+      );
     }
     return;
   }
@@ -1264,7 +1679,8 @@ async function handleRequest(
     let entries = state.logBuffer;
 
     const sourceFilter = url.searchParams.get("source");
-    if (sourceFilter) entries = entries.filter((e) => e.source === sourceFilter);
+    if (sourceFilter)
+      entries = entries.filter((e) => e.source === sourceFilter);
 
     const levelFilter = url.searchParams.get("level");
     if (levelFilter) entries = entries.filter((e) => e.level === levelFilter);
@@ -1272,7 +1688,8 @@ async function handleRequest(
     const sinceFilter = url.searchParams.get("since");
     if (sinceFilter) {
       const sinceTs = Number(sinceFilter);
-      if (!Number.isNaN(sinceTs)) entries = entries.filter((e) => e.timestamp >= sinceTs);
+      if (!Number.isNaN(sinceTs))
+        entries = entries.filter((e) => e.timestamp >= sinceTs);
     }
 
     const sources = [...new Set(state.logBuffer.map((e) => e.source))].sort();
@@ -1299,7 +1716,13 @@ async function handleRequest(
     let extensionPath: string | null = null;
     try {
       const serverDir = path.dirname(new URL(import.meta.url).pathname);
-      extensionPath = path.resolve(serverDir, "..", "..", "apps", "chrome-extension");
+      extensionPath = path.resolve(
+        serverDir,
+        "..",
+        "..",
+        "apps",
+        "chrome-extension",
+      );
       if (!fs.existsSync(extensionPath)) extensionPath = null;
     } catch {
       // ignore
@@ -1339,7 +1762,10 @@ async function handleRequest(
 
     if (addrs.solanaAddress && heliusKey) {
       try {
-        const solData = await fetchSolanaBalances(addrs.solanaAddress, heliusKey);
+        const solData = await fetchSolanaBalances(
+          addrs.solanaAddress,
+          heliusKey,
+        );
         result.solana = { address: addrs.solanaAddress, ...solData };
       } catch (err) {
         logger.warn(`[wallet] Solana balance fetch failed: ${err}`);
@@ -1382,7 +1808,10 @@ async function handleRequest(
   // ── POST /api/wallet/import ──────────────────────────────────────────
   // Import a wallet by providing a private key + chain.
   if (method === "POST" && pathname === "/api/wallet/import") {
-    const body = await readJsonBody<{ chain?: string; privateKey?: string }>(req, res);
+    const body = await readJsonBody<{ chain?: string; privateKey?: string }>(
+      req,
+      res,
+    );
     if (!body) return;
 
     if (!body.privateKey?.trim()) {
@@ -1395,7 +1824,10 @@ async function handleRequest(
     if (body.chain === "evm" || body.chain === "solana") {
       chain = body.chain;
     } else if (body.chain) {
-      error(res, `Unsupported chain: ${body.chain}. Must be "evm" or "solana".`);
+      error(
+        res,
+        `Unsupported chain: ${body.chain}. Must be "evm" or "solana".`,
+      );
       return;
     } else {
       // Auto-detect from key format
@@ -1439,7 +1871,10 @@ async function handleRequest(
     const validChains: Array<WalletChain | "both"> = ["evm", "solana", "both"];
 
     if (chain && !validChains.includes(chain as WalletChain | "both")) {
-      error(res, `Unsupported chain: ${chain}. Must be "evm", "solana", or "both".`);
+      error(
+        res,
+        `Unsupported chain: ${chain}. Must be "evm", "solana", or "both".`,
+      );
       return;
     }
 
@@ -1452,7 +1887,8 @@ async function handleRequest(
     if (targetChain === "both" || targetChain === "evm") {
       const result = generateWalletForChain("evm");
       process.env.EVM_PRIVATE_KEY = result.privateKey;
-      (state.config.env as Record<string, string>).EVM_PRIVATE_KEY = result.privateKey;
+      (state.config.env as Record<string, string>).EVM_PRIVATE_KEY =
+        result.privateKey;
       generated.push({ chain: "evm", address: result.address });
       logger.info(`[milaidy-api] Generated EVM wallet: ${result.address}`);
     }
@@ -1460,7 +1896,8 @@ async function handleRequest(
     if (targetChain === "both" || targetChain === "solana") {
       const result = generateWalletForChain("solana");
       process.env.SOLANA_PRIVATE_KEY = result.privateKey;
-      (state.config.env as Record<string, string>).SOLANA_PRIVATE_KEY = result.privateKey;
+      (state.config.env as Record<string, string>).SOLANA_PRIVATE_KEY =
+        result.privateKey;
       generated.push({ chain: "solana", address: result.address });
       logger.info(`[milaidy-api] Generated Solana wallet: ${result.address}`);
     }
@@ -1494,7 +1931,11 @@ async function handleRequest(
   if (method === "PUT" && pathname === "/api/wallet/config") {
     const body = await readJsonBody<Record<string, string>>(req, res);
     if (!body) return;
-    const allowedKeys = ["ALCHEMY_API_KEY", "HELIUS_API_KEY", "BIRDEYE_API_KEY"];
+    const allowedKeys = [
+      "ALCHEMY_API_KEY",
+      "HELIUS_API_KEY",
+      "BIRDEYE_API_KEY",
+    ];
 
     if (!state.config.env) state.config.env = {};
 
@@ -1548,7 +1989,9 @@ async function handleRequest(
 
     json(res, {
       evm: evmKey ? { privateKey: evmKey, address: addrs.evmAddress } : null,
-      solana: solKey ? { privateKey: solKey, address: addrs.solanaAddress } : null,
+      solana: solKey
+        ? { privateKey: solKey, address: addrs.solanaAddress }
+        : null,
     });
     return;
   }
@@ -1636,7 +2079,10 @@ async function handleRequest(
         },
       );
 
-      json(res, { text: responseText || "(no response)", agentName: state.agentName });
+      json(res, {
+        text: responseText || "(no response)",
+        agentName: state.agentName,
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "generation failed";
       error(res, msg, 500);
@@ -1661,27 +2107,38 @@ export async function startApiServer(opts?: {
    * If omitted the endpoint returns 501 (not supported in this mode).
    */
   onRestart?: () => Promise<AgentRuntime | null>;
-}): Promise<{ port: number; close: () => Promise<void>; updateRuntime: (rt: AgentRuntime) => void }> {
+}): Promise<{
+  port: number;
+  close: () => Promise<void>;
+  updateRuntime: (rt: AgentRuntime) => void;
+}> {
   const port = opts?.port ?? 2138;
 
   let config: MilaidyConfig;
   try {
     config = loadMilaidyConfig();
   } catch (err) {
-    logger.warn(`[milaidy-api] Failed to load config, starting with defaults: ${err instanceof Error ? err.message : err}`);
+    logger.warn(
+      `[milaidy-api] Failed to load config, starting with defaults: ${err instanceof Error ? err.message : err}`,
+    );
     config = {} as MilaidyConfig;
   }
 
   const plugins = discoverPluginsFromManifest();
-  const workspaceDir = config.agents?.defaults?.workspace ?? resolveDefaultAgentWorkspaceDir();
-  const skills = await discoverSkills(workspaceDir, config, opts?.runtime ?? null);
+  const workspaceDir =
+    config.agents?.defaults?.workspace ?? resolveDefaultAgentWorkspaceDir();
+  const skills = await discoverSkills(
+    workspaceDir,
+    config,
+    opts?.runtime ?? null,
+  );
 
   const hasRuntime = opts?.runtime != null;
   const agentName = hasRuntime
     ? (opts.runtime!.character.name ?? "Milaidy")
-    : (config.agents?.list?.[0]?.name
-      ?? config.ui?.assistant?.name
-      ?? "Milaidy");
+    : (config.agents?.list?.[0]?.name ??
+      config.ui?.assistant?.name ??
+      "Milaidy");
 
   const state: ServerState = {
     runtime: opts?.runtime ?? null,
@@ -1703,11 +2160,19 @@ export async function startApiServer(opts?: {
       const bracketMatch = /^\[([^\]]+)\]\s*/.exec(message);
       if (bracketMatch) resolvedSource = bracketMatch[1];
     }
-    state.logBuffer.push({ timestamp: Date.now(), level, message, source: resolvedSource });
+    state.logBuffer.push({
+      timestamp: Date.now(),
+      level,
+      message,
+      source: resolvedSource,
+    });
     if (state.logBuffer.length > 1000) state.logBuffer.shift();
   };
 
-  addLog("info", `Discovered ${plugins.length} plugins, ${skills.length} skills`);
+  addLog(
+    "info",
+    `Discovered ${plugins.length} plugins, ${skills.length} skills`,
+  );
 
   // ── Intercept runtime logger so all plugin/autonomy logs appear in the UI ─
   // Guard against double-patching: if the logger was already patched (e.g.
@@ -1724,7 +2189,7 @@ export async function startApiServer(opts?: {
     for (const lvl of LEVELS) {
       const original = rtLogger[lvl].bind(rtLogger);
       // pino signature: logger.info(obj, msg) or logger.info(msg)
-      const patched: typeof rtLogger[typeof lvl] = (
+      const patched: (typeof rtLogger)[typeof lvl] = (
         ...args: Parameters<typeof original>
       ) => {
         let msg = "";
@@ -1743,7 +2208,11 @@ export async function startApiServer(opts?: {
     }
 
     (rtLogger as Record<string, unknown>)[PATCHED_MARKER] = true;
-    addLog("info", "Runtime logger connected — logs will stream to the UI", "system");
+    addLog(
+      "info",
+      "Runtime logger connected — logs will stream to the UI",
+      "system",
+    );
   }
 
   // Autonomy is managed by the core AutonomyService + TaskService.
@@ -1751,7 +2220,11 @@ export async function startApiServer(opts?: {
   // TaskService picks up and executes on its 1 s polling interval.
   // enableAutonomy: true on the runtime auto-creates the task during init.
   if (opts?.runtime) {
-    addLog("info", "Autonomy is always enabled — managed by the core task system", "autonomy");
+    addLog(
+      "info",
+      "Autonomy is always enabled — managed by the core task system",
+      "autonomy",
+    );
   }
 
   // Store the restart callback on the state so the route handler can access it.
@@ -1784,7 +2257,10 @@ export async function startApiServer(opts?: {
       logger.info(`[milaidy-api] Listening on http://localhost:${actualPort}`);
       resolve({
         port: actualPort,
-        close: () => new Promise<void>((r) => { server.close(() => r()); }),
+        close: () =>
+          new Promise<void>((r) => {
+            server.close(() => r());
+          }),
         updateRuntime,
       });
     });

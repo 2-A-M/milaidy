@@ -247,7 +247,14 @@ export type ApprovalsConfig = {
 export type LoggingConfig = {
   level?: "silent" | "fatal" | "error" | "warn" | "info" | "debug" | "trace";
   file?: string;
-  consoleLevel?: "silent" | "fatal" | "error" | "warn" | "info" | "debug" | "trace";
+  consoleLevel?:
+    | "silent"
+    | "fatal"
+    | "error"
+    | "warn"
+    | "info"
+    | "debug"
+    | "trace";
   consoleStyle?: "pretty" | "compact" | "json";
   /** Redact sensitive tokens in tool summaries. Default: "tools". */
   redactSensitive?: "off" | "tools";
@@ -513,7 +520,10 @@ export type MilaidyConfig = {
   /** ElizaCloud integration for remote agent provisioning and inference. */
   cloud?: CloudConfig;
   /** Feature flags for plugin auto-enable. */
-  features?: Record<string, boolean | { enabled?: boolean; [k: string]: unknown }>;
+  features?: Record<
+    string,
+    boolean | { enabled?: boolean; [k: string]: unknown }
+  >;
 };
 
 export type ConfigValidationIssue = {

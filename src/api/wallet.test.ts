@@ -11,20 +11,20 @@
  * - Key format validation edge cases
  * - maskSecret utility
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  generateWalletKeys,
-  generateWalletForChain,
+  DEFAULT_EVM_CHAINS,
   deriveEvmAddress,
   deriveSolanaAddress,
+  generateWalletForChain,
+  generateWalletKeys,
   getWalletAddresses,
   importWallet,
   validateEvmPrivateKey,
-  validateSolanaPrivateKey,
   validatePrivateKey,
-  DEFAULT_EVM_CHAINS,
-  type WalletKeys,
+  validateSolanaPrivateKey,
   type WalletChain,
+  type WalletKeys,
 } from "./wallet.js";
 
 // ---------------------------------------------------------------------------
@@ -574,10 +574,9 @@ describe("deriveEvmAddress — boundary inputs", () => {
     expect(() => deriveEvmAddress("")).toThrow();
   });
 
-  it("does not crash on short hex (Node ECDH zero-pads)", () => {
-    // Node's ECDH accepts short buffers by zero-padding, so this won't throw.
-    // The address will be wrong, but derivation should not crash.
-    expect(() => deriveEvmAddress("0xdead")).not.toThrow();
+  it("throws on short hex (@noble/curves validates byte length)", () => {
+    // @noble/curves strictly requires 32 bytes — short inputs are rejected.
+    expect(() => deriveEvmAddress("0xdead")).toThrow();
   });
 
   it("works with uppercase hex", () => {
@@ -588,8 +587,12 @@ describe("deriveEvmAddress — boundary inputs", () => {
 
   it("produces same address for Hardhat account #1", () => {
     // Hardhat #1: 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
-    const addr = deriveEvmAddress("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d");
-    expect(addr.toLowerCase()).toBe("0x70997970c51812dc3a010c7d01b50e0d17dc79c8");
+    const addr = deriveEvmAddress(
+      "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
+    );
+    expect(addr.toLowerCase()).toBe(
+      "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+    );
   });
 });
 
@@ -604,7 +607,8 @@ describe("validateEvmPrivateKey — boundary inputs", () => {
   it("accepts max valid key (order - 1 of secp256k1 curve)", () => {
     // secp256k1 order n = FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364140
     // n-1 is valid
-    const maxKey = "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD036413F";
+    const maxKey =
+      "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD036413F";
     const result = validateEvmPrivateKey(maxKey);
     expect(result.valid).toBe(true);
     expect(result.address).toBeTruthy();
@@ -615,7 +619,9 @@ describe("Solana key edge cases", () => {
   it("deriveSolanaAddress round-trips for 10 generated keys", () => {
     for (let i = 0; i < 10; i++) {
       const keys = generateWalletKeys();
-      expect(deriveSolanaAddress(keys.solanaPrivateKey)).toBe(keys.solanaAddress);
+      expect(deriveSolanaAddress(keys.solanaPrivateKey)).toBe(
+        keys.solanaAddress,
+      );
     }
   });
 

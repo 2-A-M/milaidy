@@ -11,21 +11,20 @@
  *
  * Issue: #3 — Plugin & Provider Stability
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+
 import type { Plugin, Provider, ProviderResult } from "@elizaos/core";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { validateRuntimeContext } from "../api/plugin-validation.js";
+import type { MilaidyConfig } from "../config/types.milaidy.js";
+import { createSessionKeyProvider } from "../providers/session-bridge.js";
+import { createWorkspaceProvider } from "../providers/workspace-provider.js";
 import {
-  collectPluginNames,
-  buildCharacterFromConfig,
   applyChannelSecretsToEnv,
   applyCloudConfigToEnv,
+  buildCharacterFromConfig,
+  collectPluginNames,
   resolvePrimaryModel,
 } from "../runtime/eliza.js";
-import type { MilaidyConfig } from "../config/types.milaidy.js";
-import {
-  validateRuntimeContext,
-} from "../api/plugin-validation.js";
-import { createWorkspaceProvider } from "../providers/workspace-provider.js";
-import { createSessionKeyProvider } from "../providers/session-bridge.js";
 import { createMilaidyPlugin } from "../runtime/milaidy-plugin.js";
 
 // ---------------------------------------------------------------------------
@@ -247,7 +246,9 @@ describe("collectPluginNames", () => {
     };
     const names = collectPluginNames(config);
     // @elizaos/plugin-elizacloud should appear only once
-    const asArray = [...names].filter((n) => n === "@elizaos/plugin-elizacloud");
+    const asArray = [...names].filter(
+      (n) => n === "@elizaos/plugin-elizacloud",
+    );
     expect(asArray.length).toBe(1);
   });
 
@@ -291,7 +292,9 @@ describe("Plugin Loading — Isolation", () => {
           msg.includes("Dynamic require of") ||
           msg.includes("native addon module") ||
           msg.includes("tfjs_binding") ||
-          msg.includes("NAPI_MODULE_NOT_FOUND")
+          msg.includes("NAPI_MODULE_NOT_FOUND") ||
+          msg.includes("spec not found") ||
+          msg.includes("Failed to resolve entry")
         ) {
           // Expected: plugin not installed, native addon missing, or not resolvable in test env
           return;
@@ -322,7 +325,12 @@ describe("Plugin Loading — Isolation", () => {
 
 describe("Plugin Loading — All Together", () => {
   it("can import all core plugins without conflicting exports", async () => {
-    const results: Array<{ name: string; loaded: boolean; hasPlugin: boolean; error: string }> = [];
+    const results: Array<{
+      name: string;
+      loaded: boolean;
+      hasPlugin: boolean;
+      error: string;
+    }> = [];
 
     for (const pluginName of CORE_PLUGINS) {
       try {
@@ -571,7 +579,9 @@ describe("Runtime Context Validation", () => {
 
 describe("Provider Validation", () => {
   it("createWorkspaceProvider returns a valid Provider shape", () => {
-    const provider = createWorkspaceProvider({ workspaceDir: "/tmp/test-workspace" });
+    const provider = createWorkspaceProvider({
+      workspaceDir: "/tmp/test-workspace",
+    });
     expect(provider).toBeDefined();
     expect(typeof provider.name).toBe("string");
     expect(typeof provider.description).toBe("string");
@@ -628,7 +638,10 @@ describe("Provider Validation", () => {
     };
     const serialized = JSON.stringify(metadata);
     expect(typeof serialized).toBe("string");
-    const deserialized = JSON.parse(serialized) as { name: string; description: string };
+    const deserialized = JSON.parse(serialized) as {
+      name: string;
+      description: string;
+    };
     expect(deserialized.name).toBe("milaidy");
   });
 });
@@ -689,7 +702,9 @@ describe("Environment Propagation", () => {
     applyCloudConfigToEnv(config);
     expect(process.env.ELIZAOS_CLOUD_ENABLED).toBe("true");
     expect(process.env.ELIZAOS_CLOUD_API_KEY).toBe("test-cloud-key");
-    expect(process.env.ELIZAOS_CLOUD_BASE_URL).toBe("https://test.elizacloud.ai");
+    expect(process.env.ELIZAOS_CLOUD_BASE_URL).toBe(
+      "https://test.elizacloud.ai",
+    );
   });
 
   it("resolvePrimaryModel returns undefined for empty config", () => {

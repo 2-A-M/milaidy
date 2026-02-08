@@ -73,7 +73,9 @@ if (electronIsDev) {
   });
 
   // Check for updates if we are in a packaged app.
-  autoUpdater.checkForUpdatesAndNotify();
+  autoUpdater.checkForUpdatesAndNotify().catch((err: Error) => {
+    console.warn('[Milaidy] Update check failed (non-fatal):', err.message);
+  });
 })();
 
 // Handle when all of our windows are close (platforms have their own expectations).

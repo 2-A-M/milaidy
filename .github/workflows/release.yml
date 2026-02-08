@@ -195,6 +195,8 @@ jobs:
             apps/app/electron/dist/*.exe
             apps/app/electron/dist/*.AppImage
             apps/app/electron/dist/*.deb
+            apps/app/electron/dist/*.yml
+            apps/app/electron/dist/*.blockmap
           if-no-files-found: error
           retention-days: 30
 
@@ -226,7 +228,9 @@ jobs:
             -name "*.zip" -o \
             -name "*.exe" -o \
             -name "*.AppImage" -o \
-            -name "*.deb" \
+            -name "*.deb" -o \
+            -name "*.yml" -o \
+            -name "*.blockmap" \
           \) -exec cp {} release-files/ \;
           echo "Release files:"
           ls -lh release-files/

@@ -6,12 +6,18 @@
  * Memory search/get actions are superseded by plugin-scratchpad.
  */
 
-import type { Plugin, MessagePayload } from "@elizaos/core";
-import { getSessionProviders, resolveDefaultSessionStorePath } from "@elizaos/core";
-import { createWorkspaceProvider } from "../providers/workspace-provider.js";
-import { createSessionKeyProvider, resolveSessionKeyFromRoom } from "../providers/session-bridge.js";
-import { DEFAULT_AGENT_WORKSPACE_DIR } from "../providers/workspace.js";
+import type { MessagePayload, Plugin } from "@elizaos/core";
+import {
+  getSessionProviders,
+  resolveDefaultSessionStorePath,
+} from "@elizaos/core";
 import { restartAction } from "../actions/restart.js";
+import {
+  createSessionKeyProvider,
+  resolveSessionKeyFromRoom,
+} from "../providers/session-bridge.js";
+import { DEFAULT_AGENT_WORKSPACE_DIR } from "../providers/workspace.js";
+import { createWorkspaceProvider } from "../providers/workspace-provider.js";
 
 export type MilaidyPluginConfig = {
   workspaceDir?: string;
@@ -23,14 +29,19 @@ export type MilaidyPluginConfig = {
 export function createMilaidyPlugin(config?: MilaidyPluginConfig): Plugin {
   const workspaceDir = config?.workspaceDir ?? DEFAULT_AGENT_WORKSPACE_DIR;
   const agentId = config?.agentId ?? "main";
-  const sessionStorePath = config?.sessionStorePath ?? resolveDefaultSessionStorePath(agentId);
+  const sessionStorePath =
+    config?.sessionStorePath ?? resolveDefaultSessionStorePath(agentId);
 
   return {
     name: "milaidy",
-    description: "Milaidy workspace context, session keys, and lifecycle actions",
+    description:
+      "Milaidy workspace context, session keys, and lifecycle actions",
 
     providers: [
-      createWorkspaceProvider({ workspaceDir, maxCharsPerFile: config?.bootstrapMaxChars }),
+      createWorkspaceProvider({
+        workspaceDir,
+        maxCharsPerFile: config?.bootstrapMaxChars,
+      }),
       createSessionKeyProvider({ defaultAgentId: agentId }),
       ...getSessionProviders({ storePath: sessionStorePath }),
     ],
@@ -46,7 +57,9 @@ export function createMilaidyPlugin(config?: MilaidyPluginConfig): Plugin {
 
           // Ensure metadata is initialized so we can read and write to it.
           if (!message.metadata) {
-            message.metadata = { type: "message" } as typeof message.metadata;
+            message.metadata = { type: "message" } as NonNullable<
+              typeof message.metadata
+            >;
           }
           const meta = message.metadata as Record<string, unknown>;
           if (meta.sessionKey) return;
@@ -65,4 +78,3 @@ export function createMilaidyPlugin(config?: MilaidyPluginConfig): Plugin {
     },
   };
 }
-

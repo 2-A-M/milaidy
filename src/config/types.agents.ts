@@ -1,4 +1,8 @@
-import type { GroupChatConfig, HumanDelayConfig, IdentityConfig } from "@elizaos/core";
+import type {
+  GroupChatConfig,
+  HumanDelayConfig,
+  IdentityConfig,
+} from "@elizaos/core";
 import type {
   AgentDefaultsConfig,
   SandboxBrowserSettings,
