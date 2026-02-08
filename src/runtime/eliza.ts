@@ -29,6 +29,7 @@ import {
   debugLogResolvedContext,
   validateRuntimeContext,
 } from "../api/plugin-validation.js";
+import { cloudLogin } from "../cloud/auth.js";
 import {
   loadMilaidyConfig,
   type MilaidyConfig,
@@ -51,7 +52,6 @@ import {
 } from "../providers/workspace.js";
 import { diagnoseNoAIProvider } from "../services/version-compat.js";
 import { createMilaidyPlugin } from "./milaidy-plugin.js";
-import { cloudLogin } from "../cloud/auth.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -140,8 +140,8 @@ const CHANNEL_ENV_MAP: Readonly<
 // Reduced from 23 to 2 plugins to minimize context (was 4.5k tokens, now ~500)
 // This makes responses fast (2-3s) and cheap ($0.001/msg with Haiku)
 export const CORE_PLUGINS: readonly string[] = [
-  "@elizaos/plugin-sql",  // Database adapter (memory/persistence)
-  "@elizaos/plugin-local-embedding",  // Embeddings
+  "@elizaos/plugin-sql", // Database adapter (memory/persistence)
+  "@elizaos/plugin-local-embedding", // Embeddings
 
   // ALL OTHER PLUGINS DISABLED TO REDUCE CONTEXT
   // Each plugin adds ~50-200 tokens to every request
@@ -179,7 +179,7 @@ export const CORE_PLUGINS: readonly string[] = [
  * These are only loaded when explicitly enabled via features config,
  * NOT by default — they crash if their prerequisites are missing.
  */
-const OPTIONAL_NATIVE_PLUGINS: readonly string[] = [
+const _OPTIONAL_NATIVE_PLUGINS: readonly string[] = [
   "@elizaos/plugin-browser", // requires browser server binary
   "@elizaos/plugin-vision", // requires @tensorflow/tfjs-node native addon
   "@elizaos/plugin-cron", // requires worldId at service init
@@ -648,6 +648,17 @@ export function applyCloudConfigToEnv(config: MilaidyConfig): void {
  * any stale `POSTGRES_URL` so the plugin falls through to PGLite.
  */
 /** @internal Exported for testing. */
+export function applyX402ConfigToEnv(config: MilaidyConfig): void {
+  const x402 = (config as Record<string, unknown>).x402 as
+    | { enabled?: boolean; apiKey?: string; baseUrl?: string }
+    | undefined;
+  if (!x402?.enabled) return;
+  if (!process.env.X402_ENABLED) process.env.X402_ENABLED = "true";
+  if (x402.apiKey && !process.env.X402_API_KEY) process.env.X402_API_KEY = x402.apiKey;
+  if (x402.baseUrl && !process.env.X402_BASE_URL) process.env.X402_BASE_URL = x402.baseUrl;
+}
+
+/** @internal Exported for testing. */
 export function applyDatabaseConfigToEnv(config: MilaidyConfig): void {
   const db = config.database;
   if (!db) return;
@@ -749,7 +760,7 @@ export function buildCharacterFromConfig(config: MilaidyConfig): Character {
   const secrets: Record<string, string> = {};
   for (const key of secretKeys) {
     const value = process.env[key];
-    if (value && value.trim()) {
+    if (value?.trim()) {
       secrets[key] = value;
     }
   }
@@ -839,7 +850,7 @@ async function runFirstTimeSetup(
 
   if (clack.isCancel(runMode)) cancelOnboarding();
 
-  let cloudApiKey: string | undefined;
+  let _cloudApiKey: string | undefined;
 
   if (runMode === "cloud") {
     const cloudBaseUrl = config.cloud?.baseUrl ?? "https://www.elizacloud.ai";
@@ -871,7 +882,7 @@ async function runFirstTimeSetup(
       },
     });
 
-    cloudApiKey = loginResult.apiKey;
+    _cloudApiKey = loginResult.apiKey;
     clack.log.success("Logged in to ELIZA Cloud!");
   }
 
@@ -926,22 +937,88 @@ async function runFirstTimeSetup(
   // Check whether an API key is already set in the environment (from .env or
   // shell).  If none is found, ask the user to pick a provider and enter a key.
   const PROVIDER_OPTIONS = [
-    { id: "anthropic", label: "Anthropic (Claude)", envKey: "ANTHROPIC_API_KEY", detectKeys: ["ANTHROPIC_API_KEY"], hint: "sk-ant-..." },
-    { id: "openai", label: "OpenAI (GPT)", envKey: "OPENAI_API_KEY", detectKeys: ["OPENAI_API_KEY"], hint: "sk-..." },
-    { id: "openrouter", label: "OpenRouter", envKey: "OPENROUTER_API_KEY", detectKeys: ["OPENROUTER_API_KEY"], hint: "sk-or-..." },
-    { id: "vercel-ai-gateway", label: "Vercel AI Gateway", envKey: "AI_GATEWAY_API_KEY", detectKeys: ["AI_GATEWAY_API_KEY", "AIGATEWAY_API_KEY"], hint: "aigw_..." },
-    { id: "gemini", label: "Google Gemini", envKey: "GOOGLE_API_KEY", detectKeys: ["GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY"], hint: "AI..." },
-    { id: "grok", label: "xAI (Grok)", envKey: "XAI_API_KEY", detectKeys: ["XAI_API_KEY"], hint: "xai-..." },
-    { id: "groq", label: "Groq", envKey: "GROQ_API_KEY", detectKeys: ["GROQ_API_KEY"], hint: "gsk_..." },
-    { id: "deepseek", label: "DeepSeek", envKey: "DEEPSEEK_API_KEY", detectKeys: ["DEEPSEEK_API_KEY"], hint: "sk-..." },
-    { id: "mistral", label: "Mistral", envKey: "MISTRAL_API_KEY", detectKeys: ["MISTRAL_API_KEY"], hint: "" },
-    { id: "together", label: "Together AI", envKey: "TOGETHER_API_KEY", detectKeys: ["TOGETHER_API_KEY"], hint: "" },
-    { id: "ollama", label: "Ollama (local, free)", envKey: "OLLAMA_BASE_URL", detectKeys: ["OLLAMA_BASE_URL"], hint: "http://localhost:11434" },
+    {
+      id: "anthropic",
+      label: "Anthropic (Claude)",
+      envKey: "ANTHROPIC_API_KEY",
+      detectKeys: ["ANTHROPIC_API_KEY"],
+      hint: "sk-ant-...",
+    },
+    {
+      id: "openai",
+      label: "OpenAI (GPT)",
+      envKey: "OPENAI_API_KEY",
+      detectKeys: ["OPENAI_API_KEY"],
+      hint: "sk-...",
+    },
+    {
+      id: "openrouter",
+      label: "OpenRouter",
+      envKey: "OPENROUTER_API_KEY",
+      detectKeys: ["OPENROUTER_API_KEY"],
+      hint: "sk-or-...",
+    },
+    {
+      id: "vercel-ai-gateway",
+      label: "Vercel AI Gateway",
+      envKey: "AI_GATEWAY_API_KEY",
+      detectKeys: ["AI_GATEWAY_API_KEY", "AIGATEWAY_API_KEY"],
+      hint: "aigw_...",
+    },
+    {
+      id: "gemini",
+      label: "Google Gemini",
+      envKey: "GOOGLE_API_KEY",
+      detectKeys: ["GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY"],
+      hint: "AI...",
+    },
+    {
+      id: "grok",
+      label: "xAI (Grok)",
+      envKey: "XAI_API_KEY",
+      detectKeys: ["XAI_API_KEY"],
+      hint: "xai-...",
+    },
+    {
+      id: "groq",
+      label: "Groq",
+      envKey: "GROQ_API_KEY",
+      detectKeys: ["GROQ_API_KEY"],
+      hint: "gsk_...",
+    },
+    {
+      id: "deepseek",
+      label: "DeepSeek",
+      envKey: "DEEPSEEK_API_KEY",
+      detectKeys: ["DEEPSEEK_API_KEY"],
+      hint: "sk-...",
+    },
+    {
+      id: "mistral",
+      label: "Mistral",
+      envKey: "MISTRAL_API_KEY",
+      detectKeys: ["MISTRAL_API_KEY"],
+      hint: "",
+    },
+    {
+      id: "together",
+      label: "Together AI",
+      envKey: "TOGETHER_API_KEY",
+      detectKeys: ["TOGETHER_API_KEY"],
+      hint: "",
+    },
+    {
+      id: "ollama",
+      label: "Ollama (local, free)",
+      envKey: "OLLAMA_BASE_URL",
+      detectKeys: ["OLLAMA_BASE_URL"],
+      hint: "http://localhost:11434",
+    },
   ] as const;
 
   // Detect if any provider key is already configured
-  const detectedProvider = PROVIDER_OPTIONS.find(
-    (p) => p.detectKeys.some((key) => process.env[key]?.trim()),
+  const detectedProvider = PROVIDER_OPTIONS.find((p) =>
+    p.detectKeys.some((key) => process.env[key]?.trim()),
   );
 
   let providerEnvKey: string | undefined;
@@ -1089,8 +1166,16 @@ async function runFirstTimeSetup(
     const skillsmpAction = await clack.select({
       message: `${name}: Want to connect to the Skills Marketplace? (https://skillsmp.com)`,
       options: [
-        { value: "enter", label: "Enter API key", hint: "enables browsing & installing skills" },
-        { value: "skip", label: "Skip for now", hint: "you can add it later via env or config" },
+        {
+          value: "enter",
+          label: "Enter API key",
+          hint: "enables browsing & installing skills",
+        },
+        {
+          value: "skip",
+          label: "Skip for now",
+          hint: "you can add it later via env or config",
+        },
       ],
     });
 
@@ -1199,7 +1284,7 @@ export interface StartElizaOptions {
  */
 export async function startEliza(
   opts?: StartElizaOptions,
-): Promise<AgentRuntime | void> {
+): Promise<AgentRuntime | undefined> {
   // 1. Load Milaidy config from ~/.milaidy/milaidy.json
   let config: MilaidyConfig;
   try {
@@ -1236,7 +1321,7 @@ export async function startEliza(
   // 2c. Propagate x402 config into process.env
   applyX402ConfigToEnv(config);
 
-  // 2c. Propagate database config into process.env for plugin-sql
+  // 2d. Propagate database config into process.env for plugin-sql
   applyDatabaseConfigToEnv(config);
 
   // 3. Build ElizaOS Character from Milaidy config
@@ -1338,8 +1423,10 @@ export async function startEliza(
   //     plugin-agent-skills auto-loads them on startup.
   let bundledSkillsDir: string | null = null;
   try {
-    // @ts-ignore — optional peer dependency, resolved at runtime
-    const { getSkillsDir } = (await import("@elizaos/skills")) as { getSkillsDir: () => string };
+    // @ts-expect-error — optional peer dependency, resolved at runtime
+    const { getSkillsDir } = (await import("@elizaos/skills")) as {
+      getSkillsDir: () => string;
+    };
     bundledSkillsDir = getSkillsDir();
     logger.info(`[milaidy] Bundled skills dir: ${bundledSkillsDir}`);
   } catch {
@@ -1392,7 +1479,9 @@ export async function startEliza(
     //     The call is idempotent (runtime.initialize checks adapter.isReady()).
     if (runtime.adapter && !(await runtime.adapter.isReady())) {
       await runtime.adapter.init();
-      logger.info("[milaidy] Database adapter initialized early (before plugin inits)");
+      logger.info(
+        "[milaidy] Database adapter initialized early (before plugin inits)",
+      );
     }
   } else {
     const loadedNames = resolvedPlugins.map((p) => p.name).join(", ");
@@ -1488,6 +1577,11 @@ export async function startEliza(
       onRestart: async () => {
         logger.info("[milaidy] Hot-reload: Restarting runtime...");
         try {
+          // Stop the old runtime to release resources (DB connections, timers, etc.)
+          try { await runtime.stop(); } catch (stopErr) {
+            logger.warn(`[milaidy] Hot-reload: old runtime stop failed: ${formatError(stopErr)}`);
+          }
+
           // Reload config from disk (updated by API)
           const freshConfig = loadMilaidyConfig();
 
@@ -1498,8 +1592,7 @@ export async function startEliza(
           const freshMilaidyPlugin = createMilaidyPlugin({
             workspaceDir:
               freshConfig.agents?.defaults?.workspace ?? workspaceDir,
-            bootstrapMaxChars:
-              freshConfig.agents?.defaults?.bootstrapMaxChars,
+            bootstrapMaxChars: freshConfig.agents?.defaults?.bootstrapMaxChars,
             agentId:
               runtime.character.name?.toLowerCase().replace(/\s+/g, "-") ??
               "main",

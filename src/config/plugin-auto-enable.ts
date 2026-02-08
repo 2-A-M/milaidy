@@ -188,7 +188,9 @@ export function applyPluginAutoEnable(
     const envValue = env[envKey];
     if (!envValue || typeof envValue !== "string" || envValue.trim() === "")
       continue;
-    const pluginId = pluginName.replace("@elizaos/plugin-", "");
+    const pluginId = pluginName.includes("/plugin-")
+      ? pluginName.slice(pluginName.lastIndexOf("/plugin-") + "/plugin-".length)
+      : pluginName;
     if (pluginsConfig.entries[pluginId]?.enabled === false) continue;
     addToAllowlist(
       pluginsConfig.allow,
@@ -212,7 +214,9 @@ export function applyPluginAutoEnable(
           featureConfig !== null &&
           featureConfig.enabled !== false);
       if (!isEnabled) continue;
-      const pluginId = pluginName.replace("@elizaos/plugin-", "");
+      const pluginId = pluginName.includes("/plugin-")
+        ? pluginName.slice(pluginName.lastIndexOf("/plugin-") + "/plugin-".length)
+        : pluginName;
       if (pluginsConfig.entries[pluginId]?.enabled === false) continue;
       addToAllowlist(
         pluginsConfig.allow,

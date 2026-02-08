@@ -753,49 +753,6 @@ export class MilaidyClient {
     });
   }
 
-  async getRegistryPlugins(): Promise<{ count: number; plugins: RegistryPluginInfo[] }> {
-    return this.fetch("/api/registry/plugins");
-  }
-
-  async searchRegistryPlugins(query: string, limit = 15): Promise<{ query: string; count: number; results: RegistrySearchResult[] }> {
-    const encoded = encodeURIComponent(query);
-    return this.fetch(`/api/registry/search?q=${encoded}&limit=${Math.max(1, Math.min(limit, 50))}`);
-  }
-
-  async refreshRegistry(): Promise<{ ok: boolean; count: number }> {
-    return this.fetch("/api/registry/refresh", { method: "POST" });
-  }
-
-  async installRegistryPlugin(name: string, autoRestart = true): Promise<{
-    ok: boolean;
-    plugin?: { name: string; version: string; installPath: string };
-    requiresRestart?: boolean;
-    message?: string;
-    error?: string;
-  }> {
-    return this.fetch("/api/plugins/install", {
-      method: "POST",
-      body: JSON.stringify({ name, autoRestart }),
-    });
-  }
-
-  async uninstallRegistryPlugin(name: string, autoRestart = true): Promise<{
-    ok: boolean;
-    pluginName?: string;
-    requiresRestart?: boolean;
-    message?: string;
-    error?: string;
-  }> {
-    return this.fetch("/api/plugins/uninstall", {
-      method: "POST",
-      body: JSON.stringify({ name, autoRestart }),
-    });
-  }
-
-  async getInstalledRegistryPlugins(): Promise<{ count: number; plugins: InstalledRegistryPlugin[] }> {
-    return this.fetch("/api/plugins/installed");
-  }
-
   async getWorkbenchOverview(): Promise<WorkbenchOverview> {
     return this.fetch("/api/workbench/overview");
   }
@@ -1141,8 +1098,10 @@ export class MilaidyClient {
 
     this.ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data as string) as Record<string, unknown>;
-        const type = data.type as string;
+        if (typeof event.data !== "string") return;
+        const data = JSON.parse(event.data) as Record<string, unknown>;
+        const type = typeof data.type === "string" ? data.type : undefined;
+        if (!type) return;
         const handlers = this.wsHandlers.get(type);
         if (handlers) {
           for (const handler of handlers) {

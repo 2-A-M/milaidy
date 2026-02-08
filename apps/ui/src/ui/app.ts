@@ -1446,6 +1446,10 @@ export class MilaidyApp extends LitElement {
       window.clearTimeout(this.actionNoticeTimer);
       this.actionNoticeTimer = null;
     }
+    if (this.cloudPollInterval != null) {
+      clearInterval(this.cloudPollInterval);
+      this.cloudPollInterval = null;
+    }
     client.disconnectWs();
     this.teardownNativeBindings();
   }
@@ -4017,6 +4021,13 @@ export class MilaidyApp extends LitElement {
             <button class="lifecycle-btn" @click=${this.handlePairingSubmit} ?disabled=${this.pairingBusy}>
               ${this.pairingBusy ? "Pairing..." : "Pair"}
             </button>
+          </div>
+          ${this.pairingError ? html`<div class="pairing-error">${this.pairingError}</div>` : null}
+        </div>
+      </div>
+      ${this.renderCommandPalette()}
+    `;
+  }
 
   private async pollCloudCredits(): Promise<void> {
     const cloudStatus = await client.getCloudStatus().catch(() => null);
@@ -4059,13 +4070,6 @@ export class MilaidyApp extends LitElement {
           <span>${formatted}</span>
         </a>
       </div>
-    `;
-  }
-          </div>
-          ${this.pairingError ? html`<div class="pairing-error">${this.pairingError}</div>` : null}
-        </div>
-      </div>
-      ${this.renderCommandPalette()}
     `;
   }
 
@@ -6434,12 +6438,15 @@ export class MilaidyApp extends LitElement {
     return html`
       <div class="app-shell">
         <div class="onboarding">
-          ${this.onboardingStep === 0 ? this.renderOnboardingWelcome() : ""}
-          ${this.onboardingStep === 1 ? this.renderOnboardingName(opts) : ""}
-          ${this.onboardingStep === 2 ? this.renderOnboardingStyle(opts) : ""}
-          ${this.onboardingStep === 3 ? this.renderOnboardingProvider(opts) : ""}
-          ${this.onboardingStep === 4 ? this.renderOnboardingSkillsMarketplace() : ""}
-          ${this.onboardingStep === 5 ? this.renderOnboardingChannels() : ""}
+          ${this.onboardingStep === "welcome" ? this.renderOnboardingWelcome() : ""}
+          ${this.onboardingStep === "name" ? this.renderOnboardingName(opts) : ""}
+          ${this.onboardingStep === "style" ? this.renderOnboardingStyle(opts) : ""}
+          ${this.onboardingStep === "theme" ? this.renderOnboardingTheme() : ""}
+          ${this.onboardingStep === "runMode" ? this.renderOnboardingRunMode() : ""}
+          ${this.onboardingStep === "cloudProvider" ? this.renderOnboardingCloudProvider(opts) : ""}
+          ${this.onboardingStep === "modelSelection" ? this.renderOnboardingModelSelection(opts) : ""}
+          ${this.onboardingStep === "llmProvider" ? this.renderOnboardingLlmProvider(opts) : ""}
+          ${this.onboardingStep === "inventorySetup" ? this.renderOnboardingSkillsMarketplace() : ""}
         </div>
       </div>
     `;

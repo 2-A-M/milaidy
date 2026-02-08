@@ -3578,7 +3578,8 @@ async function handleRequest(
   // ── GET /api/mcp/marketplace/search?q=... ─────────────────────────────────
   if (method === "GET" && pathname === "/api/mcp/marketplace/search") {
     const query = url.searchParams.get("q") || "";
-    const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get("limit") || "30", 10)));
+    const rawLimit = parseInt(url.searchParams.get("limit") || "30", 10);
+    const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(rawLimit, 50)) : 30;
 
     try {
       const { searchMcpMarketplace } = await import("../services/mcp-marketplace.js");
@@ -3635,8 +3636,46 @@ async function handleRequest(
   // ── PUT /api/mcp/config ────────────────────────────────────────────────────
   // Replace entire MCP config
   if (method === "PUT" && pathname === "/api/mcp/config") {
-    const body = await readJsonBody<{ servers?: Record<string, unknown> }>(req, res);
+    const body = await readJsonBody<{ servers?: Record<string, Record<string, unknown>> }>(req, res);
     if (!body) return;
+
+    // Security: validate each server the same way POST /api/mcp/config/server does
+    const validTypes = ["stdio", "http", "streamable-http", "sse"];
+    const allowedCommands = ["npx", "node", "docker", "deno", "bun", "uvx", "python", "python3"];
+    const servers = body.servers ?? {};
+    for (const [name, cfg] of Object.entries(servers)) {
+      if (!cfg || typeof cfg !== "object") {
+        error(res, `Server "${name}": config must be an object`, 400);
+        return;
+      }
+      const cfgType = cfg.type;
+      if (typeof cfgType !== "string" || !validTypes.includes(cfgType)) {
+        error(res, `Server "${name}": config.type must be one of: ${validTypes.join(", ")}`, 400);
+        return;
+      }
+      if (cfgType === "stdio") {
+        const cmd = cfg.command;
+        if (typeof cmd !== "string" || !cmd.trim()) {
+          error(res, `Server "${name}": config.command required for stdio`, 400);
+          return;
+        }
+        const baseName = cmd.trim().split("/").pop()?.split("\\").pop() ?? "";
+        if (!allowedCommands.includes(baseName)) {
+          error(res, `Server "${name}": command must be one of: ${allowedCommands.join(", ")}`, 400);
+          return;
+        }
+      } else {
+        const serverUrl = cfg.url;
+        if (typeof serverUrl !== "string" || !serverUrl.trim()) {
+          error(res, `Server "${name}": config.url required for remote servers`, 400);
+          return;
+        }
+        try { new URL(serverUrl as string); } catch {
+          error(res, `Server "${name}": config.url must be a valid URL`, 400);
+          return;
+        }
+      }
+    }
 
     if (!state.config.plugins) state.config.plugins = {} as unknown as typeof state.config.plugins;
     const plugins = state.config.plugins as Record<string, unknown>;
@@ -3645,7 +3684,7 @@ async function handleRequest(
     }
 
     const pluginConfig = plugins["@elizaos/plugin-mcp"] as Record<string, unknown>;
-    pluginConfig.mcp = JSON.stringify({ servers: body.servers || {} });
+    pluginConfig.mcp = JSON.stringify({ servers });
     saveMilaidyConfig(state.config);
 
     json(res, { ok: true });
