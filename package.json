@@ -109,7 +109,7 @@
     "@elizaos/plugin-google-genai": "2.0.0-alpha.3",
     "@elizaos/plugin-groq": "next",
     "@elizaos/plugin-imessage": "next",
-    "@elizaos/plugin-knowledge": "next",
+    "@elizaos/plugin-knowledge": "2.0.0-alpha.3",
     "@elizaos/plugin-local-embedding": "next",
     "@elizaos/plugin-mattermost": "next",
     "@elizaos/plugin-mcp": "next",
@@ -135,6 +135,7 @@
     "@elizaos/plugin-xai": "next",
     "@elizaos/skills": "next",
     "@elizaos/tui": "next",
+    "@homunculuslabs/plugin-zai": "2.0.0-alpha.1",
     "@noble/curves": "^2.0.1",
     "chalk": "^5.6.2",
     "commander": "^14.0.3",
@@ -169,7 +170,10 @@
     "node": ">=22.12.0"
   },
   "trustedDependencies": [
+    "@lydell/node-pty",
+    "@whiskeysockets/baileys",
     "esbuild",
-    "protobufjs"
+    "protobufjs",
+    "sharp"
   ]
 }

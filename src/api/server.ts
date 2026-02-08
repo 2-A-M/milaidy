@@ -29,11 +29,19 @@ import {
 import { resolveStateDir } from "../config/paths.js";
 import { CharacterSchema } from "../config/zod-schema.js";
 import { resolveDefaultAgentWorkspaceDir } from "../providers/workspace.js";
+import { CloudManager } from "../cloud/cloud-manager.js";
+import { handleCloudRoute, type CloudRouteState } from "./cloud-routes.js";
 import {
   type PluginParamInfo,
   validatePluginConfig,
 } from "./plugin-validation.js";
-import { CORE_PLUGINS } from "../runtime/eliza.js";
+import {
+  exportAgent,
+  importAgent,
+  estimateExportSize,
+  AgentExportError,
+} from "../services/agent-export.js";
+import { handleDatabaseRoute } from "./database.js";
 import {
   fetchEvmBalances,
   fetchEvmNfts,
@@ -87,6 +95,8 @@ interface ServerState {
   logBuffer: LogEntry[];
   chatRoomId: UUID | null;
   chatUserId: UUID | null;
+  /** Cloud manager for ELIZA Cloud integration (null when cloud is disabled). */
+  cloudManager: CloudManager | null;
 }
 
 interface PluginParamDef {
@@ -96,6 +106,8 @@ interface PluginParamDef {
   required: boolean;
   sensitive: boolean;
   default?: string;
+  /** Predefined options for dropdown selection (e.g. model names). */
+  options?: string[];
   /** Current value from process.env (masked if sensitive). */
   currentValue: string | null;
   /** Whether a value is currently set in the environment. */
@@ -110,6 +122,8 @@ interface PluginEntry {
   configured: boolean;
   envKey: string | null;
   category: "ai-provider" | "connector" | "database" | "feature";
+  /** Where the plugin comes from: "bundled" (ships with Milaidy) or "store" (user-installed from registry). */
+  source: "bundled" | "store";
   configKeys: string[];
   parameters: PluginParamDef[];
   validationErrors: Array<{ field: string; message: string }>;
@@ -200,10 +214,13 @@ function buildParamDefs(
       required: Boolean(def.required),
       sensitive,
       default: def.default as string | undefined,
+      options: Array.isArray(def.options)
+        ? (def.options as string[])
+        : undefined,
       currentValue: isSet
         ? sensitive
-          ? maskValue(envValue!)
-          : envValue!
+          ? maskValue(envValue ?? "")
+          : (envValue ?? null)
         : null,
       isSet,
     };
@@ -214,6 +231,88 @@ function buildParamDefs(
  * Discover available plugins from the bundled plugins.json manifest.
  * Falls back to filesystem scanning for monorepo development.
  */
+/**
+ * Build PluginEntry records for user-installed plugins (from the Store).
+ * These are tracked in config.plugins.installs and loaded at runtime,
+ * but don't appear in the bundled plugins.json manifest.
+ *
+ * We read the installed plugin's package.json to extract metadata
+ * (name, description, parameters) so they show up in the Plugins Manager
+ * with the same level of detail as bundled plugins.
+ */
+function discoverInstalledPlugins(
+  config: MilaidyConfig,
+  bundledIds: Set<string>,
+): PluginEntry[] {
+  const installs = config.plugins?.installs;
+  if (!installs || typeof installs !== "object") return [];
+
+  const entries: PluginEntry[] = [];
+
+  for (const [packageName, record] of Object.entries(installs)) {
+    // Derive a short id from the package name (e.g. "@elizaos/plugin-foo" → "foo")
+    const id = packageName
+      .replace(/^@[^/]+\/plugin-/, "")
+      .replace(/^@[^/]+\//, "")
+      .replace(/^plugin-/, "");
+
+    // Skip if it's already covered by the bundled manifest
+    if (bundledIds.has(id)) continue;
+
+    const category = categorizePlugin(id);
+    const installPath = record.installPath;
+
+    // Try to read the plugin's package.json for metadata
+    let name = packageName;
+    let description = `Installed from registry (v${record.version ?? "unknown"})`;
+
+    if (installPath) {
+      // Check npm layout first, then direct layout
+      const candidates = [
+        path.join(
+          installPath,
+          "node_modules",
+          ...packageName.split("/"),
+          "package.json",
+        ),
+        path.join(installPath, "package.json"),
+      ];
+      for (const pkgPath of candidates) {
+        try {
+          if (fs.existsSync(pkgPath)) {
+            const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8")) as {
+              name?: string;
+              description?: string;
+            };
+            if (pkg.name) name = pkg.name;
+            if (pkg.description) description = pkg.description;
+            break;
+          }
+        } catch {
+          // ignore read errors
+        }
+      }
+    }
+
+    entries.push({
+      id,
+      name,
+      description,
+      enabled: false, // Will be updated against the runtime below
+      configured: true,
+      envKey: null,
+      category,
+      source: "store",
+      configKeys: [],
+      parameters: [],
+      validationErrors: [],
+      validationWarnings: [],
+    });
+  }
+
+  return entries.sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function discoverPluginsFromManifest(): PluginEntry[] {
   const thisDir =
     import.meta.dirname ?? path.dirname(new URL(import.meta.url).pathname);
@@ -252,28 +351,6 @@ function discoverPluginsFromManifest(): PluginEntry[] {
             paramInfos,
           );
 
-<<<<<<< HEAD
-        // Check if this plugin is in CORE_PLUGINS
-        const pluginPackageName = `@elizaos/plugin-${p.id}`;
-        const isCore = CORE_PLUGINS.includes(pluginPackageName);
-
-        return {
-          id: p.id,
-          name: p.name,
-          description: p.description,
-          enabled: false,
-          configured,
-          envKey,
-          category,
-          configKeys: p.configKeys,
-          parameters,
-          validationErrors: validation.errors,
-          validationWarnings: validation.warnings,
-          isCore,
-          isActive: false, // Will be updated when runtime is available
-        };
-      }).sort((a, b) => a.name.localeCompare(b.name));
-=======
           return {
             id: p.id,
             name: p.name,
@@ -282,6 +359,7 @@ function discoverPluginsFromManifest(): PluginEntry[] {
             configured,
             envKey,
             category,
+            source: "bundled" as const,
             configKeys: p.configKeys,
             parameters,
             validationErrors: validation.errors,
@@ -289,7 +367,6 @@ function discoverPluginsFromManifest(): PluginEntry[] {
           };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
->>>>>>> b35fdbea804e6566df9ce97203d7a24c97ccaa86
     } catch (err) {
       logger.debug(
         `[milaidy-api] Failed to read plugins.json: ${err instanceof Error ? err.message : err}`,
@@ -324,6 +401,7 @@ function categorizePlugin(
     "perplexity",
     "qwen",
     "minimax",
+    "zai",
   ];
   const connectors = [
     "telegram",
@@ -623,6 +701,7 @@ function scanSkillsDir(
 
 /** Maximum request body size (1 MB) — prevents memory-based DoS. */
 const MAX_BODY_BYTES = 1_048_576;
+const MAX_IMPORT_BYTES = 512 * 1_048_576; // 512 MB for agent imports
 
 function readBody(req: http.IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -642,6 +721,33 @@ function readBody(req: http.IncomingMessage): Promise<string> {
       chunks.push(c);
     });
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+    req.on("error", reject);
+  });
+}
+
+/**
+ * Read raw binary request body with a configurable size limit.
+ * Used for agent import file uploads.
+ */
+function readRawBody(
+  req: http.IncomingMessage,
+  maxBytes: number,
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+    req.on("data", (c: Buffer) => {
+      totalBytes += c.length;
+      if (totalBytes > maxBytes) {
+        req.destroy();
+        reject(
+          new Error(`Request body exceeds maximum size (${maxBytes} bytes)`),
+        );
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks)));
     req.on("error", reject);
   });
 }
@@ -791,6 +897,165 @@ function getProviderOptions(): Array<{
       pluginName: "@elizaos/plugin-ollama",
       keyPrefix: null,
       description: "Local models, no API key needed.",
+    },
+    {
+      id: "zai",
+      name: "z.ai (GLM Coding Plan)",
+      envKey: "ZAI_API_KEY",
+      pluginName: "@homunculuslabs/plugin-zai",
+      keyPrefix: null,
+      description: "GLM models via z.ai Coding Plan.",
+    },
+  ];
+}
+
+function getCloudProviderOptions(): Array<{
+  id: string;
+  name: string;
+  description: string;
+}> {
+  return [
+    {
+      id: "elizacloud",
+      name: "Eliza Cloud",
+      description:
+        "Managed cloud infrastructure. Wallets, LLMs, and RPCs included.",
+    },
+  ];
+}
+
+function getModelOptions(): {
+  small: Array<{
+    id: string;
+    name: string;
+    provider: string;
+    description: string;
+  }>;
+  large: Array<{
+    id: string;
+    name: string;
+    provider: string;
+    description: string;
+  }>;
+} {
+  return {
+    small: [
+      {
+        id: "claude-haiku",
+        name: "Claude Haiku (latest)",
+        provider: "anthropic",
+        description: "Fast and efficient. Default small model.",
+      },
+      {
+        id: "gpt-4o-mini",
+        name: "GPT-4o Mini",
+        provider: "openai",
+        description: "OpenAI's compact model.",
+      },
+      {
+        id: "gemini-flash",
+        name: "Gemini Flash",
+        provider: "google",
+        description: "Google's fast model.",
+      },
+    ],
+    large: [
+      {
+        id: "claude-sonnet-4-5",
+        name: "Claude Sonnet 4.5",
+        provider: "anthropic",
+        description: "Powerful reasoning. Default large model.",
+      },
+      {
+        id: "gpt-4o",
+        name: "GPT-4o",
+        provider: "openai",
+        description: "OpenAI's flagship model.",
+      },
+      {
+        id: "claude-opus",
+        name: "Claude Opus",
+        provider: "anthropic",
+        description: "Most capable Claude model.",
+      },
+      {
+        id: "gemini-pro",
+        name: "Gemini Pro",
+        provider: "google",
+        description: "Google's advanced model.",
+      },
+    ],
+  };
+}
+
+function getInventoryProviderOptions(): Array<{
+  id: string;
+  name: string;
+  description: string;
+  rpcProviders: Array<{
+    id: string;
+    name: string;
+    description: string;
+    envKey: string | null;
+    requiresKey: boolean;
+  }>;
+}> {
+  return [
+    {
+      id: "evm",
+      name: "EVM",
+      description: "Ethereum, Base, Arbitrum, Optimism, Polygon.",
+      rpcProviders: [
+        {
+          id: "elizacloud",
+          name: "Eliza Cloud",
+          description: "Managed RPC. No setup needed.",
+          envKey: null,
+          requiresKey: false,
+        },
+        {
+          id: "infura",
+          name: "Infura",
+          description: "Reliable EVM infrastructure.",
+          envKey: "INFURA_API_KEY",
+          requiresKey: true,
+        },
+        {
+          id: "alchemy",
+          name: "Alchemy",
+          description: "Full-featured EVM data platform.",
+          envKey: "ALCHEMY_API_KEY",
+          requiresKey: true,
+        },
+        {
+          id: "ankr",
+          name: "Ankr",
+          description: "Decentralized RPC provider.",
+          envKey: "ANKR_API_KEY",
+          requiresKey: true,
+        },
+      ],
+    },
+    {
+      id: "solana",
+      name: "Solana",
+      description: "Solana mainnet tokens and NFTs.",
+      rpcProviders: [
+        {
+          id: "elizacloud",
+          name: "Eliza Cloud",
+          description: "Managed RPC. No setup needed.",
+          envKey: null,
+          requiresKey: false,
+        },
+        {
+          id: "helius",
+          name: "Helius",
+          description: "Solana-native data platform.",
+          envKey: "HELIUS_API_KEY",
+          requiresKey: true,
+        },
+      ],
     },
   ];
 }
@@ -1032,12 +1297,25 @@ async function handleRequest(
   // ── GET /api/status ─────────────────────────────────────────────────────
   if (method === "GET" && pathname === "/api/status") {
     const uptime = state.startedAt ? Date.now() - state.startedAt : undefined;
+
+    // Cloud mode: report cloud connection status alongside local state
+    const cloudProxy = state.cloudManager?.getProxy();
+    const runMode = cloudProxy ? "cloud" : "local";
+    const cloudStatus = state.cloudManager
+      ? {
+          connectionStatus: state.cloudManager.getStatus(),
+          activeAgentId: state.cloudManager.getActiveAgentId(),
+        }
+      : undefined;
+
     json(res, {
-      state: state.agentState,
-      agentName: state.agentName,
-      model: state.model,
+      state: cloudProxy ? "running" : state.agentState,
+      agentName: cloudProxy ? cloudProxy.agentName : state.agentName,
+      model: cloudProxy ? "cloud" : state.model,
       uptime,
       startedAt: state.startedAt,
+      runMode,
+      cloud: cloudStatus,
     });
     return;
   }
@@ -1055,6 +1333,9 @@ async function handleRequest(
       names: pickRandomNames(6),
       styles: STYLE_PRESETS,
       providers: getProviderOptions(),
+      cloudProviders: getCloudProviderOptions(),
+      models: getModelOptions(),
+      inventoryProviders: getInventoryProviderOptions(),
       sharedStyleRules: "Keep responses brief. Be helpful and concise.",
     });
     return;
@@ -1064,6 +1345,21 @@ async function handleRequest(
   if (method === "POST" && pathname === "/api/onboarding") {
     const body = await readJsonBody(req, res);
     if (!body) return;
+
+    // ── Validate required fields ──────────────────────────────────────────
+    if (!body.name || typeof body.name !== "string" || !body.name.trim()) {
+      error(res, "Missing or invalid agent name", 400);
+      return;
+    }
+    if (body.theme && body.theme !== "light" && body.theme !== "dark") {
+      error(res, "Invalid theme: must be 'light' or 'dark'", 400);
+      return;
+    }
+    if (body.runMode && body.runMode !== "local" && body.runMode !== "cloud") {
+      error(res, "Invalid runMode: must be 'local' or 'cloud'", 400);
+      return;
+    }
+
     const config = state.config;
 
     if (!config.agents) config.agents = {};
@@ -1075,7 +1371,7 @@ async function handleRequest(
       config.agents.list.push({ id: "main", default: true });
     }
     const agent = config.agents.list[0] as Record<string, unknown>;
-    agent.name = body.name;
+    agent.name = (body.name as string).trim();
     agent.workspace = resolveDefaultAgentWorkspaceDir();
     if (body.bio) agent.bio = body.bio;
     if (body.systemPrompt) agent.system = body.systemPrompt;
@@ -1084,29 +1380,65 @@ async function handleRequest(
     if (body.topics) agent.topics = body.topics;
     if (body.messageExamples) agent.messageExamples = body.messageExamples;
 
-    if (body.provider && body.providerApiKey) {
-      if (!config.env) config.env = {};
-      const providerOpt = getProviderOptions().find(
-        (p) => p.id === body.provider,
-      );
-      if (providerOpt?.envKey) {
-        (config.env as Record<string, string>)[providerOpt.envKey] =
-          body.providerApiKey as string;
-        process.env[providerOpt.envKey] = body.providerApiKey as string;
+    // ── Theme preference ──────────────────────────────────────────────────
+    if (body.theme) {
+      if (!config.ui) config.ui = {};
+      config.ui.theme = body.theme as "light" | "dark";
+    }
+
+    // ── Run mode & cloud configuration ────────────────────────────────────
+    const runMode = (body.runMode as string) || "local";
+    if (!config.cloud) config.cloud = {};
+    config.cloud.enabled = runMode === "cloud";
+
+    if (runMode === "cloud") {
+      if (body.cloudProvider) {
+        config.cloud.provider = body.cloudProvider as string;
+      }
+      if (body.smallModel) {
+        if (!config.models) config.models = {};
+        config.models.small = body.smallModel as string;
+      }
+      if (body.largeModel) {
+        if (!config.models) config.models = {};
+        config.models.large = body.largeModel as string;
       }
     }
 
-    if (body.telegramBotToken) {
-      if (!config.env) config.env = {};
-      (config.env as Record<string, string>).TELEGRAM_BOT_TOKEN =
-        body.telegramBotToken as string;
-      process.env.TELEGRAM_BOT_TOKEN = body.telegramBotToken as string;
+    // ── Local LLM provider ────────────────────────────────────────────────
+    if (runMode === "local" && body.provider) {
+      if (body.providerApiKey) {
+        if (!config.env) config.env = {};
+        const providerOpt = getProviderOptions().find(
+          (p) => p.id === body.provider,
+        );
+        if (providerOpt?.envKey) {
+          (config.env as Record<string, string>)[providerOpt.envKey] =
+            body.providerApiKey as string;
+          process.env[providerOpt.envKey] = body.providerApiKey as string;
+        }
+      }
     }
-    if (body.discordBotToken) {
+
+    // ── Inventory / RPC providers ─────────────────────────────────────────
+    if (Array.isArray(body.inventoryProviders)) {
       if (!config.env) config.env = {};
-      (config.env as Record<string, string>).DISCORD_API_TOKEN =
-        body.discordBotToken as string;
-      process.env.DISCORD_API_TOKEN = body.discordBotToken as string;
+      const allInventory = getInventoryProviderOptions();
+      for (const inv of body.inventoryProviders as Array<{
+        chain: string;
+        rpcProvider: string;
+        rpcApiKey?: string;
+      }>) {
+        const chainDef = allInventory.find((ip) => ip.id === inv.chain);
+        if (!chainDef) continue;
+        const rpcDef = chainDef.rpcProviders.find(
+          (rp) => rp.id === inv.rpcProvider,
+        );
+        if (rpcDef?.envKey && inv.rpcApiKey) {
+          (config.env as Record<string, string>)[rpcDef.envKey] = inv.rpcApiKey;
+          process.env[rpcDef.envKey] = inv.rpcApiKey;
+        }
+      }
     }
 
     // ── Generate wallet keys if not already present ───────────────────────
@@ -1140,7 +1472,18 @@ async function handleRequest(
 
     state.config = config;
     state.agentName = (body.name as string) ?? state.agentName;
-    saveMilaidyConfig(config);
+    try {
+      saveMilaidyConfig(config);
+    } catch (err) {
+      logger.error(
+        `[milaidy-api] Failed to save config after onboarding: ${err}`,
+      );
+      error(res, "Failed to save configuration", 500);
+      return;
+    }
+    logger.info(
+      `[milaidy-api] Onboarding complete for agent "${body.name}" (mode: ${(body.runMode as string) || "local"})`,
+    );
     json(res, { ok: true });
     return;
   }
@@ -1326,6 +1669,142 @@ async function handleRequest(
     return;
   }
 
+  // ── POST /api/agent/export ─────────────────────────────────────────────
+  // Export the entire agent as a password-encrypted binary file.
+  if (method === "POST" && pathname === "/api/agent/export") {
+    if (!state.runtime) {
+      error(res, "Agent is not running — start it before exporting.", 503);
+      return;
+    }
+
+    const body = await readJsonBody<{
+      password?: string;
+      includeLogs?: boolean;
+    }>(req, res);
+    if (!body) return;
+
+    if (
+      !body.password ||
+      typeof body.password !== "string" ||
+      body.password.length < 4
+    ) {
+      error(res, "A password of at least 4 characters is required.", 400);
+      return;
+    }
+
+    try {
+      const fileBuffer = await exportAgent(state.runtime, body.password, {
+        includeLogs: body.includeLogs === true,
+      });
+
+      const agentName = (state.runtime.character.name ?? "agent")
+        .replace(/[^a-zA-Z0-9_-]/g, "_")
+        .toLowerCase();
+      const timestamp = new Date()
+        .toISOString()
+        .replace(/[:.]/g, "-")
+        .slice(0, 19);
+      const filename = `${agentName}-${timestamp}.eliza-agent`;
+
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`,
+      );
+      res.setHeader("Content-Length", fileBuffer.length);
+      res.end(fileBuffer);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (err instanceof AgentExportError) {
+        error(res, msg, 400);
+      } else {
+        error(res, `Export failed: ${msg}`, 500);
+      }
+    }
+    return;
+  }
+
+  // ── GET /api/agent/export/estimate ─────────────────────────────────────────
+  // Get an estimate of the export size before downloading.
+  if (method === "GET" && pathname === "/api/agent/export/estimate") {
+    if (!state.runtime) {
+      error(res, "Agent is not running.", 503);
+      return;
+    }
+
+    try {
+      const estimate = await estimateExportSize(state.runtime);
+      json(res, estimate);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      error(res, `Estimate failed: ${msg}`, 500);
+    }
+    return;
+  }
+
+  // ── POST /api/agent/import ─────────────────────────────────────────────
+  // Import an agent from a password-encrypted .eliza-agent file.
+  if (method === "POST" && pathname === "/api/agent/import") {
+    if (!state.runtime) {
+      error(res, "Agent is not running — start it before importing.", 503);
+      return;
+    }
+
+    let rawBody: Buffer;
+    try {
+      rawBody = await readRawBody(req, MAX_IMPORT_BYTES);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      error(res, msg, 413);
+      return;
+    }
+
+    if (rawBody.length < 5) {
+      error(
+        res,
+        "Request body is too small — expected password + file data.",
+        400,
+      );
+      return;
+    }
+
+    // Parse binary envelope: [4 bytes password length][password][file data]
+    const passwordLength = rawBody.readUInt32BE(0);
+    if (passwordLength < 4 || passwordLength > 1024) {
+      error(res, "Invalid password length in request envelope.", 400);
+      return;
+    }
+    if (rawBody.length < 4 + passwordLength + 1) {
+      error(
+        res,
+        "Request body is incomplete — missing file data after password.",
+        400,
+      );
+      return;
+    }
+
+    const password = rawBody.subarray(4, 4 + passwordLength).toString("utf-8");
+    const fileBuffer = rawBody.subarray(4 + passwordLength);
+
+    try {
+      const result = await importAgent(
+        state.runtime,
+        fileBuffer as Buffer,
+        password,
+      );
+      json(res, result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (err instanceof AgentExportError) {
+        error(res, msg, 400);
+      } else {
+        error(res, `Import failed: ${msg}`, 500);
+      }
+    }
+    return;
+  }
+
   // ── POST /api/agent/autonomy ────────────────────────────────────────────
   // Autonomy is always enabled; kept for backward compat.
   if (method === "POST" && pathname === "/api/agent/autonomy") {
@@ -1486,13 +1965,25 @@ async function handleRequest(
 
   // ── GET /api/plugins ────────────────────────────────────────────────────
   if (method === "GET" && pathname === "/api/plugins") {
-    // Update enabled status and active status from runtime (if available)
+    // Re-read config from disk so we pick up plugins installed since server start.
+    // The install endpoint writes to milaidy.json but state.config is only loaded
+    // once at server startup, so it would be stale without this refresh.
+    let freshConfig: MilaidyConfig;
+    try {
+      freshConfig = loadMilaidyConfig();
+    } catch {
+      freshConfig = state.config;
+    }
+
+    // Merge user-installed plugins into the list (they don't exist in plugins.json)
+    const bundledIds = new Set(state.plugins.map((p) => p.id));
+    const installedEntries = discoverInstalledPlugins(freshConfig, bundledIds);
+    const allPlugins = [...state.plugins, ...installedEntries];
+
+    // Update enabled status from runtime (if available)
     if (state.runtime) {
       const loadedNames = state.runtime.plugins.map((p) => p.name);
-      // Log for debugging
-      logger.debug(`[milaidy-api] Loaded plugin names: ${loadedNames.join(", ")}`);
-
-      for (const plugin of state.plugins) {
+      for (const plugin of allPlugins) {
         const suffix = `plugin-${plugin.id}`;
 <<<<<<< HEAD
         const packageName = `@elizaos/plugin-${plugin.id}`;
@@ -1511,7 +2002,6 @@ async function handleRequest(
             name === plugin.id ||
             name === suffix ||
             name.endsWith(`/${suffix}`),
->>>>>>> b35fdbea804e6566df9ce97203d7a24c97ccaa86
         );
         plugin.enabled = isLoaded;
         plugin.isActive = isLoaded; // Mark as active if currently loaded in runtime
@@ -1523,7 +2013,7 @@ async function handleRequest(
     }
 
     // Always refresh current env values and re-validate
-    for (const plugin of state.plugins) {
+    for (const plugin of allPlugins) {
       for (const param of plugin.parameters) {
         const envValue = process.env[param.key];
         param.isSet = Boolean(envValue && envValue.trim());
@@ -1553,7 +2043,7 @@ async function handleRequest(
       plugin.validationWarnings = validation.warnings;
     }
 
-    json(res, { plugins: state.plugins });
+    json(res, { plugins: allPlugins });
     return;
   }
 
@@ -1708,6 +2198,63 @@ async function handleRequest(
     plugin.validationErrors = updated.errors;
     plugin.validationWarnings = updated.warnings;
 
+    // Update config.plugins.allow for hot-reload
+    if (body.enabled !== undefined) {
+      const packageName = `@elizaos/plugin-${pluginId}`;
+
+      // Initialize plugins.allow if it doesn't exist
+      if (!state.config.plugins) {
+        state.config.plugins = {};
+      }
+      if (!state.config.plugins.allow) {
+        state.config.plugins.allow = [];
+      }
+
+      const allowList = state.config.plugins.allow as string[];
+      const index = allowList.indexOf(packageName);
+
+      if (body.enabled && index === -1) {
+        // Add plugin to allow list
+        allowList.push(packageName);
+        addLog("info", `Enabled plugin: ${packageName}`, "milaidy-api");
+      } else if (!body.enabled && index !== -1) {
+        // Remove plugin from allow list
+        allowList.splice(index, 1);
+        addLog("info", `Disabled plugin: ${packageName}`, "milaidy-api");
+      }
+
+      // Save updated config
+      try {
+        saveMilaidyConfig(state.config);
+      } catch (err) {
+        logger.warn(
+          `[milaidy-api] Failed to save config: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+
+      // Trigger runtime restart if available
+      if (callCtx.onRestart) {
+        addLog("info", "Triggering runtime restart...", "milaidy-api");
+        callCtx
+          .onRestart()
+          .then((newRuntime) => {
+            if (newRuntime) {
+              updateRuntime(newRuntime);
+              addLog("info", "Runtime restarted successfully", "milaidy-api");
+            } else {
+              addLog("warn", "Runtime restart returned null", "milaidy-api");
+            }
+          })
+          .catch((err) => {
+            addLog(
+              "error",
+              `Runtime restart failed: ${err instanceof Error ? err.message : err}`,
+              "milaidy-api",
+            );
+          });
+      }
+    }
+
     json(res, { ok: true, plugin });
     return;
   }
@@ -1717,9 +2264,38 @@ async function handleRequest(
     const { getRegistryPlugins } = await import(
       "../services/registry-client.js"
     );
+    const { listInstalledPlugins } = await import(
+      "../services/plugin-installer.js"
+    );
     try {
       const registry = await getRegistryPlugins();
-      const plugins = Array.from(registry.values());
+      const installed = await listInstalledPlugins();
+      const installedNames = new Set(installed.map((p) => p.name));
+
+      // Also check which plugins are loaded in the runtime
+      const loadedNames = state.runtime
+        ? new Set(state.runtime.plugins.map((p) => p.name))
+        : new Set<string>();
+
+      // Cross-reference with bundled manifest so the Store can hide them
+      const bundledIds = new Set(state.plugins.map((p) => p.id));
+
+      const plugins = Array.from(registry.values()).map((p) => {
+        const shortId = p.name
+          .replace(/^@[^/]+\/plugin-/, "")
+          .replace(/^@[^/]+\//, "")
+          .replace(/^plugin-/, "");
+        return {
+          ...p,
+          installed: installedNames.has(p.name),
+          installedVersion:
+            installed.find((i) => i.name === p.name)?.version ?? null,
+          loaded:
+            loadedNames.has(p.name) ||
+            loadedNames.has(p.name.replace("@elizaos/", "")),
+          bundled: bundledIds.has(shortId),
+        };
+      });
       json(res, { count: plugins.length, plugins });
     } catch (err) {
       error(
@@ -1936,6 +2512,308 @@ async function handleRequest(
       error(
         res,
         `Failed to list installed plugins: ${err instanceof Error ? err.message : String(err)}`,
+        500,
+      );
+    }
+    return;
+  }
+
+  // ── GET /api/skills/catalog ───────────────────────────────────────────
+  // Browse the full skill catalog (paginated).
+  if (method === "GET" && pathname === "/api/skills/catalog") {
+    try {
+      const { getCatalogSkills } = await import(
+        "../services/skill-catalog-client.js"
+      );
+      const all = await getCatalogSkills();
+      const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
+      const perPage = Math.min(
+        100,
+        Math.max(1, Number(url.searchParams.get("perPage")) || 50),
+      );
+      const sort = url.searchParams.get("sort") ?? "downloads";
+      const sorted = [...all];
+      if (sort === "downloads")
+        sorted.sort(
+          (a, b) =>
+            b.stats.downloads - a.stats.downloads || b.updatedAt - a.updatedAt,
+        );
+      else if (sort === "stars")
+        sorted.sort(
+          (a, b) => b.stats.stars - a.stats.stars || b.updatedAt - a.updatedAt,
+        );
+      else if (sort === "updated")
+        sorted.sort((a, b) => b.updatedAt - a.updatedAt);
+      else if (sort === "name")
+        sorted.sort((a, b) =>
+          (a.displayName ?? a.slug).localeCompare(b.displayName ?? b.slug),
+        );
+
+      // Resolve installed status from the AgentSkillsService
+      const installedSlugs = new Set<string>();
+      if (state.runtime) {
+        try {
+          const svc = state.runtime.getService("AGENT_SKILLS_SERVICE") as
+            | {
+                getLoadedSkills?: () => Array<{ slug: string; source: string }>;
+              }
+            | undefined;
+          if (svc && typeof svc.getLoadedSkills === "function") {
+            for (const s of svc.getLoadedSkills()) {
+              installedSlugs.add(s.slug);
+            }
+          }
+        } catch {
+          /* service may not be available */
+        }
+      }
+      // Also check locally discovered skills
+      for (const s of state.skills) {
+        installedSlugs.add(s.id);
+      }
+
+      const start = (page - 1) * perPage;
+      const skills = sorted.slice(start, start + perPage).map((s) => ({
+        ...s,
+        installed: installedSlugs.has(s.slug),
+      }));
+      json(res, {
+        total: all.length,
+        page,
+        perPage,
+        totalPages: Math.ceil(all.length / perPage),
+        installedCount: installedSlugs.size,
+        skills,
+      });
+    } catch (err) {
+      error(
+        res,
+        `Failed to load skill catalog: ${err instanceof Error ? err.message : String(err)}`,
+        500,
+      );
+    }
+    return;
+  }
+
+  // ── GET /api/skills/catalog/search ─────────────────────────────────────
+  if (method === "GET" && pathname === "/api/skills/catalog/search") {
+    const q = url.searchParams.get("q");
+    if (!q) {
+      error(res, "Missing query parameter ?q=", 400);
+      return;
+    }
+    try {
+      const { searchCatalogSkills } = await import(
+        "../services/skill-catalog-client.js"
+      );
+      const limit = Math.min(
+        100,
+        Math.max(1, Number(url.searchParams.get("limit")) || 30),
+      );
+      const results = await searchCatalogSkills(q, limit);
+      json(res, { query: q, count: results.length, results });
+    } catch (err) {
+      error(
+        res,
+        `Skill catalog search failed: ${err instanceof Error ? err.message : String(err)}`,
+        500,
+      );
+    }
+    return;
+  }
+
+  // ── GET /api/skills/catalog/:slug ──────────────────────────────────────
+  if (method === "GET" && pathname.startsWith("/api/skills/catalog/")) {
+    const slug = decodeURIComponent(
+      pathname.slice("/api/skills/catalog/".length),
+    );
+    // Exclude "search" which is handled above
+    if (slug && slug !== "search") {
+      try {
+        const { getCatalogSkill } = await import(
+          "../services/skill-catalog-client.js"
+        );
+        const skill = await getCatalogSkill(slug);
+        if (!skill) {
+          error(res, `Skill "${slug}" not found in catalog`, 404);
+          return;
+        }
+        json(res, { skill });
+      } catch (err) {
+        error(
+          res,
+          `Failed to fetch skill: ${err instanceof Error ? err.message : String(err)}`,
+          500,
+        );
+      }
+      return;
+    }
+  }
+
+  // ── POST /api/skills/catalog/refresh ───────────────────────────────────
+  if (method === "POST" && pathname === "/api/skills/catalog/refresh") {
+    try {
+      const { refreshCatalog } = await import(
+        "../services/skill-catalog-client.js"
+      );
+      const skills = await refreshCatalog();
+      json(res, { ok: true, count: skills.length });
+    } catch (err) {
+      error(
+        res,
+        `Catalog refresh failed: ${err instanceof Error ? err.message : String(err)}`,
+        500,
+      );
+    }
+    return;
+  }
+
+  // ── POST /api/skills/catalog/install ───────────────────────────────────
+  if (method === "POST" && pathname === "/api/skills/catalog/install") {
+    const body = await readJsonBody<{ slug: string; version?: string }>(
+      req,
+      res,
+    );
+    if (!body) return;
+    if (!body.slug) {
+      error(res, "Missing required field: slug", 400);
+      return;
+    }
+
+    if (!state.runtime) {
+      error(res, "Agent runtime not available — start the agent first", 503);
+      return;
+    }
+
+    try {
+      // eslint-disable-next-line -- service is loosely typed; cast via unknown
+      const service = state.runtime.getService("AGENT_SKILLS_SERVICE") as
+        | {
+            install?: (
+              slug: string,
+              opts?: { version?: string; force?: boolean },
+            ) => Promise<boolean>;
+            isInstalled?: (slug: string) => Promise<boolean>;
+          }
+        | undefined;
+
+      if (!service || typeof service.install !== "function") {
+        error(
+          res,
+          "AgentSkillsService not available — ensure @elizaos/plugin-agent-skills is loaded",
+          501,
+        );
+        return;
+      }
+
+      const alreadyInstalled =
+        typeof service.isInstalled === "function"
+          ? await service.isInstalled(body.slug)
+          : false;
+
+      if (alreadyInstalled) {
+        json(res, {
+          ok: true,
+          slug: body.slug,
+          message: `Skill "${body.slug}" is already installed`,
+          alreadyInstalled: true,
+        });
+        return;
+      }
+
+      const success = await service.install(body.slug, {
+        version: body.version,
+      });
+
+      if (success) {
+        // Refresh the skills list so the UI picks up the new skill
+        const workspaceDir =
+          state.config.agents?.defaults?.workspace ??
+          resolveDefaultAgentWorkspaceDir();
+        state.skills = await discoverSkills(
+          workspaceDir,
+          state.config,
+          state.runtime,
+        );
+
+        json(res, {
+          ok: true,
+          slug: body.slug,
+          message: `Skill "${body.slug}" installed successfully`,
+        });
+      } else {
+        error(res, `Failed to install skill "${body.slug}"`, 500);
+      }
+    } catch (err) {
+      error(
+        res,
+        `Skill install failed: ${err instanceof Error ? err.message : String(err)}`,
+        500,
+      );
+    }
+    return;
+  }
+
+  // ── POST /api/skills/catalog/uninstall ─────────────────────────────────
+  if (method === "POST" && pathname === "/api/skills/catalog/uninstall") {
+    const body = await readJsonBody<{ slug: string }>(req, res);
+    if (!body) return;
+    if (!body.slug) {
+      error(res, "Missing required field: slug", 400);
+      return;
+    }
+
+    if (!state.runtime) {
+      error(res, "Agent runtime not available — start the agent first", 503);
+      return;
+    }
+
+    try {
+      // eslint-disable-next-line -- service is loosely typed; cast via unknown
+      const service = state.runtime.getService("AGENT_SKILLS_SERVICE") as
+        | {
+            uninstall?: (slug: string) => Promise<boolean>;
+          }
+        | undefined;
+
+      if (!service || typeof service.uninstall !== "function") {
+        error(
+          res,
+          "AgentSkillsService not available — ensure @elizaos/plugin-agent-skills is loaded",
+          501,
+        );
+        return;
+      }
+
+      const success = await service.uninstall(body.slug);
+
+      if (success) {
+        // Refresh the skills list
+        const workspaceDir =
+          state.config.agents?.defaults?.workspace ??
+          resolveDefaultAgentWorkspaceDir();
+        state.skills = await discoverSkills(
+          workspaceDir,
+          state.config,
+          state.runtime,
+        );
+
+        json(res, {
+          ok: true,
+          slug: body.slug,
+          message: `Skill "${body.slug}" uninstalled successfully`,
+        });
+      } else {
+        error(
+          res,
+          `Failed to uninstall skill "${body.slug}" — it may be a bundled skill`,
+          400,
+        );
+      }
+    } catch (err) {
+      error(
+        res,
+        `Skill uninstall failed: ${err instanceof Error ? err.message : String(err)}`,
         500,
       );
     }
@@ -2168,7 +3046,8 @@ async function handleRequest(
     // Persist to config.env so it survives restarts
     if (!state.config.env) state.config.env = {};
     const envKey = chain === "evm" ? "EVM_PRIVATE_KEY" : "SOLANA_PRIVATE_KEY";
-    (state.config.env as Record<string, string>)[envKey] = process.env[envKey]!;
+    (state.config.env as Record<string, string>)[envKey] =
+      process.env[envKey] ?? "";
 
     try {
       saveMilaidyConfig(state.config);
@@ -2339,11 +3218,68 @@ async function handleRequest(
     return;
   }
 
+  // ── Cloud routes (/api/cloud/*) ─────────────────────────────────────────
+  if (pathname.startsWith("/api/cloud/")) {
+    const cloudState: CloudRouteState = {
+      config: state.config,
+      cloudManager: state.cloudManager,
+    };
+    const handled = await handleCloudRoute(
+      req,
+      res,
+      pathname,
+      method,
+      cloudState,
+    );
+    if (handled) return;
+  }
+
   // ── POST /api/chat ──────────────────────────────────────────────────────
   // Routes messages through the full ElizaOS message pipeline so the agent
   // has conversation memory, context, and always responds (DM + client_chat
   // bypass the shouldRespond LLM evaluation).
+  //
+  // Cloud mode: when a cloud proxy is active, messages are forwarded to the
+  // remote sandbox instead of the local runtime.  Supports SSE streaming
+  // when the client sends Accept: text/event-stream.
   if (method === "POST" && pathname === "/api/chat") {
+    // ── Cloud proxy path ───────────────────────────────────────────────
+    const proxy = state.cloudManager?.getProxy();
+    if (proxy) {
+      const body = await readJsonBody<{ text?: string }>(req, res);
+      if (!body) return;
+      if (!body.text?.trim()) {
+        error(res, "text is required");
+        return;
+      }
+
+      const wantsStream = (req.headers.accept ?? "").includes(
+        "text/event-stream",
+      );
+
+      if (wantsStream) {
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+          "X-Accel-Buffering": "no",
+        });
+
+        for await (const chunk of proxy.handleChatMessageStream(
+          body.text.trim(),
+        )) {
+          res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
+        }
+        res.write(`event: done\ndata: {}\n\n`);
+        res.end();
+      } else {
+        const responseText = await proxy.handleChatMessage(body.text.trim());
+        json(res, { text: responseText, agentName: proxy.agentName });
+      }
+      return;
+    }
+
+    // ── Local runtime path (existing code below) ───────────────────────
     const body = await readJsonBody<{ text?: string }>(req, res);
     if (!body) return;
     if (!body.text?.trim()) {
@@ -2413,6 +3349,82 @@ async function handleRequest(
     return;
   }
 
+  // ── Database management API ─────────────────────────────────────────────
+  if (pathname.startsWith("/api/database/")) {
+    const handled = await handleDatabaseRoute(
+      req,
+      res,
+      state.runtime,
+      pathname,
+    );
+    if (handled) return;
+  }
+
+  // ── GET /api/cloud/status ─────────────────────────────────────────────
+  if (method === "GET" && pathname === "/api/cloud/status") {
+    const rt = state.runtime;
+    if (!rt) {
+      json(res, { connected: false, reason: "runtime_not_started" });
+      return;
+    }
+    const cloudAuth = rt.getService("CLOUD_AUTH") as {
+      isAuthenticated: () => boolean;
+      getUserId: () => string | undefined;
+      getOrganizationId: () => string | undefined;
+    } | null;
+    if (!cloudAuth || !cloudAuth.isAuthenticated()) {
+      json(res, { connected: false, reason: "not_authenticated" });
+      return;
+    }
+    json(res, {
+      connected: true,
+      userId: cloudAuth.getUserId(),
+      organizationId: cloudAuth.getOrganizationId(),
+      topUpUrl: "https://www.elizacloud.ai/dashboard/billing",
+    });
+    return;
+  }
+
+  // ── GET /api/cloud/credits ──────────────────────────────────────────────
+  if (method === "GET" && pathname === "/api/cloud/credits") {
+    const rt = state.runtime;
+    if (!rt) {
+      json(res, { balance: null, connected: false });
+      return;
+    }
+    const cloudAuth = rt.getService("CLOUD_AUTH") as {
+      isAuthenticated: () => boolean;
+      getClient: () => { get: <T>(path: string) => Promise<T> };
+    } | null;
+    if (!cloudAuth || !cloudAuth.isAuthenticated()) {
+      json(res, { balance: null, connected: false });
+      return;
+    }
+    let balance: number;
+    const client = cloudAuth.getClient();
+    try {
+      const creditResponse = await client.get<{
+        success: boolean;
+        data: { balance: number; currency: string };
+      }>("/credits/balance");
+      balance = creditResponse.data.balance;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "cloud API unreachable";
+      logger.warn(`[cloud/credits] Failed to fetch balance: ${msg}`);
+      json(res, { balance: null, connected: true, error: msg });
+      return;
+    }
+    const low = balance < 2.0;
+    const critical = balance < 0.5;
+    json(res, {
+      connected: true,
+      balance,
+      low,
+      critical,
+      topUpUrl: "https://www.elizacloud.ai/dashboard/billing",
+    });
+    return;
+  }
   // ── Fallback ────────────────────────────────────────────────────────────
   error(res, "Not found", 404);
 }
@@ -2477,7 +3489,20 @@ export async function startApiServer(opts?: {
     logBuffer: [],
     chatRoomId: null,
     chatUserId: null,
+    cloudManager: null,
   };
+
+  // ── Cloud Manager initialisation ──────────────────────────────────────
+  if (config.cloud?.enabled && config.cloud?.apiKey) {
+    const mgr = new CloudManager(config.cloud, {
+      onStatusChange: (s) => {
+        addLog("info", `Cloud connection status: ${s}`, "cloud");
+      },
+    });
+    mgr.init();
+    state.cloudManager = mgr;
+    addLog("info", "Cloud manager initialised (ELIZA Cloud enabled)", "cloud");
+  }
 
   const addLog = (level: string, message: string, source = "system") => {
     let resolvedSource = source;
@@ -2565,22 +3590,28 @@ export async function startApiServer(opts?: {
     }
   });
 
-  // ---------------------------------------------------------------------------
-  // WebSocket Server
-  // ---------------------------------------------------------------------------
-
+  // ── WebSocket Server ─────────────────────────────────────────────────────
   const wss = new WebSocketServer({ noServer: true });
   const wsClients = new Set<WebSocket>();
 
-  // Handle WebSocket upgrade
+  // Handle upgrade requests for WebSocket
   server.on("upgrade", (request, socket, head) => {
-    const { pathname } = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
-
-    if (pathname === "/ws") {
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit("connection", ws, request);
-      });
-    } else {
+    try {
+      const { pathname } = new URL(
+        request.url ?? "/",
+        `http://${request.headers.host}`,
+      );
+      if (pathname === "/ws") {
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          wss.emit("connection", ws, request);
+        });
+      } else {
+        socket.destroy();
+      }
+    } catch (err) {
+      logger.error(
+        `[milaidy-api] WebSocket upgrade error: ${err instanceof Error ? err.message : err}`,
+      );
       socket.destroy();
     }
   });
@@ -2588,68 +3619,80 @@ export async function startApiServer(opts?: {
   // Handle WebSocket connections
   wss.on("connection", (ws: WebSocket) => {
     wsClients.add(ws);
-    addLog("info", `WebSocket client connected (total: ${wsClients.size})`, "websocket");
+    addLog("info", "WebSocket client connected", "websocket");
 
     // Send initial status
-    const uptime = state.startedAt ? Date.now() - state.startedAt : undefined;
-    ws.send(JSON.stringify({
-      type: "status",
-      state: state.agentState,
-      agentName: state.agentName,
-      model: state.model,
-      uptime,
-      startedAt: state.startedAt,
-    }));
+    try {
+      ws.send(
+        JSON.stringify({
+          type: "status",
+          data: {
+            agentState: state.agentState,
+            agentName: state.agentName,
+            model: state.model,
+            startedAt: state.startedAt,
+          },
+        }),
+      );
+    } catch (err) {
+      logger.error(
+        `[milaidy-api] WebSocket send error: ${err instanceof Error ? err.message : err}`,
+      );
+    }
 
     ws.on("message", (data) => {
       try {
-        const message = JSON.parse(data.toString()) as Record<string, unknown>;
-        // Handle incoming messages if needed (currently UI only receives, doesn't send)
-        addLog("debug", `WebSocket message received: ${message.type}`, "websocket");
+        const msg = JSON.parse(data.toString());
+        if (msg.type === "ping") {
+          ws.send(JSON.stringify({ type: "pong" }));
+        }
       } catch (err) {
-        addLog("error", `WebSocket message parse error: ${err}`, "websocket");
+        logger.error(
+          `[milaidy-api] WebSocket message error: ${err instanceof Error ? err.message : err}`,
+        );
       }
     });
 
     ws.on("close", () => {
       wsClients.delete(ws);
-      addLog("info", `WebSocket client disconnected (remaining: ${wsClients.size})`, "websocket");
+      addLog("info", "WebSocket client disconnected", "websocket");
     });
 
     ws.on("error", (err) => {
-      addLog("error", `WebSocket error: ${err.message}`, "websocket");
+      logger.error(
+        `[milaidy-api] WebSocket error: ${err instanceof Error ? err.message : err}`,
+      );
       wsClients.delete(ws);
     });
   });
 
-  /** Broadcast message to all connected WebSocket clients */
-  function broadcast(message: Record<string, unknown>): void {
-    const data = JSON.stringify(message);
+  // Broadcast status to all connected WebSocket clients
+  const broadcastStatus = () => {
+    const statusData = {
+      type: "status",
+      data: {
+        agentState: state.agentState,
+        agentName: state.agentName,
+        model: state.model,
+        startedAt: state.startedAt,
+      },
+    };
+    const message = JSON.stringify(statusData);
     for (const client of wsClients) {
-      if (client.readyState === 1) { // OPEN
+      if (client.readyState === 1) {
+        // OPEN
         try {
-          client.send(data);
+          client.send(message);
         } catch (err) {
-          addLog("error", `WebSocket send error: ${err}`, "websocket");
+          logger.error(
+            `[milaidy-api] WebSocket broadcast error: ${err instanceof Error ? err.message : err}`,
+          );
         }
       }
     }
-  }
+  };
 
-  /** Broadcast status updates to connected clients */
-  function broadcastStatus(): void {
-    const uptime = state.startedAt ? Date.now() - state.startedAt : undefined;
-    broadcast({
-      type: "status",
-      state: state.agentState,
-      agentName: state.agentName,
-      model: state.model,
-      uptime,
-      startedAt: state.startedAt,
-    });
-  }
-
-  // Send status updates every 5 seconds
+  // Broadcast status every 5 seconds
   const statusInterval = setInterval(broadcastStatus, 5000);
 
   /** Hot-swap the runtime reference (used after an in-process restart). */
@@ -2659,7 +3702,8 @@ export async function startApiServer(opts?: {
     state.agentName = rt.character.name ?? "Milaidy";
     state.startedAt = Date.now();
     addLog("info", `Runtime restarted — agent: ${state.agentName}`, "system");
-    broadcastStatus(); // Notify WebSocket clients of restart
+    // Broadcast status update immediately after restart
+    broadcastStatus();
   };
 
   return new Promise((resolve) => {
@@ -2677,18 +3721,12 @@ export async function startApiServer(opts?: {
       );
       resolve({
         port: actualPort,
-<<<<<<< HEAD
-        close: () => new Promise<void>((r) => {
-          clearInterval(statusInterval);
-          wss.close();
-          server.close(() => r());
-        }),
-=======
         close: () =>
           new Promise<void>((r) => {
+            clearInterval(statusInterval);
+            wss.close();
             server.close(() => r());
           }),
->>>>>>> b35fdbea804e6566df9ce97203d7a24c97ccaa86
         updateRuntime,
       });
     });
