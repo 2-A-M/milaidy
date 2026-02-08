@@ -89,6 +89,7 @@ jobs:
   playwright-tests:
     name: Playwright E2E Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: apps/ui

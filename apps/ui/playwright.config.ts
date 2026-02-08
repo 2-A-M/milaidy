@@ -21,6 +21,7 @@ export default defineConfig({
   webServer: {
     command: "bunx vite --port 2138",
     port: 2138,
+    timeout: 60_000,
     reuseExistingServer: !process.env.CI,
   },
 });
