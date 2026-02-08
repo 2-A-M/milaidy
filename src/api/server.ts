@@ -1705,15 +1705,25 @@ async function handleRequest(
         ? new Set(state.runtime.plugins.map((p) => p.name))
         : new Set<string>();
 
-      const plugins = Array.from(registry.values()).map((p) => ({
-        ...p,
-        installed: installedNames.has(p.name),
-        installedVersion:
-          installed.find((i) => i.name === p.name)?.version ?? null,
-        loaded:
-          loadedNames.has(p.name) ||
-          loadedNames.has(p.name.replace("@elizaos/", "")),
-      }));
+      // Cross-reference with bundled manifest so the Store can hide them
+      const bundledIds = new Set(state.plugins.map((p) => p.id));
+
+      const plugins = Array.from(registry.values()).map((p) => {
+        const shortId = p.name
+          .replace(/^@[^/]+\/plugin-/, "")
+          .replace(/^@[^/]+\//, "")
+          .replace(/^plugin-/, "");
+        return {
+          ...p,
+          installed: installedNames.has(p.name),
+          installedVersion:
+            installed.find((i) => i.name === p.name)?.version ?? null,
+          loaded:
+            loadedNames.has(p.name) ||
+            loadedNames.has(p.name.replace("@elizaos/", "")),
+          bundled: bundledIds.has(shortId),
+        };
+      });
       json(res, { count: plugins.length, plugins });
     } catch (err) {
       error(

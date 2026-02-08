@@ -75,6 +75,7 @@ export class MilaidyApp extends LitElement {
   @state() storePlugins: RegistryPlugin[] = [];
   @state() storeSearch = "";
   @state() storeFilter: "all" | "installed" | "ai-provider" | "connector" | "feature" = "all";
+  @state() storeShowBundled = false;
   @state() storeLoading = false;
   @state() storeInstalling: Set<string> = new Set();
   @state() storeUninstalling: Set<string> = new Set();
@@ -1464,7 +1465,12 @@ export class MilaidyApp extends LitElement {
   private renderStore() {
     const searchLower = this.storeSearch.toLowerCase();
 
-    const filtered = this.storePlugins.filter((p) => {
+    // Base pool: hide bundled plugins unless toggled on or searching
+    const pool = this.storeShowBundled
+      ? this.storePlugins
+      : this.storePlugins.filter((p) => !p.bundled || p.installed);
+
+    const filtered = pool.filter((p) => {
       // Category filter
       if (this.storeFilter === "installed" && !p.installed) return false;
       if (this.storeFilter === "ai-provider" && this.categorizeStorePlugin(p.name) !== "ai-provider") return false;
@@ -1480,6 +1486,8 @@ export class MilaidyApp extends LitElement {
       return true;
     });
 
+    const communityPlugins = this.storePlugins.filter((p) => !p.bundled);
+    const bundledCount = this.storePlugins.filter((p) => p.bundled).length;
     const installedCount = this.storePlugins.filter(p => p.installed).length;
     const loadedCount = this.storePlugins.filter(p => p.loaded).length;
 
@@ -1493,9 +1501,9 @@ export class MilaidyApp extends LitElement {
     };
 
     const categoryCount = (cat: string): number => {
-      if (cat === "all") return this.storePlugins.length;
-      if (cat === "installed") return installedCount;
-      return this.storePlugins.filter(p => this.categorizeStorePlugin(p.name) === cat).length;
+      if (cat === "all") return pool.length;
+      if (cat === "installed") return pool.filter((p) => p.installed).length;
+      return pool.filter((p) => this.categorizeStorePlugin(p.name) === cat).length;
     };
 
     return html`
@@ -1511,8 +1519,8 @@ export class MilaidyApp extends LitElement {
 
       <div class="store-summary-bar">
         <div class="store-summary-stat">
-          <span class="stat-value">${this.storePlugins.length}</span>
-          <span class="stat-label">available</span>
+          <span class="stat-value">${communityPlugins.length}</span>
+          <span class="stat-label">community</span>
         </div>
         <div class="store-summary-stat">
           <span class="stat-value" style="color:var(--ok);">${installedCount}</span>
@@ -1522,9 +1530,18 @@ export class MilaidyApp extends LitElement {
           <span class="stat-value" style="color:var(--accent);">${loadedCount}</span>
           <span class="stat-label">active</span>
         </div>
-        <div style="margin-left:auto;">
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+          <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);cursor:pointer;user-select:none;">
+            <input
+              type="checkbox"
+              .checked=${this.storeShowBundled}
+              @change=${(e: Event) => { this.storeShowBundled = (e.target as HTMLInputElement).checked; }}
+              style="cursor:pointer;"
+            />
+            Show bundled (${bundledCount})
+          </label>
           <button class="btn" style="font-size:11px;padding:3px 10px;margin:0;" @click=${this.handleStoreRefresh} ?disabled=${this.storeLoading}>
-            ${this.storeLoading ? "Refreshing..." : "Refresh Registry"}
+            ${this.storeLoading ? "Refreshing..." : "Refresh"}
           </button>
         </div>
       </div>
@@ -1586,6 +1603,7 @@ export class MilaidyApp extends LitElement {
             <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:2px;">${p.name}</div>
           </div>
           <div style="display:flex;gap:4px;flex-shrink:0;">
+            ${p.bundled ? html`<span class="store-badge" style="color:var(--muted);border-color:var(--border);">bundled</span>` : ""}
             ${p.loaded ? html`<span class="store-badge loaded">active</span>` : ""}
             ${p.installed ? html`<span class="store-badge installed">installed</span>` : ""}
           </div>

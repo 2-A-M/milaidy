@@ -150,6 +150,7 @@ export interface RegistryPlugin {
   installed: boolean;
   installedVersion: string | null;
   loaded: boolean;
+  bundled: boolean;
 }
 
 export interface RegistrySearchResult {
