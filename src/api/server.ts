@@ -3439,13 +3439,16 @@ async function handleRequest(
       return;
     }
 
+    const uninstallId = validateSkillId(body.id.trim(), res);
+    if (!uninstallId) return;
+
     try {
       const workspaceDir =
         state.config.agents?.defaults?.workspace ??
         resolveDefaultAgentWorkspaceDir();
       const result = await uninstallMarketplaceSkill(
         workspaceDir,
-        body.id.trim(),
+        uninstallId,
       );
       json(res, { ok: true, skill: result });
     } catch (err) {
