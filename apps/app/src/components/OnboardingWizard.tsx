@@ -917,35 +917,36 @@ export function OnboardingWizard() {
               {onboardingOptions?.inventoryProviders.map((provider: InventoryProviderOption) => (
                 <div
                   key={provider.id}
-                  className={`px-4 py-3 border-2 transition-colors ${
+                  className={`px-4 py-3 border-2 transition-colors cursor-pointer ${
                     onboardingSelectedChains.has(provider.id)
-                      ? "border-accent bg-accent text-accent-fg"
+                      ? "border-accent bg-card"
                       : "border-border bg-card hover:border-accent"
                   }`}
+                  onClick={() => handleChainToggle(provider.id)}
                 >
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={onboardingSelectedChains.has(provider.id)}
                       onChange={() => handleChainToggle(provider.id)}
-                      className="cursor-pointer"
+                      className="cursor-pointer accent-[var(--accent)]"
                     />
-                    <span className="font-bold text-sm">{provider.name}</span>
+                    <span className="font-bold text-sm text-txt-strong">{provider.name}</span>
                   </label>
                   {provider.description && (
-                    <p className={`text-xs mt-0.5 ml-6 ${onboardingSelectedChains.has(provider.id) ? "opacity-80" : "text-muted"}`}>
+                    <p className="text-xs mt-0.5 ml-6 text-muted">
                       {provider.description}
                     </p>
                   )}
                   {onboardingSelectedChains.has(provider.id) && (
-                    <div className="mt-3 ml-6">
-                      <label className="text-[13px] font-bold block mb-2 text-left opacity-80">
+                    <div className="mt-3 ml-6" onClick={(e) => e.stopPropagation()}>
+                      <label className="text-[13px] font-bold text-txt-strong block mb-1 text-left">
                         RPC Provider:
                       </label>
                       <select
                         value={onboardingRpcSelections[provider.id] ?? "elizacloud"}
                         onChange={(e) => handleRpcSelectionChange(provider.id, e.target.value)}
-                        className="w-full px-3 py-2 border border-border bg-card text-sm mt-2 focus:border-accent focus:outline-none"
+                        className="w-full px-3 py-2 border border-border bg-bg text-txt text-sm focus:border-accent focus:outline-none rounded"
                       >
                         {provider.rpcProviders.map((rpc: RpcProviderOption) => (
                           <option key={rpc.id} value={rpc.id}>
@@ -955,7 +956,7 @@ export function OnboardingWizard() {
                       </select>
                       {onboardingRpcSelections[provider.id] && (
                         <div className="mt-3">
-                          <label className="text-[13px] font-bold block mb-2 text-left opacity-80">
+                          <label className="text-[13px] font-bold text-txt-strong block mb-1 text-left">
                             RPC API Key (optional):
                           </label>
                           <input
@@ -969,7 +970,7 @@ export function OnboardingWizard() {
                               )
                             }
                             placeholder="Optional API key"
-                            className="w-full px-3 py-2 border border-border bg-card text-sm mt-2 focus:border-accent focus:outline-none"
+                            className="w-full px-3 py-2 border border-border bg-bg text-txt text-sm focus:border-accent focus:outline-none rounded"
                           />
                         </div>
                       )}
