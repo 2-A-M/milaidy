@@ -2700,8 +2700,37 @@ async function handleRequest(
         return;
       }
 
+      // Only allow env vars declared in the plugin's parameter definitions.
+      // This prevents attackers from injecting arbitrary env vars like
+      // NODE_OPTIONS, LD_PRELOAD, PATH, etc. via the config endpoint.
+      const allowedParamKeys = new Set(plugin.parameters.map((p) => p.key));
+
+      // Defense-in-depth: block dangerous system env vars even if a plugin
+      // accidentally declares one of these as a parameter key.
+      const BLOCKED_ENV_KEYS = new Set([
+        "LD_PRELOAD",
+        "LD_LIBRARY_PATH",
+        "DYLD_INSERT_LIBRARIES",
+        "DYLD_LIBRARY_PATH",
+        "NODE_OPTIONS",
+        "NODE_EXTRA_CA_CERTS",
+        "ELECTRON_RUN_AS_NODE",
+        "PATH",
+        "HOME",
+        "SHELL",
+        "MILAIDY_API_TOKEN",
+        "DATABASE_URL",
+        "POSTGRES_URL",
+      ]);
+
       for (const [key, value] of Object.entries(body.config)) {
         if (typeof value === "string" && value.trim()) {
+          if (!allowedParamKeys.has(key)) {
+            continue; // silently skip keys not declared in plugin parameters
+          }
+          if (BLOCKED_ENV_KEYS.has(key.toUpperCase())) {
+            continue; // never allow dangerous system env vars
+          }
           process.env[key] = value;
         }
       }
