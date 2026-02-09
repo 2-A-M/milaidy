@@ -213,6 +213,7 @@ export class MilaidyApp extends LitElement {
   @state() skillsMarketplaceManualGithubUrl = "";
   @state() skillToggleAction = "";
   @state() skillsSubTab: "my" | "browse" = "my";
+  @state() skillCreateFormOpen = false;
   @state() skillCreateName = "";
   @state() skillCreateDescription = "";
   @state() skillCreating = false;
@@ -474,7 +475,6 @@ export class MilaidyApp extends LitElement {
       position: absolute;
       top: 100%;
       right: 0;
-      margin-top: 6px;
       padding: 10px 14px;
       border: 1px solid var(--border);
       background: var(--bg);
@@ -483,8 +483,24 @@ export class MilaidyApp extends LitElement {
       box-shadow: 0 2px 8px rgba(0,0,0,0.12);
     }
 
+    /* Invisible bridge so the hover doesn't break crossing the gap */
+    .wallet-wrapper::after {
+      content: "";
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      height: 8px;
+    }
+
+    .wallet-wrapper:hover::after {
+      display: block;
+    }
+
     .wallet-wrapper:hover .wallet-tooltip {
       display: block;
+      margin-top: 8px;
     }
 
     .wallet-addr-row {
@@ -3796,7 +3812,6 @@ export class MilaidyApp extends LitElement {
       <header>
         <div style="display:flex;align-items:center;gap:12px;">
           <span class="logo">${name}</span>
-          ${this.renderWalletIcon()}
           ${this.renderCloudCreditBadge()}
         </div>
         <div style="display:flex;align-items:center;gap:12px;">
@@ -3814,6 +3829,7 @@ export class MilaidyApp extends LitElement {
               `}
           <button class="lifecycle-btn" @click=${this.handleRestart} ?disabled=${state === "restarting" || state === "not_started"} title="Restart the agent (reload code, config, plugins)">Restart</button>
           </div>
+          ${this.renderWalletIcon()}
         </div>
       </header>
     `;
@@ -4806,6 +4822,7 @@ export class MilaidyApp extends LitElement {
       const result = await client.createSkill(name, this.skillCreateDescription.trim() || "");
       this.skillCreateName = "";
       this.skillCreateDescription = "";
+      this.skillCreateFormOpen = false;
       this.setActionNotice(`Skill "${name}" created.`, "success");
       await this.refreshSkills();
       if (result.path) await client.openSkill(result.skill?.id ?? name).catch(() => undefined);
@@ -4932,22 +4949,39 @@ export class MilaidyApp extends LitElement {
       </div>
 
       ${this.skillsSubTab === "my" ? html`
-        <section style="border:1px solid var(--border);padding:12px;margin-bottom:14px;">
-          <div style="font-weight:bold;font-size:13px;margin-bottom:8px;">Create New Skill</div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <input class="plugin-search" style="flex:1;min-width:180px;" placeholder="Skill name" .value=${this.skillCreateName}
-              @input=${(e: Event) => { this.skillCreateName = (e.target as HTMLInputElement).value; }} />
-            <input class="plugin-search" style="flex:2;min-width:200px;" placeholder="Description (optional)" .value=${this.skillCreateDescription}
-              @input=${(e: Event) => { this.skillCreateDescription = (e.target as HTMLInputElement).value; }} />
-            <button class="btn" style="font-size:12px;padding:4px 12px;" @click=${() => this.handleCreateSkill()}
-              ?disabled=${this.skillCreating || !this.skillCreateName.trim()}>${this.skillCreating ? "Creating..." : "+ Create"}</button>
-          </div>
-        </section>
-
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <div></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <button class="btn" style="font-size:12px;padding:6px 16px;font-weight:bold;" @click=${() => { this.skillCreateFormOpen = !this.skillCreateFormOpen; }}>
+            ${this.skillCreateFormOpen ? "Cancel" : "+ New Skill"}
+          </button>
           <button class="btn" @click=${this.refreshSkills} style="font-size:12px;padding:4px 12px;">Refresh</button>
         </div>
+
+        ${this.skillCreateFormOpen ? html`
+          <section style="border:1px solid var(--accent,#888);padding:16px;margin-bottom:14px;border-radius:4px;background:var(--bg-secondary,rgba(255,255,255,0.03));">
+            <div style="font-weight:bold;font-size:14px;margin-bottom:12px;">Create New Skill</div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <div>
+                <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--muted);">Skill Name <span style="color:var(--danger,#e74c3c);">*</span></label>
+                <input class="plugin-search" style="width:100%;box-sizing:border-box;" placeholder="e.g. my-awesome-skill"
+                  .value=${this.skillCreateName}
+                  @input=${(e: Event) => { this.skillCreateName = (e.target as HTMLInputElement).value; }}
+                  @keydown=${(e: KeyboardEvent) => { if (e.key === "Enter" && this.skillCreateName.trim()) void this.handleCreateSkill(); }} />
+              </div>
+              <div>
+                <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--muted);">Description</label>
+                <input class="plugin-search" style="width:100%;box-sizing:border-box;" placeholder="Brief description of what this skill does (optional)"
+                  .value=${this.skillCreateDescription}
+                  @input=${(e: Event) => { this.skillCreateDescription = (e.target as HTMLInputElement).value; }}
+                  @keydown=${(e: KeyboardEvent) => { if (e.key === "Enter" && this.skillCreateName.trim()) void this.handleCreateSkill(); }} />
+              </div>
+              <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;">
+                <button class="btn" style="font-size:12px;padding:5px 16px;" @click=${() => { this.skillCreateFormOpen = false; this.skillCreateName = ""; this.skillCreateDescription = ""; }}>Cancel</button>
+                <button class="btn" style="font-size:12px;padding:5px 16px;font-weight:bold;" @click=${() => this.handleCreateSkill()}
+                  ?disabled=${this.skillCreating || !this.skillCreateName.trim()}>${this.skillCreating ? "Creating..." : "Create Skill"}</button>
+              </div>
+            </div>
+          </section>
+        ` : ""}
 
         ${this.skills.length === 0
           ? html`<div class="empty-state">No skills loaded. Create one above or install from Browse tab.</div>`
@@ -6478,7 +6512,7 @@ export class MilaidyApp extends LitElement {
         ${THEMES.map(t => html`
           <div
             class="onboarding-option ${this.onboardingTheme === t.id ? "selected" : ""}"
-            @click=${() => { this.onboardingTheme = t.id; }}
+            @click=${() => { this.onboardingTheme = t.id; this.setTheme(t.id); }}
             style="text-align:center;padding:14px 8px;"
           >
             <div class="label">${t.label}</div>
@@ -6600,34 +6634,59 @@ export class MilaidyApp extends LitElement {
   private renderOnboardingLlmProvider(opts: OnboardingOptions) {
     const selected = opts.providers.find((p) => p.id === this.onboardingProvider);
     const needsKey = selected && selected.envKey && selected.id !== "elizacloud" && selected.id !== "ollama";
+    const freeProvider = opts.providers.find((p) => p.id === "elizacloud");
+    const paidProviders = opts.providers.filter((p) => p.id !== "elizacloud");
 
     return html`
       <img class="onboarding-avatar" src="/pfp.jpg" alt="milAIdy" style="width:100px;height:100px;" />
       <div class="onboarding-speech">which AI provider do you want to use?</div>
+
       <div class="onboarding-options onboarding-options-scroll">
-        ${opts.providers.map(
-          (provider) => html`
-            <div
-              class="onboarding-option ${this.onboardingProvider === provider.id ? "selected" : ""}"
-              @click=${() => { this.onboardingProvider = provider.id; this.onboardingApiKey = ""; }}
-            >
-              <div class="label">${provider.name}</div>
-              <div class="hint">${provider.description}</div>
+        ${freeProvider ? html`
+          <div
+            class="onboarding-option ${this.onboardingProvider === "elizacloud" ? "selected" : ""}"
+            @click=${() => { this.onboardingProvider = "elizacloud"; this.onboardingApiKey = ""; }}
+            style="position:relative;"
+          >
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <div class="label">${freeProvider.name}</div>
+              <span style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;padding:2px 8px;background:var(--accent);color:var(--bg);font-weight:bold;">free</span>
             </div>
-          `,
-        )}
+            <div class="hint">${freeProvider.description}</div>
+          </div>
+        ` : ""}
+
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+          ${paidProviders.map(
+            (provider) => html`
+              <div
+                class="onboarding-option ${this.onboardingProvider === provider.id ? "selected" : ""}"
+                @click=${() => { this.onboardingProvider = provider.id; this.onboardingApiKey = ""; }}
+              >
+                <div class="label">${provider.name}</div>
+                <div class="hint">${provider.description}</div>
+              </div>
+            `,
+          )}
+        </div>
       </div>
-      ${needsKey
+
+      ${needsKey && selected
         ? html`
-            <input
-              class="onboarding-input"
-              type="password"
-              placeholder="API Key"
-              .value=${this.onboardingApiKey}
-              @input=${(e: Event) => { this.onboardingApiKey = (e.target as HTMLInputElement).value; }}
-            />
+            <div style="margin-top:12px;padding:12px 14px;border:1px solid var(--border);background:var(--card);">
+              <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:6px;">${selected.name} API Key</label>
+              <input
+                class="onboarding-input"
+                type="password"
+                placeholder="${selected.keyPrefix ? `${selected.keyPrefix}...` : "Paste your API key"}"
+                .value=${this.onboardingApiKey}
+                @input=${(e: Event) => { this.onboardingApiKey = (e.target as HTMLInputElement).value; }}
+                style="margin-top:0;"
+              />
+            </div>
           `
         : ""}
+
       <div class="btn-row">
         <button class="btn btn-outline" @click=${() => this.handleOnboardingBack()}>Back</button>
         <button

@@ -44,7 +44,7 @@ test.describe("Error States", () => {
 
   test("onboarding POST without name is rejected", async ({ appPage: page }) => {
     const resp = await page.request.post("/api/onboarding", {
-      data: { theme: "dark" },
+      data: { theme: "milady" },
     });
     expect(resp.status()).toBeGreaterThanOrEqual(400);
   });
