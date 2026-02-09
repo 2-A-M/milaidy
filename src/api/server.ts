@@ -3853,6 +3853,8 @@ async function handleRequest(
   };
 
   // Helper: ensure the room for a conversation is set up.
+  // Also ensures the world has ownership metadata so the settings provider
+  // can find it via findWorldsForOwner during onboarding.
   const ensureConversationRoom = async (
     conv: ConversationMeta,
   ): Promise<void> => {
@@ -3873,6 +3875,27 @@ async function handleRequest(
       messageServerId,
       metadata: { ownership: { ownerId: userId } },
     });
+    // Ensure the world has ownership metadata so the settings provider
+    // can locate it via findWorldsForOwner during onboarding / DM flows.
+    const world = await runtime.getWorld(worldId);
+    if (world) {
+      let needsUpdate = false;
+      if (!world.metadata) {
+        world.metadata = {};
+        needsUpdate = true;
+      }
+      if (
+        !world.metadata.ownership ||
+        typeof world.metadata.ownership !== "object" ||
+        (world.metadata.ownership as { ownerId: string }).ownerId !== userId
+      ) {
+        world.metadata.ownership = { ownerId: userId };
+        needsUpdate = true;
+      }
+      if (needsUpdate) {
+        await runtime.updateWorld(world);
+      }
+    }
   };
 
   // ── GET /api/conversations ──────────────────────────────────────────
