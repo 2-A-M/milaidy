@@ -5,9 +5,9 @@
 
 import { logger } from "@elizaos/core";
 import type { CloudConfig } from "../config/types.milaidy.js";
+import { BackupScheduler } from "./backup.js";
 import { ElizaCloudClient } from "./bridge-client.js";
 import { CloudRuntimeProxy } from "./cloud-proxy.js";
-import { BackupScheduler } from "./backup.js";
 import { ConnectionMonitor } from "./reconnect.js";
 
 export type CloudConnectionStatus =

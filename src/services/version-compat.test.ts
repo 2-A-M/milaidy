@@ -40,6 +40,18 @@ describe("parseSemver", () => {
     expect(parseSemver("3.0.0-rc.2")).toEqual([3, 0, 0, 2]);
   });
 
+  it("parses a nightly pre-release version", () => {
+    expect(parseSemver("2.0.0-nightly.20260208")).toEqual([2, 0, 0, 20260208]);
+  });
+
+  it("compares two nightly versions correctly", () => {
+    const older = parseSemver("2.0.0-nightly.20260207");
+    const newer = parseSemver("2.0.0-nightly.20260208");
+    expect(older).not.toBeNull();
+    expect(newer).not.toBeNull();
+    expect(older![3]).toBeLessThan(newer![3]);
+  });
+
   it("returns null for invalid version strings", () => {
     expect(parseSemver("not-a-version")).toBeNull();
     expect(parseSemver("")).toBeNull();
@@ -95,6 +107,28 @@ describe("compareSemver", () => {
   it("patch version difference", () => {
     expect(compareSemver("2.0.1", "2.0.0")).toBe(1);
     expect(compareSemver("2.0.0", "2.0.1")).toBe(-1);
+  });
+
+  it("nightly.20260207 < nightly.20260208", () => {
+    expect(
+      compareSemver("2.0.0-nightly.20260207", "2.0.0-nightly.20260208"),
+    ).toBe(-1);
+  });
+
+  it("nightly.20260208 > nightly.20260207", () => {
+    expect(
+      compareSemver("2.0.0-nightly.20260208", "2.0.0-nightly.20260207"),
+    ).toBe(1);
+  });
+
+  it("nightly same date === 0", () => {
+    expect(
+      compareSemver("2.0.0-nightly.20260208", "2.0.0-nightly.20260208"),
+    ).toBe(0);
+  });
+
+  it("release > nightly", () => {
+    expect(compareSemver("2.0.0", "2.0.0-nightly.20260208")).toBe(1);
   });
 
   it("returns null for invalid input", () => {

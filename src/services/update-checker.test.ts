@@ -7,7 +7,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReleaseChannel, UpdateConfig } from "../config/types.milaidy.js";
-import { CHANNEL_DIST_TAGS } from "../config/types.milaidy.js";
+import { CHANNEL_DIST_TAGS } from "./release-channels.js";
 
 // ---------------------------------------------------------------------------
 // We test the pure logic functions by importing them directly.

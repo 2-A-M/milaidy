@@ -142,7 +142,7 @@ process.on("SIGTERM", cleanup);
 function startVite() {
   viteProcess = spawn("npx", ["vite", "--port", String(UI_PORT)], {
     cwd: path.join(cwd, "apps/ui"),
-    env: process.env,
+    env: { ...process.env, MILAIDY_API_PORT: String(API_PORT) },
     stdio: ["inherit", "pipe", "pipe"],
   });
 

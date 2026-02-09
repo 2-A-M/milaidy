@@ -9,8 +9,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CloudRuntimeProxy } from "./cloud-proxy.js";
 import type { ElizaCloudClient } from "./bridge-client.js";
+import { CloudRuntimeProxy } from "./cloud-proxy.js";
 
 function createMockClient(
   overrides: Partial<ElizaCloudClient> = {},

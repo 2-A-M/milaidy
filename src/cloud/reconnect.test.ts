@@ -15,8 +15,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-import { ConnectionMonitor } from "./reconnect.js";
+
 import type { ElizaCloudClient } from "./bridge-client.js";
+import { ConnectionMonitor } from "./reconnect.js";
 
 function createMockClient(
   overrides: Record<string, unknown> = {},

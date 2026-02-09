@@ -7,22 +7,22 @@
  */
 
 import crypto from "node:crypto";
-import { describe, it, expect, beforeEach } from "vitest";
-import { exportAgent, importAgent, AgentExportError } from "./agent-export.js";
 import type {
-  AgentRuntime,
-  UUID,
   Agent,
-  Memory,
-  Entity,
+  AgentRuntime,
   Component,
-  Room,
-  Relationship,
-  World,
-  Task,
-  Log,
+  Entity,
   IDatabaseAdapter,
+  Log,
+  Memory,
+  Relationship,
+  Room,
+  Task,
+  UUID,
+  World,
 } from "@elizaos/core";
+import { beforeEach, describe, expect, it } from "vitest";
+import { AgentExportError, exportAgent, importAgent } from "./agent-export.js";
 
 // ---------------------------------------------------------------------------
 // Mock data factories

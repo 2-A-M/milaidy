@@ -35,12 +35,12 @@ import {
   type MilaidyConfig,
   saveMilaidyConfig,
 } from "../config/config.js";
+import { resolveStateDir, resolveUserPath } from "../config/paths.js";
 import {
   type ApplyPluginAutoEnableParams,
   applyPluginAutoEnable,
 } from "../config/plugin-auto-enable.js";
 import type { AgentConfig } from "../config/types.agents.js";
-import { resolveStateDir, resolveUserPath } from "../config/paths.js";
 import type { PluginInstallRecord } from "../config/types.milaidy.js";
 import {
   createHookEvent,

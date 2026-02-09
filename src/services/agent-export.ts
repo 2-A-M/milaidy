@@ -19,19 +19,19 @@
  */
 
 import * as crypto from "node:crypto";
-import { gzipSync, gunzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 import type {
-  AgentRuntime,
-  UUID,
   Agent,
-  Memory,
-  Entity,
+  AgentRuntime,
   Component,
-  Room,
-  Relationship,
-  World,
-  Task,
+  Entity,
   Log,
+  Memory,
+  Relationship,
+  Room,
+  Task,
+  UUID,
+  World,
 } from "@elizaos/core";
 import { logger } from "@elizaos/core";
 import { z } from "zod";

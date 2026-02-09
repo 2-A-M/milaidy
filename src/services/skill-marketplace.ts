@@ -1,7 +1,7 @@
-import path from "node:path";
-import os from "node:os";
-import fs from "node:fs/promises";
 import { execFile } from "node:child_process";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { promisify } from "node:util";
 import { logger } from "@elizaos/core";
 
@@ -9,6 +9,154 @@ const execFileAsync = promisify(execFile);
 
 const SKILLSMP_BASE_URL = "https://skillsmp.com";
 const VALID_NAME = /^[a-zA-Z0-9._-]+$/;
+
+/**
+ * Minimal scan report shape used by the marketplace installer.
+ * Full type definition lives in @elizaos/plugin-agent-skills/security/types.
+ */
+interface MarketplaceScanReport {
+  scannedAt: string;
+  status: "clean" | "warning" | "critical" | "blocked";
+  summary: {
+    scannedFiles: number;
+    critical: number;
+    warn: number;
+    info: number;
+  };
+  findings: Array<{
+    ruleId: string;
+    severity: string;
+    file: string;
+    line: number;
+    message: string;
+    evidence: string;
+  }>;
+  manifestFindings: Array<{
+    ruleId: string;
+    severity: string;
+    file: string;
+    message: string;
+  }>;
+  skillPath: string;
+}
+
+/**
+ * Run a security scan on a skill directory.
+ *
+ * Checks for binary files, symlink escapes, and missing SKILL.md.
+ * This is a self-contained manifest check — the full content-level scan
+ * (code + markdown patterns) is handled by the AgentSkillsService when
+ * it loads the skill. This layer catches the most dangerous structural
+ * attacks at the marketplace install boundary.
+ */
+async function runSkillSecurityScan(
+  skillDir: string,
+): Promise<MarketplaceScanReport> {
+  const fsPromises = await import("node:fs/promises");
+  const pathMod = await import("node:path");
+
+  const findings: MarketplaceScanReport["findings"] = [];
+  const manifestFindings: MarketplaceScanReport["manifestFindings"] = [];
+  let scannedFiles = 0;
+
+  const BINARY_EXTENSIONS = new Set([
+    ".exe",
+    ".dll",
+    ".so",
+    ".dylib",
+    ".wasm",
+    ".bin",
+    ".com",
+    ".bat",
+    ".cmd",
+  ]);
+
+  // Walk and check
+  async function walk(dir: string): Promise<void> {
+    const entries = await fsPromises.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name === "node_modules") continue;
+      const fullPath = pathMod.join(dir, entry.name);
+      const relPath = pathMod.relative(skillDir, fullPath);
+
+      if (entry.isDirectory()) {
+        await walk(fullPath);
+      } else if (entry.isFile()) {
+        scannedFiles++;
+        const ext = pathMod.extname(entry.name).toLowerCase();
+        if (BINARY_EXTENSIONS.has(ext)) {
+          manifestFindings.push({
+            ruleId: "binary-file",
+            severity: "critical",
+            file: relPath,
+            message: `Binary executable file detected (${ext})`,
+          });
+        }
+      } else if (entry.isSymbolicLink()) {
+        const resolved = await fsPromises.realpath(fullPath).catch(() => "");
+        if (resolved && !resolved.startsWith(skillDir)) {
+          manifestFindings.push({
+            ruleId: "symlink-escape",
+            severity: "critical",
+            file: relPath,
+            message: `Symbolic link points outside skill directory`,
+          });
+        }
+      }
+    }
+  }
+
+  await walk(skillDir);
+
+  // Check SKILL.md exists
+  const skillMdPath = pathMod.join(skillDir, "SKILL.md");
+  const hasSkillMd = await fsPromises
+    .stat(skillMdPath)
+    .then((s) => s.isFile())
+    .catch(() => false);
+  if (!hasSkillMd) {
+    manifestFindings.push({
+      ruleId: "missing-skill-md",
+      severity: "critical",
+      file: "SKILL.md",
+      message: "No SKILL.md file found — invalid skill package",
+    });
+  }
+
+  const hasBlocking = manifestFindings.some(
+    (f) =>
+      f.ruleId === "binary-file" ||
+      f.ruleId === "symlink-escape" ||
+      f.ruleId === "missing-skill-md",
+  );
+  const critical = manifestFindings.filter(
+    (f) => f.severity === "critical",
+  ).length;
+  const warn = manifestFindings.filter((f) => f.severity === "warn").length;
+
+  let status: MarketplaceScanReport["status"] = "clean";
+  if (hasBlocking) status = "blocked";
+  else if (critical > 0) status = "critical";
+  else if (warn > 0) status = "warning";
+
+  const report: MarketplaceScanReport = {
+    scannedAt: new Date().toISOString(),
+    status,
+    summary: { scannedFiles, critical, warn, info: 0 },
+    findings,
+    manifestFindings,
+    skillPath: skillDir,
+  };
+
+  // Persist the report
+  await fsPromises.writeFile(
+    pathMod.join(skillDir, ".scan-results.json"),
+    JSON.stringify(report, null, 2),
+    "utf-8",
+  );
+
+  return report;
+}
 
 export interface SkillsMarketplaceSearchItem {
   id: string;
@@ -32,6 +180,8 @@ export interface InstalledMarketplaceSkill {
   installPath: string;
   installedAt: string;
   source: "skillsmp" | "manual";
+  /** Security scan status, set after installation scan */
+  scanStatus?: "clean" | "warning" | "critical" | "blocked";
 }
 
 export interface InstallSkillInput {
@@ -170,9 +320,7 @@ function inferRepository(skill: Record<string, unknown>): string | null {
     if (typeof value !== "string" || !value.trim()) continue;
     try {
       return normalizeRepo(value);
-    } catch {
-      continue;
-    }
+    } catch {}
   }
 
   // Try to extract repository from githubUrl (e.g., https://github.com/owner/repo/tree/...)
@@ -502,6 +650,32 @@ export async function installMarketplaceSkill(
     throw new Error("Installed path does not contain SKILL.md");
   }
 
+  // ── Security scan ─────────────────────────────────────────
+  // Scan the skill directory for dangerous patterns before making it available.
+  // Blocked skills are removed and an error is thrown.
+  const scanReport = await runSkillSecurityScan(targetDir);
+  const scanStatus = scanReport.status;
+
+  if (scanReport.status === "blocked") {
+    await fs
+      .rm(targetDir, { recursive: true, force: true })
+      .catch(() => undefined);
+    const reasons = [
+      ...scanReport.findings.map((f: { message: string }) => f.message),
+      ...scanReport.manifestFindings.map((f: { message: string }) => f.message),
+    ];
+    throw new Error(
+      `Skill "${id}" blocked by security scan: ${reasons.join("; ")}`,
+    );
+  }
+
+  if (scanReport.status === "critical" || scanReport.status === "warning") {
+    logger.warn(
+      `[skills-marketplace] Security scan for "${id}": ${scanReport.status} ` +
+        `(${scanReport.summary.critical} critical, ${scanReport.summary.warn} warnings)`,
+    );
+  }
+
   const record: InstalledMarketplaceSkill = {
     id,
     name: input.name?.trim() || id,
@@ -512,6 +686,7 @@ export async function installMarketplaceSkill(
     installPath: targetDir,
     installedAt: new Date().toISOString(),
     source: input.source ?? "manual",
+    scanStatus,
   };
 
   const records = await readInstallRecords(workspaceDir);
@@ -519,7 +694,7 @@ export async function installMarketplaceSkill(
   await writeInstallRecords(workspaceDir, records);
 
   logger.info(
-    `[skills-marketplace] Installed ${record.id} from ${record.repository}:${record.path}`,
+    `[skills-marketplace] Installed ${record.id} from ${record.repository}:${record.path} (scan: ${scanStatus ?? "skipped"})`,
   );
   return record;
 }

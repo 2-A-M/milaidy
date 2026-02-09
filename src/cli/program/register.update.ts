@@ -15,14 +15,14 @@ import { loadMilaidyConfig, saveMilaidyConfig } from "../../config/config.js";
 import type { ReleaseChannel } from "../../config/types.milaidy.js";
 import { VERSION } from "../../runtime/version.js";
 import {
+  detectInstallMethod,
+  performUpdate,
+} from "../../services/self-updater.js";
+import {
   checkForUpdate,
   fetchAllChannelVersions,
   resolveChannel,
 } from "../../services/update-checker.js";
-import {
-  detectInstallMethod,
-  performUpdate,
-} from "../../services/self-updater.js";
 import { theme } from "../../terminal/theme.js";
 
 // ---------------------------------------------------------------------------
@@ -165,11 +165,22 @@ async function updateAction(opts: {
     process.exit(1);
   }
 
-  console.log(
-    theme.success(
-      `\n  Updated successfully! ${VERSION} -> ${updateResult.newVersion ?? result.latestVersion ?? "latest"}`,
-    ),
-  );
+  if (updateResult.newVersion) {
+    console.log(
+      theme.success(
+        `\n  Updated successfully! ${VERSION} -> ${updateResult.newVersion}`,
+      ),
+    );
+  } else {
+    // Update command succeeded (exit 0) but we couldn't verify the new version.
+    // This can happen if the new binary isn't on PATH yet or has issues.
+    console.log(theme.success("\n  Update command completed successfully."));
+    console.log(
+      theme.warn(
+        `  Could not verify the new version. Expected: ${result.latestVersion ?? "unknown"}`,
+      ),
+    );
+  }
   console.log(
     theme.muted("  Restart milaidy for the new version to take effect.\n"),
   );

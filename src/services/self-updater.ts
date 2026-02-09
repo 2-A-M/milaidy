@@ -16,7 +16,7 @@ import { execSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import type { ReleaseChannel } from "../config/types.milaidy.js";
-import { CHANNEL_DIST_TAGS } from "../config/types.milaidy.js";
+import { CHANNEL_DIST_TAGS } from "./release-channels.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -144,7 +144,7 @@ export function detectInstallMethod(): InstallMethod {
 // Update commands per install method
 // ---------------------------------------------------------------------------
 
-function buildUpdateCommand(
+export function buildUpdateCommand(
   method: InstallMethod,
   channel: ReleaseChannel,
 ): { command: string; args: string[] } | null {
@@ -175,17 +175,14 @@ function buildUpdateCommand(
     }
 
     case "apt":
+      // Use sh -c to run a compound command properly instead of
+      // stuffing && into the args array (which only works with shell: true
+      // and is unintuitive).
       return {
-        command: "sudo",
+        command: "sh",
         args: [
-          "apt-get",
-          "update",
-          "&&",
-          "sudo",
-          "apt-get",
-          "install",
-          "--only-upgrade",
-          "milaidy",
+          "-c",
+          "sudo apt-get update && sudo apt-get install --only-upgrade -y milaidy",
         ],
       };
 

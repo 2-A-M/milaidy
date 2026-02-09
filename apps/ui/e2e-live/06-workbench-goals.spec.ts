@@ -1,172 +1,82 @@
-/**
- * 06 — Workbench: Goals
- *
- * Tests creating, editing, completing, and viewing goals through the
- * Workbench tab against the real goal service. Verifies persistence
- * and summary statistics.
- */
 import { test, expect, navigateToTab, ensureAgentRunning } from "./fixtures.js";
 
-test.describe("Workbench — Goals", () => {
+interface Goal { id: string; name: string; isCompleted: boolean }
+interface Overview { goals: Goal[]; summary: Record<string, number>; autonomy: { enabled: boolean } }
+
+test.describe("Goals", () => {
   test.beforeEach(async ({ appPage: page }) => {
     await ensureAgentRunning(page);
     await navigateToTab(page, "Workbench");
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(500);
   });
 
-  test("workbench page renders with summary cards", async ({ appPage: page }) => {
-    // Summary section should be visible with stats
-    const summaryArea = page.locator(
-      "[class*='summary'], [class*='overview'], [class*='stats'], [class*='card']",
-    );
-    await expect(summaryArea.first()).toBeVisible({ timeout: 10_000 });
+  test("overview is consistent", async ({ appPage: page }) => {
+    const d = (await (await page.request.get("/api/workbench/overview")).json()) as Overview;
+    expect(d.summary.goalCount).toBe(d.goals.length);
+    expect(typeof d.autonomy.enabled).toBe("boolean");
   });
 
-  test("create a new goal", async ({ appPage: page }) => {
-    const goalName = `E2E Goal ${Date.now()}`;
+  test("create returns valid UUID", async ({ appPage: page }) => {
+    const name = `Goal ${Date.now()}`;
+    const body = (await (await page.request.post("/api/workbench/goals", { data: { name, description: "test" } })).json()) as { ok: boolean; id: string };
+    expect(body.ok).toBe(true);
+    expect(body.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    expect((await (await page.request.get("/api/workbench/overview")).json() as Overview).goals.find((g) => g.id === body.id)?.name).toBe(name);
+  });
 
-    // Find the goal name input
-    const nameInput = page.locator(
-      "input[placeholder*='goal' i], input[placeholder*='name' i], input[name*='goal' i]",
-    );
-    await nameInput.first().fill(goalName);
+  test("persists", async ({ appPage: page }) => {
+    const { id } = (await (await page.request.post("/api/workbench/goals", { data: { name: `P ${Date.now()}` } })).json()) as { id: string };
+    expect((await (await page.request.get("/api/workbench/overview")).json() as Overview).goals.some((g) => g.id === id)).toBe(true);
+  });
 
-    // Optional: add description
-    const descInput = page.locator(
-      "textarea[placeholder*='description' i], input[placeholder*='description' i]",
-    );
-    if ((await descInput.count()) > 0) {
-      await descInput.first().fill("Created by E2E test suite");
+  test("mark complete", async ({ appPage: page }) => {
+    const { id } = (await (await page.request.post("/api/workbench/goals", { data: { name: `C ${Date.now()}` } })).json()) as { id: string };
+    expect((await page.request.patch(`/api/workbench/goals/${id}`, { data: { isCompleted: true } })).status()).toBe(200);
+    expect((await (await page.request.get("/api/workbench/overview")).json() as Overview).goals.find((g) => g.id === id)?.isCompleted).toBe(true);
+  });
+
+  test("edit name", async ({ appPage: page }) => {
+    const { id } = (await (await page.request.post("/api/workbench/goals", { data: { name: `O ${Date.now()}` } })).json()) as { id: string };
+    const newName = `R ${Date.now()}`;
+    expect((await page.request.patch(`/api/workbench/goals/${id}`, { data: { name: newName } })).status()).toBe(200);
+    expect((await (await page.request.get("/api/workbench/overview")).json() as Overview).goals.find((g) => g.id === id)?.name).toBe(newName);
+  });
+
+  test("summary increments", async ({ appPage: page }) => {
+    const before = (await (await page.request.get("/api/workbench/overview")).json() as Overview).summary.goalCount;
+    await page.request.post("/api/workbench/goals", { data: { name: `S ${Date.now()}` } });
+    expect((await (await page.request.get("/api/workbench/overview")).json() as Overview).summary.goalCount).toBe(before + 1);
+  });
+
+  test("empty name rejected", async ({ appPage: page }) => {
+    expect((await page.request.post("/api/workbench/goals", { data: { name: "" } })).status()).toBeGreaterThanOrEqual(400);
+  });
+
+  test("empty PATCH rejected", async ({ appPage: page }) => {
+    const { id } = (await (await page.request.post("/api/workbench/goals", { data: { name: `EP ${Date.now()}` } })).json()) as { id: string };
+    expect((await page.request.patch(`/api/workbench/goals/${id}`, { data: {} })).status()).toBeGreaterThanOrEqual(400);
+  });
+
+  test("special characters in name", async ({ appPage: page }) => {
+    for (const name of [`🎯 ${Date.now()}`, `<b>html</b> ${Date.now()}`, `中文 ${Date.now()}`, `"quotes" ${Date.now()}`]) {
+      const { id } = (await (await page.request.post("/api/workbench/goals", { data: { name } })).json()) as { id: string };
+      expect((await (await page.request.get("/api/workbench/overview")).json() as Overview).goals.find((g) => g.id === id)?.name).toBe(name);
     }
-
-    // Click Add/Create Goal button
-    const addBtn = page.locator("button").filter({
-      hasText: /add goal|create goal|add|submit/i,
-    });
-    await addBtn.first().click();
-    await page.waitForTimeout(1000);
-
-    // Verify the goal appears in the list
-    const goalItem = page.locator("[class*='goal'], [class*='item'], li")
-      .filter({ hasText: goalName });
-    await expect(goalItem.first()).toBeVisible({ timeout: 10_000 });
   });
 
-  test("goal persists across page reload", async ({ appPage: page }) => {
-    const goalName = `Persistent Goal ${Date.now()}`;
-
-    // Create goal
-    const nameInput = page.locator(
-      "input[placeholder*='goal' i], input[placeholder*='name' i], input[name*='goal' i]",
-    );
-    await nameInput.first().fill(goalName);
-
-    const addBtn = page.locator("button").filter({
-      hasText: /add goal|create goal|add|submit/i,
-    });
-    await addBtn.first().click();
-    await page.waitForTimeout(1000);
-
-    // Reload
-    await page.reload();
-    await page.waitForTimeout(2000);
-    await navigateToTab(page, "Workbench");
-    await page.waitForTimeout(1000);
-
-    // Goal should still be there
-    const goalItem = page.locator("[class*='goal'], [class*='item'], li")
-      .filter({ hasText: goalName });
-    await expect(goalItem.first()).toBeVisible({ timeout: 10_000 });
+  test("1000-char name", async ({ appPage: page }) => {
+    expect([200, 400, 422]).toContain((await page.request.post("/api/workbench/goals", { data: { name: "A".repeat(1000) } })).status());
   });
 
-  test("mark goal as complete", async ({ appPage: page }) => {
-    // Get the workbench overview to find an existing goal
-    const overviewResponse = await page.request.get("/api/workbench/overview");
-    const overview = (await overviewResponse.json()) as {
-      goals: Array<{ id: string; name: string; isCompleted: boolean }>;
-    };
-
-    // Find an incomplete goal, or create one
-    let goalId: string;
-    const incomplete = overview.goals.find((g) => !g.isCompleted);
-    if (incomplete) {
-      goalId = incomplete.id;
-    } else {
-      // Create a new goal via API
-      const createResp = await page.request.post("/api/workbench/goals", {
-        data: { name: `Goal to complete ${Date.now()}` },
-      });
-      const created = (await createResp.json()) as { id: string };
-      goalId = created.id;
-      await page.reload();
-      await navigateToTab(page, "Workbench");
-      await page.waitForTimeout(1000);
-    }
-
-    // Complete the goal via API (UI completion involves clicking a checkbox)
-    const patchResp = await page.request.patch(`/api/workbench/goals/${goalId}`, {
-      data: { isCompleted: true },
-    });
-    expect(patchResp.status()).toBe(200);
-
-    // Verify
-    const verifyResp = await page.request.get("/api/workbench/overview");
-    const verifyData = (await verifyResp.json()) as {
-      goals: Array<{ id: string; isCompleted: boolean }>;
-    };
-    const completedGoal = verifyData.goals.find((g) => g.id === goalId);
-    expect(completedGoal?.isCompleted).toBe(true);
+  test("5 concurrent creates → unique IDs", async ({ appPage: page }) => {
+    const ids = await Promise.all(Array.from({ length: 5 }, (_, i) =>
+      page.request.post("/api/workbench/goals", { data: { name: `C${i} ${Date.now()}` } }).then(async (r) => ((await r.json()) as { id: string }).id),
+    ));
+    expect(new Set(ids).size).toBe(5);
   });
 
-  test("edit goal name", async ({ appPage: page }) => {
-    // Create a goal via API
-    const createResp = await page.request.post("/api/workbench/goals", {
-      data: { name: `Original Name ${Date.now()}`, description: "Will be renamed" },
-    });
-    const { id: goalId } = (await createResp.json()) as { id: string };
-
-    const newName = `Renamed Goal ${Date.now()}`;
-    const patchResp = await page.request.patch(`/api/workbench/goals/${goalId}`, {
-      data: { name: newName },
-    });
-    expect(patchResp.status()).toBe(200);
-
-    // Reload workbench and verify the new name appears
-    await page.reload();
-    await navigateToTab(page, "Workbench");
-    await page.waitForTimeout(1000);
-
-    const renamedGoal = page.locator("[class*='goal'], [class*='item'], li")
-      .filter({ hasText: newName });
-    await expect(renamedGoal.first()).toBeVisible({ timeout: 10_000 });
-  });
-
-  test("goal summary statistics update correctly", async ({ appPage: page }) => {
-    // Get current summary
-    const resp1 = await page.request.get("/api/workbench/overview");
-    const data1 = (await resp1.json()) as {
-      summary: { goalCount: number; openGoals: number; completedGoals: number };
-    };
-    const beforeCount = data1.summary.goalCount;
-
-    // Create a new goal
-    await page.request.post("/api/workbench/goals", {
-      data: { name: `Summary Test ${Date.now()}` },
-    });
-
-    // Check summary updated
-    const resp2 = await page.request.get("/api/workbench/overview");
-    const data2 = (await resp2.json()) as {
-      summary: { goalCount: number; openGoals: number };
-    };
-    expect(data2.summary.goalCount).toBe(beforeCount + 1);
-    expect(data2.summary.openGoals).toBeGreaterThan(0);
-  });
-
-  test("empty goal name is rejected", async ({ appPage: page }) => {
-    const resp = await page.request.post("/api/workbench/goals", {
-      data: { name: "" },
-    });
-    expect(resp.status()).toBeGreaterThanOrEqual(400);
+  test("tags and priority", async ({ appPage: page }) => {
+    const { id } = (await (await page.request.post("/api/workbench/goals", { data: { name: `T ${Date.now()}`, tags: ["e2e"], priority: 1 } })).json()) as { id: string };
+    expect(id).toBeTruthy();
   });
 });

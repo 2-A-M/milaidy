@@ -5,7 +5,7 @@
  * without actually running update commands.
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReleaseChannel } from "../config/types.milaidy.js";
 
 // Mock child_process and fs before importing the module
@@ -30,10 +30,16 @@ vi.mock("node:fs", async (importOriginal) => {
   };
 });
 
-import { execSync } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
+import { EventEmitter } from "node:events";
 import fs from "node:fs";
-import { detectInstallMethod } from "./self-updater.js";
 import type { InstallMethod } from "./self-updater.js";
+import {
+  buildUpdateCommand,
+  detectInstallMethod,
+  performUpdate,
+} from "./self-updater.js";
 
 // ============================================================================
 // 1. Installation method detection
@@ -142,35 +148,211 @@ describe("detectInstallMethod", () => {
 });
 
 // ============================================================================
-// 2. Update command generation validation
+// 2. buildUpdateCommand — tests the actual command generation
 // ============================================================================
 
-describe("Update command expectations", () => {
-  // These tests validate the expected behavior of the update system
-  // without actually running commands. They ensure the correct package
-  // spec is used for each channel.
-
-  it("stable channel should install milaidy@latest", () => {
-    const channel: ReleaseChannel = "stable";
-    const expectedSpec = "milaidy@latest";
-    expect(expectedSpec).toBe("milaidy@latest");
+describe("buildUpdateCommand", () => {
+  it("npm-global + stable → npm install -g milaidy@latest", () => {
+    const result = buildUpdateCommand("npm-global", "stable");
+    expect(result).not.toBeNull();
+    expect(result!.command).toBe("npm");
+    expect(result!.args).toEqual(["install", "-g", "milaidy@latest"]);
   });
 
-  it("beta channel should install milaidy@beta", () => {
-    const channel: ReleaseChannel = "beta";
-    const expectedSpec = "milaidy@beta";
-    expect(expectedSpec).toBe("milaidy@beta");
+  it("npm-global + beta → npm install -g milaidy@beta", () => {
+    const result = buildUpdateCommand("npm-global", "beta");
+    expect(result).not.toBeNull();
+    expect(result!.command).toBe("npm");
+    expect(result!.args).toEqual(["install", "-g", "milaidy@beta"]);
   });
 
-  it("nightly channel should install milaidy@nightly", () => {
-    const channel: ReleaseChannel = "nightly";
-    const expectedSpec = "milaidy@nightly";
-    expect(expectedSpec).toBe("milaidy@nightly");
+  it("npm-global + nightly → npm install -g milaidy@nightly", () => {
+    const result = buildUpdateCommand("npm-global", "nightly");
+    expect(result).not.toBeNull();
+    expect(result!.command).toBe("npm");
+    expect(result!.args).toEqual(["install", "-g", "milaidy@nightly"]);
+  });
+
+  it("bun-global + stable → bun install -g milaidy@latest", () => {
+    const result = buildUpdateCommand("bun-global", "stable");
+    expect(result).not.toBeNull();
+    expect(result!.command).toBe("bun");
+    expect(result!.args).toEqual(["install", "-g", "milaidy@latest"]);
+  });
+
+  it("pnpm-global + beta → pnpm add -g milaidy@beta", () => {
+    const result = buildUpdateCommand("pnpm-global", "beta");
+    expect(result).not.toBeNull();
+    expect(result!.command).toBe("pnpm");
+    expect(result!.args).toEqual(["add", "-g", "milaidy@beta"]);
+  });
+
+  it("homebrew → brew upgrade milaidy (ignores channel)", () => {
+    const result = buildUpdateCommand("homebrew", "stable");
+    expect(result).not.toBeNull();
+    expect(result!.command).toBe("brew");
+    expect(result!.args).toEqual(["upgrade", "milaidy"]);
+  });
+
+  it("snap + nightly → snap refresh with --channel=edge", () => {
+    const result = buildUpdateCommand("snap", "nightly");
+    expect(result).not.toBeNull();
+    expect(result!.command).toBe("sudo");
+    expect(result!.args).toContain("--channel=edge");
+  });
+
+  it("snap + beta → snap refresh with --channel=beta", () => {
+    const result = buildUpdateCommand("snap", "beta");
+    expect(result).not.toBeNull();
+    expect(result!.args).toContain("--channel=beta");
+  });
+
+  it("snap + stable → snap refresh with --channel=stable", () => {
+    const result = buildUpdateCommand("snap", "stable");
+    expect(result).not.toBeNull();
+    expect(result!.args).toContain("--channel=stable");
+  });
+
+  it("apt → sudo apt-get update && install (as shell string)", () => {
+    const result = buildUpdateCommand("apt", "stable");
+    expect(result).not.toBeNull();
+    expect(result!.command).toBe("sh");
+    expect(result!.args[0]).toBe("-c");
+    // The actual command is a single shell string
+    expect(result!.args[1]).toContain("apt-get update");
+    expect(result!.args[1]).toContain("apt-get install");
+    expect(result!.args[1]).toContain("milaidy");
+  });
+
+  it("flatpak → flatpak update ai.milady.Milaidy", () => {
+    const result = buildUpdateCommand("flatpak", "stable");
+    expect(result).not.toBeNull();
+    expect(result!.command).toBe("flatpak");
+    expect(result!.args).toEqual(["update", "ai.milady.Milaidy"]);
+  });
+
+  it("local-dev → null (cannot auto-update)", () => {
+    const result = buildUpdateCommand("local-dev", "stable");
+    expect(result).toBeNull();
+  });
+
+  it("unknown → falls back to npm install -g", () => {
+    const result = buildUpdateCommand("unknown", "stable");
+    expect(result).not.toBeNull();
+    expect(result!.command).toBe("npm");
+    expect(result!.args).toContain("milaidy@latest");
   });
 });
 
 // ============================================================================
-// 3. Install method type exhaustiveness
+// 3. performUpdate — tests the actual update execution with mocked child_process
+// ============================================================================
+
+describe("performUpdate", () => {
+  beforeEach(() => {
+    vi.mocked(execSync).mockReset();
+    vi.mocked(spawn).mockReset();
+    vi.mocked(fs.realpathSync).mockReset();
+    vi.mocked(fs.readFileSync).mockReset();
+  });
+
+  function createMockChild(exitCode: number, stderrOutput = ""): ChildProcess {
+    const child = new EventEmitter() as ChildProcess;
+    const stderrEmitter = new EventEmitter();
+    Object.defineProperty(child, "stderr", { value: stderrEmitter });
+    Object.defineProperty(child, "stdin", { value: null });
+    Object.defineProperty(child, "stdout", { value: null });
+
+    // Simulate the child process completing after a tick
+    process.nextTick(() => {
+      if (stderrOutput) {
+        stderrEmitter.emit("data", Buffer.from(stderrOutput));
+      }
+      child.emit("close", exitCode);
+    });
+
+    return child;
+  }
+
+  it("returns error for local-dev installs without spawning", async () => {
+    // detectInstallMethod returns local-dev when which fails and devDependencies exist
+    vi.mocked(execSync).mockImplementation((cmd: string) => {
+      if (typeof cmd === "string" && cmd.startsWith("which")) {
+        throw new Error("not found");
+      }
+      throw new Error("unexpected call");
+    });
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(
+      JSON.stringify({ devDependencies: { vitest: "^4.0.0" } }),
+    );
+
+    const result = await performUpdate("2.0.0-alpha.7", "stable");
+
+    expect(result.success).toBe(false);
+    expect(result.method).toBe("local-dev");
+    expect(result.error).toContain("git pull");
+    // spawn should NOT have been called
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it("reports failure when update command exits non-zero", async () => {
+    // detectInstallMethod returns npm-global
+    vi.mocked(execSync).mockImplementation((cmd: string) => {
+      if (typeof cmd === "string" && cmd.startsWith("which")) {
+        return Buffer.from("/usr/local/bin/milaidy");
+      }
+      throw new Error("unexpected");
+    });
+    vi.mocked(fs.realpathSync).mockReturnValueOnce(
+      "/usr/local/lib/node_modules/milaidy/milaidy.mjs",
+    );
+
+    // Simulate npm install failing
+    vi.mocked(spawn).mockReturnValueOnce(
+      createMockChild(1, "npm ERR! code E403\nnpm ERR! 403 Forbidden"),
+    );
+
+    const result = await performUpdate("2.0.0-alpha.7", "stable");
+
+    expect(result.success).toBe(false);
+    expect(result.method).toBe("npm-global");
+    expect(result.command).toContain("npm install -g milaidy@latest");
+    expect(result.error).toContain("E403");
+  });
+
+  it("reports success and captures new version on exit 0", async () => {
+    // detectInstallMethod returns npm-global
+    let execCallCount = 0;
+    vi.mocked(execSync).mockImplementation((cmd: string) => {
+      execCallCount++;
+      if (typeof cmd === "string" && cmd.startsWith("which")) {
+        return Buffer.from("/usr/local/bin/milaidy");
+      }
+      // readPostUpdateVersion calls: milaidy --version
+      if (typeof cmd === "string" && cmd.includes("--version")) {
+        return Buffer.from("2.1.0\n");
+      }
+      throw new Error(`unexpected execSync call: ${cmd}`);
+    });
+    vi.mocked(fs.realpathSync).mockReturnValueOnce(
+      "/usr/local/lib/node_modules/milaidy/milaidy.mjs",
+    );
+
+    // Simulate npm install succeeding
+    vi.mocked(spawn).mockReturnValueOnce(createMockChild(0));
+
+    const result = await performUpdate("2.0.0-alpha.7", "stable");
+
+    expect(result.success).toBe(true);
+    expect(result.method).toBe("npm-global");
+    expect(result.previousVersion).toBe("2.0.0-alpha.7");
+    expect(result.newVersion).toBe("2.1.0");
+    expect(result.error).toBeNull();
+  });
+});
+
+// ============================================================================
+// 4. Install method type exhaustiveness
 // ============================================================================
 
 describe("InstallMethod type", () => {
@@ -190,5 +372,17 @@ describe("InstallMethod type", () => {
     // Verify all methods are distinct
     const unique = new Set(methods);
     expect(unique.size).toBe(methods.length);
+
+    // Verify each method generates a command (except local-dev)
+    for (const method of methods) {
+      const cmd = buildUpdateCommand(method, "stable");
+      if (method === "local-dev") {
+        expect(cmd).toBeNull();
+      } else {
+        expect(cmd).not.toBeNull();
+        expect(cmd!.command).toBeTruthy();
+        expect(cmd!.args.length).toBeGreaterThan(0);
+      }
+    }
   });
 });

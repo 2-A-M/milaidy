@@ -6,12 +6,12 @@
  * - generateMcpConfigFromServerDetails (full registry server + env/headers → config)
  * - McpRegistryServer / McpServerConfig type contracts
  */
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   generateMcpConfigFromRegistry,
   generateMcpConfigFromServerDetails,
-  type McpRegistryServer,
   type McpMarketplaceSearchItem,
+  type McpRegistryServer,
   type McpServerConfig,
 } from "./mcp-marketplace.js";
 

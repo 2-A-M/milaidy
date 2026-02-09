@@ -54,15 +54,15 @@ export class AppsView extends LitElement {
       flex: 1;
       padding: 8px 12px;
       border: 1px solid var(--border);
-      border-radius: 0;
-      background: white;
+      border-radius: 6px;
+      background: var(--input-bg, var(--card));
       color: var(--text);
       font-size: 14px;
       outline: none;
     }
 
     .search-bar input:focus {
-      border-color: purple;
+      border-color: var(--accent, #6366f1);
     }
 
     .apps-grid {
@@ -73,43 +73,40 @@ export class AppsView extends LitElement {
 
     .app-card {
       border: 1px solid var(--border);
-      border-radius: 0;
-      padding: 0;
-      background: white;
+      border-radius: 10px;
+      padding: 16px;
+      background: var(--card);
       display: flex;
       flex-direction: column;
-      gap: 0;
+      gap: 10px;
       transition: border-color 0.15s;
     }
 
     .app-card:hover {
-      border-color: purple;
+      border-color: var(--accent, #6366f1);
     }
 
     .app-card.running {
-      border-color: #2f4d0c;
-      box-shadow: none;
+      border-color: #22c55e;
+      box-shadow: 0 0 0 1px #22c55e33;
     }
 
     .app-header {
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 6px 12px;
-      background: var(--section-bar-bg, #b9d9b7);
-      color: var(--section-bar-fg, #2f4d0c);
     }
 
     .app-icon {
-      width: 32px;
-      height: 32px;
-      border-radius: 0;
-      background: #2f4d0c;
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      background: var(--accent, #6366f1);
       color: white;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 16px;
+      font-size: 18px;
       font-weight: 700;
       flex-shrink: 0;
     }
@@ -117,70 +114,66 @@ export class AppsView extends LitElement {
     .app-icon img {
       width: 100%;
       height: 100%;
-      border-radius: 0;
+      border-radius: 8px;
       object-fit: cover;
     }
 
     .app-title {
-      font-weight: bold;
-      font-size: 14px;
-      color: var(--section-bar-fg, #2f4d0c);
+      font-weight: 600;
+      font-size: 15px;
+      color: var(--text-strong, var(--text));
     }
 
     .app-meta {
       display: flex;
       gap: 6px;
       flex-wrap: wrap;
-      padding: 8px 12px 0;
     }
 
     .badge {
       display: inline-block;
       padding: 2px 8px;
-      border-radius: 0;
+      border-radius: 999px;
       font-size: 11px;
       font-weight: 500;
-      background: #f4ffee;
-      color: #2f4d0c;
-      border: 1px solid var(--border);
+      background: var(--badge-bg, #f1f5f9);
+      color: var(--badge-text, #475569);
     }
 
     .badge.running {
-      background: #d9f0d6;
-      color: #2f4d0c;
+      background: #dcfce7;
+      color: #166534;
     }
 
     .badge.category {
-      background: #d9f0d6;
-      color: #2f4d0c;
+      background: #ede9fe;
+      color: #5b21b6;
     }
 
     .badge.launch-type {
-      background: #f4ffee;
-      color: #2f4d0c;
+      background: #e0f2fe;
+      color: #0c4a6e;
     }
 
     .app-description {
       font-size: 13px;
-      color: var(--muted, #5a7a3a);
+      color: var(--text-muted, #64748b);
       line-height: 1.4;
       flex: 1;
-      padding: 0 12px;
     }
 
     .app-capabilities {
       display: flex;
       gap: 4px;
       flex-wrap: wrap;
-      padding: 0 12px;
     }
 
     .capability-tag {
       font-size: 11px;
       padding: 1px 6px;
-      border-radius: 0;
-      background: #f4ffee;
-      color: #2f4d0c;
+      border-radius: 4px;
+      background: var(--tag-bg, #f8fafc);
+      color: var(--tag-text, #64748b);
       border: 1px solid var(--border);
     }
 
@@ -188,15 +181,14 @@ export class AppsView extends LitElement {
       display: flex;
       gap: 8px;
       margin-top: 4px;
-      padding: 0 12px 12px;
     }
 
     .btn {
       padding: 6px 14px;
       border: 1px solid var(--border);
-      border-radius: 0;
-      background: var(--section-bar-bg, #b9d9b7);
-      color: var(--section-bar-fg, #2f4d0c);
+      border-radius: 6px;
+      background: var(--card);
+      color: var(--text);
       font-size: 13px;
       cursor: pointer;
       font-weight: 500;
@@ -204,8 +196,7 @@ export class AppsView extends LitElement {
     }
 
     .btn:hover {
-      background: #2f4d0c;
-      color: white;
+      background: var(--hover, #f1f5f9);
     }
 
     .btn:disabled {
@@ -214,9 +205,9 @@ export class AppsView extends LitElement {
     }
 
     .btn.primary {
-      background: #2f4d0c;
+      background: var(--accent, #6366f1);
       color: white;
-      border-color: #2f4d0c;
+      border-color: var(--accent, #6366f1);
     }
 
     .btn.primary:hover {
@@ -224,19 +215,18 @@ export class AppsView extends LitElement {
     }
 
     .btn.danger {
-      color: #991b1b;
-      border-color: #991b1b;
+      color: #dc2626;
+      border-color: #dc262644;
     }
 
     .btn.danger:hover {
-      background: #991b1b;
-      color: white;
+      background: #fef2f2;
     }
 
     .empty-state {
       text-align: center;
       padding: 48px 16px;
-      color: var(--muted, #5a7a3a);
+      color: var(--text-muted, #64748b);
     }
 
     .empty-state h3 {
@@ -248,10 +238,9 @@ export class AppsView extends LitElement {
 
     .error-banner {
       padding: 12px 16px;
-      border-radius: 0;
-      background: rgba(153,27,27,0.08);
+      border-radius: 8px;
+      background: #fef2f2;
       color: #991b1b;
-      border: 1px solid #991b1b;
       margin-bottom: 16px;
       font-size: 13px;
     }
@@ -259,19 +248,18 @@ export class AppsView extends LitElement {
     .loading {
       text-align: center;
       padding: 48px;
-      color: var(--muted, #5a7a3a);
+      color: var(--text-muted, #64748b);
     }
 
     .stars {
       font-size: 11px;
-      color: var(--muted, #5a7a3a);
+      color: var(--text-muted, #64748b);
     }
 
     .app-footer {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0 12px 12px;
     }
   `;
 

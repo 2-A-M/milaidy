@@ -103,8 +103,18 @@ jobs:
 
       - name: Validate package
         run: |
-          npm pack --dry-run 2>&1 | tail -20
-          echo "Package validation passed"
+          PACK_OUTPUT=$(npm pack --dry-run 2>&1)
+          echo "$PACK_OUTPUT"
+
+          # Verify critical files are included in the package
+          for required in "milaidy.mjs" "dist/index.js" "package.json"; do
+            if ! echo "$PACK_OUTPUT" | grep -q "$required"; then
+              echo "::error::Required file '$required' missing from package contents"
+              exit 1
+            fi
+          done
+
+          echo "Package validation passed — all required files present"
 
       - name: Publish to npm
         run: npm publish --tag ${{ steps.meta.outputs.dist_tag }} --access public

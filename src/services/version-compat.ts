@@ -96,26 +96,32 @@ export const AI_PROVIDER_PLUGINS: readonly string[] = [
 // ---------------------------------------------------------------------------
 
 /**
- * Parse a semver string (including pre-release tags like alpha.N) into a
- * comparable tuple. Returns null for unparseable versions.
+ * Parse a semver string (including pre-release tags) into a comparable tuple.
+ * Returns null for unparseable versions.
  *
  * Examples:
- *   "2.0.0-alpha.3" → [2, 0, 0, 3]
- *   "2.0.0-alpha.4" → [2, 0, 0, 4]
- *   "2.0.0"          → [2, 0, 0, Infinity]  (release beats any pre-release)
+ *   "2.0.0-alpha.3"          → [2, 0, 0, 3]
+ *   "2.0.0-alpha.4"          → [2, 0, 0, 4]
+ *   "2.0.0-nightly.20260208" → [2, 0, 0, 20260208]
+ *   "2.0.0"                  → [2, 0, 0, Infinity]  (release beats any pre-release)
+ *
+ * Note: comparisons are only meaningful within the same pre-release tag type
+ * (alpha vs alpha, nightly vs nightly). Cross-tag comparisons (alpha.7 vs beta.1)
+ * compare only the numeric suffix, which may not reflect the intended ordering.
+ * The update checker always compares within the same channel, so this is safe.
  */
 export function parseSemver(
   version: string,
 ): [number, number, number, number] | null {
   const match = version.match(
-    /^(\d+)\.(\d+)\.(\d+)(?:-(?:alpha|beta|rc)\.(\d+))?$/,
+    /^(\d+)\.(\d+)\.(\d+)(?:-(?:alpha|beta|rc|nightly)\.(\d+))?$/,
   );
   if (!match) return null;
 
   const major = Number(match[1]);
   const minor = Number(match[2]);
   const patch = Number(match[3]);
-  // A release without a pre-release tag sorts after any alpha/beta/rc.
+  // A release without a pre-release tag sorts after any pre-release.
   const pre =
     match[4] !== undefined ? Number(match[4]) : Number.POSITIVE_INFINITY;
 

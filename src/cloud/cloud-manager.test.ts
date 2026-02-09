@@ -59,8 +59,8 @@ vi.mock("./reconnect.js", () => {
   };
 });
 
-import { CloudManager } from "./cloud-manager.js";
 import type { CloudConfig } from "../config/types.milaidy.js";
+import { CloudManager } from "./cloud-manager.js";
 
 afterEach(() => {
   vi.clearAllMocks();

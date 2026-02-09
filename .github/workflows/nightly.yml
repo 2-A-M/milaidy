@@ -135,19 +135,26 @@ jobs:
 
       - name: Validate package
         run: |
-          npm pack --dry-run 2>&1 | head -50
-          echo "Package contents look good"
+          PACK_OUTPUT=$(npm pack --dry-run 2>&1)
+          echo "$PACK_OUTPUT"
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: nightly-build
-          path: |
-            dist/
-            package.json
-          retention-days: 7
+          # Verify critical files are included in the package
+          for required in "milaidy.mjs" "dist/index.js" "package.json"; do
+            if ! echo "$PACK_OUTPUT" | grep -q "$required"; then
+              echo "::error::Required file '$required' missing from package contents"
+              exit 1
+            fi
+          done
+
+          # Verify package size is reasonable (not empty, not bloated)
+          SIZE_LINE=$(echo "$PACK_OUTPUT" | grep "total files:" || echo "$PACK_OUTPUT" | tail -1)
+          echo "Pack summary: $SIZE_LINE"
 
   # ── Publish to npm ──────────────────────────────────────────────────────
+  # Note: This job does a full checkout + rebuild rather than reusing
+  # build-and-test artifacts because npm publish requires the complete
+  # package tree (all `files` entries from package.json), and
+  # setup-node with registry-url configures .npmrc for authentication.
   publish-npm:
     name: Publish to npm (nightly)
     needs: [check-commits, build-and-test]

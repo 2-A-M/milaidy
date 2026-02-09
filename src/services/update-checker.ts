@@ -11,8 +11,8 @@
 
 import { loadMilaidyConfig, saveMilaidyConfig } from "../config/config.js";
 import type { ReleaseChannel, UpdateConfig } from "../config/types.milaidy.js";
-import { CHANNEL_DIST_TAGS } from "../config/types.milaidy.js";
 import { VERSION } from "../runtime/version.js";
+import { CHANNEL_DIST_TAGS } from "./release-channels.js";
 import { compareSemver } from "./version-compat.js";
 
 // ---------------------------------------------------------------------------
@@ -200,8 +200,15 @@ export async function checkForUpdate(options?: {
   };
   try {
     saveMilaidyConfig(updatedConfig);
-  } catch {
-    // Non-fatal: config write failure shouldn't break the check.
+  } catch (err) {
+    // Non-fatal: config write failure shouldn't break the check, but log
+    // it so persistent failures (permissions, full disk) don't go unnoticed.
+    // Without persisting, the cache interval won't work and the registry
+    // gets queried on every startup.
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(
+      `[milaidy] Warning: could not save update-check metadata: ${msg}\n`,
+    );
   }
 
   return {

@@ -266,8 +266,7 @@ export class AppManager {
    */
   async launch(name: string): Promise<AppLaunchResult> {
     if (this.runningApps.has(name)) {
-      const running = this.runningApps.get(name);
-      if (!running) throw new Error(`App "${name}" not found in running apps`);
+      const running = this.runningApps.get(name)!;
       return {
         url: running.url,
         launchType: running.launchType,

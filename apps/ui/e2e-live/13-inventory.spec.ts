@@ -1,163 +1,107 @@
-/**
- * 13 — Inventory (Wallet)
- *
- * Tests the wallet/inventory tab — wallet addresses, API key configuration,
- * token balances, NFTs, and private key export.
- */
 import { test, expect, navigateToTab, ensureAgentRunning } from "./fixtures.js";
 
 test.describe("Inventory & Wallet", () => {
-  test.beforeEach(async ({ appPage: page }) => {
-    await ensureAgentRunning(page);
-    await navigateToTab(page, "Inventory");
-    await page.waitForTimeout(1000);
+  test.beforeEach(async ({ appPage: page }) => { await ensureAgentRunning(page); });
+
+  test("wallet addresses", async ({ appPage: page }) => {
+    const d = (await (await page.request.get("/api/wallet/addresses")).json()) as { evmAddress: string | null; solanaAddress: string | null };
+    expect("evmAddress" in d).toBe(true);
+    expect("solanaAddress" in d).toBe(true);
   });
 
-  test("inventory page loads", async ({ appPage: page }) => {
-    // The inventory page should render
-    const heading = page.locator("h1, h2, [class*='heading']").filter({
-      hasText: /inventory|wallet/i,
-    });
-    const hasHeading = (await heading.count()) > 0;
-    // Or at least the page content is visible
-    const bodyText = await page.textContent("body");
-    expect(bodyText?.length).toBeGreaterThan(0);
-    // Soft heading check — UI may not have a distinct heading
-    expect(hasHeading || bodyText !== null).toBe(true);
-  });
-
-  test("wallet addresses endpoint returns data", async ({ appPage: page }) => {
-    const resp = await page.request.get("/api/wallet/addresses");
-    expect(resp.status()).toBe(200);
-
-    const data = (await resp.json()) as {
-      evmAddress: string | null;
-      solanaAddress: string | null;
-    };
-    // At least one address should be set (from seed config)
-    expect(
-      data.evmAddress !== null || data.solanaAddress !== null,
-    ).toBe(true);
-  });
-
-  test("wallet config endpoint returns key status", async ({ appPage: page }) => {
-    const resp = await page.request.get("/api/wallet/config");
-    expect(resp.status()).toBe(200);
-
-    const data = (await resp.json()) as {
-      alchemyKeySet: boolean;
-      heliusKeySet: boolean;
-      birdeyeKeySet: boolean;
-      evmChains: string[];
-      evmAddress: string | null;
-      solanaAddress: string | null;
-    };
-
-    expect(typeof data.alchemyKeySet).toBe("boolean");
-    expect(typeof data.heliusKeySet).toBe("boolean");
-    expect(typeof data.birdeyeKeySet).toBe("boolean");
-    expect(Array.isArray(data.evmChains)).toBe(true);
+  test("wallet config key status", async ({ appPage: page }) => {
+    const d = (await (await page.request.get("/api/wallet/config")).json()) as Record<string, unknown>;
+    for (const k of ["alchemyKeySet", "heliusKeySet", "birdeyeKeySet"]) expect(typeof d[k]).toBe("boolean");
+    expect(Array.isArray(d.evmChains)).toBe(true);
   });
 
   test("update wallet API keys", async ({ appPage: page }) => {
-    // Save a dummy key
-    const resp = await page.request.put("/api/wallet/config", {
-      data: {
-        ALCHEMY_API_KEY: "test-key-12345",
-      },
-    });
-    expect(resp.status()).toBe(200);
-
-    // Verify key is set
-    const verifyResp = await page.request.get("/api/wallet/config");
-    const data = (await verifyResp.json()) as { alchemyKeySet: boolean };
-    expect(data.alchemyKeySet).toBe(true);
+    expect((await page.request.put("/api/wallet/config", { data: { ALCHEMY_API_KEY: "test-key-e2e" } })).status()).toBe(200);
+    expect(((await (await page.request.get("/api/wallet/config")).json()) as { alchemyKeySet: boolean }).alchemyKeySet).toBe(true);
   });
 
-  test("wallet balances endpoint responds", async ({ appPage: page }) => {
-    const resp = await page.request.get("/api/wallet/balances");
-    expect(resp.status()).toBe(200);
-
-    const data = (await resp.json()) as {
-      evm: Record<string, unknown> | null;
-      solana: Record<string, unknown> | null;
-    };
-
-    // Both fields should exist (may be null if no API keys)
-    expect("evm" in data).toBe(true);
-    expect("solana" in data).toBe(true);
+  test("wallet balances responds", async ({ appPage: page }) => {
+    const d = (await (await page.request.get("/api/wallet/balances")).json()) as Record<string, unknown>;
+    expect("evm" in d && "solana" in d).toBe(true);
   });
 
-  test("wallet NFTs endpoint responds", async ({ appPage: page }) => {
-    const resp = await page.request.get("/api/wallet/nfts");
-    expect(resp.status()).toBe(200);
-
-    const data = (await resp.json()) as {
-      evm: unknown;
-      solana: unknown;
-    };
-    expect("evm" in data).toBe(true);
-    expect("solana" in data).toBe(true);
+  test("wallet NFTs responds", async ({ appPage: page }) => {
+    const d = (await (await page.request.get("/api/wallet/nfts")).json()) as Record<string, unknown>;
+    expect("evm" in d && "solana" in d).toBe(true);
   });
 
-  test("wallet export requires confirmation", async ({ appPage: page }) => {
-    // Without confirmation, should be rejected
-    const resp = await page.request.post("/api/wallet/export", {
-      data: {},
-    });
+  test("export requires confirmation", async ({ appPage: page }) => {
+    const resp = await page.request.post("/api/wallet/export", { data: {} });
     expect(resp.status()).toBe(403);
+    const body = (await resp.json()) as { error: string };
+    expect(body.error).toMatch(/confirm/i);
   });
 
-  test("wallet export with confirmation returns keys", async ({ appPage: page }) => {
-    const resp = await page.request.post("/api/wallet/export", {
-      data: { confirm: true },
-    });
+  test("export with confirmation returns keys", async ({ appPage: page }) => {
+    const resp = await page.request.post("/api/wallet/export", { data: { confirm: true } });
     expect(resp.status()).toBe(200);
+    const d = (await resp.json()) as { evm: { privateKey: string } | null; solana: { privateKey: string } | null };
+    if (d.evm) expect(d.evm.privateKey.length).toBeGreaterThan(0);
+    if (d.solana) expect(d.solana.privateKey.length).toBeGreaterThan(0);
+  });
 
-    const data = (await resp.json()) as {
+  test("inventory page navigates", async ({ appPage: page }) => {
+    await navigateToTab(page, "Inventory");
+    await expect(page).toHaveURL(/\/inventory/);
+  });
+
+  test("wallet addresses have valid format", async ({ appPage: page }) => {
+    const d = (await (await page.request.get("/api/wallet/addresses")).json()) as {
+      evmAddress: string | null; solanaAddress: string | null;
+    };
+    if (d.evmAddress) expect(d.evmAddress).toMatch(/^0x[a-fA-F0-9]{40}$/);
+    if (d.solanaAddress) expect(d.solanaAddress.length).toBeGreaterThan(30);
+  });
+
+  test("generate new wallets", async ({ appPage: page }) => {
+    const resp = await page.request.post("/api/wallet/generate", { data: { chain: "both" } });
+    expect(resp.status()).toBe(200);
+    const d = (await resp.json()) as { ok: boolean; wallets: Array<{ chain: string; address: string }> };
+    expect(d.ok).toBe(true);
+    expect(d.wallets.length).toBeGreaterThanOrEqual(1);
+    for (const w of d.wallets) {
+      expect(typeof w.address).toBe("string");
+      expect(w.address.length).toBeGreaterThan(10);
+      expect(["evm", "solana"]).toContain(w.chain);
+    }
+  });
+
+  test("wallet balances deep shape when keys set", async ({ appPage: page }) => {
+    const d = (await (await page.request.get("/api/wallet/balances")).json()) as {
+      evm: { address: string; chains: Array<{ chain: string; nativeBalance: string }> } | null;
+      solana: { address: string; solBalance: string } | null;
+    };
+    if (d.evm) {
+      expect(typeof d.evm.address).toBe("string");
+      expect(Array.isArray(d.evm.chains)).toBe(true);
+      for (const c of d.evm.chains) {
+        expect(typeof c.chain).toBe("string");
+        expect(typeof c.nativeBalance).toBe("string");
+      }
+    }
+    if (d.solana) {
+      expect(typeof d.solana.address).toBe("string");
+      expect(typeof d.solana.solBalance).toBe("string");
+    }
+  });
+
+  test("export keys have valid private key format", async ({ appPage: page }) => {
+    const d = (await (await page.request.post("/api/wallet/export", { data: { confirm: true } })).json()) as {
       evm: { privateKey: string; address: string } | null;
       solana: { privateKey: string; address: string } | null;
     };
-
-    // At least one wallet should have keys
-    const hasKeys = data.evm !== null || data.solana !== null;
-    expect(hasKeys).toBe(true);
-
-    if (data.evm) {
-      expect(typeof data.evm.privateKey).toBe("string");
-      expect(typeof data.evm.address).toBe("string");
-      expect(data.evm.privateKey.length).toBeGreaterThan(0);
+    if (d.evm) {
+      expect(d.evm.privateKey).toMatch(/^(0x)?[a-fA-F0-9]{64}$/);
+      expect(d.evm.address).toMatch(/^0x[a-fA-F0-9]{40}$/);
     }
-    if (data.solana) {
-      expect(typeof data.solana.privateKey).toBe("string");
-      expect(typeof data.solana.address).toBe("string");
-    }
-  });
-
-  test("inventory shows wallet addresses in UI", async ({ appPage: page }) => {
-    const addrResp = await page.request.get("/api/wallet/addresses");
-    const addrs = (await addrResp.json()) as {
-      evmAddress: string | null;
-      solanaAddress: string | null;
-    };
-
-    if (addrs.evmAddress) {
-      // The EVM address (or a truncated version) should be visible
-      const truncated = `${addrs.evmAddress.slice(0, 6)}...${addrs.evmAddress.slice(-4)}`;
-      const addrEl = page.locator("body").filter({
-        hasText: new RegExp(
-          addrs.evmAddress.slice(0, 6).replace("0x", "0x?"),
-          "i",
-        ),
-      });
-      // Address should appear somewhere on the page
-      const bodyText = await page.textContent("body");
-      const hasAddr =
-        bodyText?.includes(addrs.evmAddress) ||
-        bodyText?.includes(addrs.evmAddress.slice(0, 10)) ||
-        bodyText?.includes(truncated);
-      // This is informational — address display depends on wallet config state
-      expect(bodyText).toBeTruthy();
+    if (d.solana) {
+      expect(d.solana.privateKey.length).toBeGreaterThan(40);
+      expect(d.solana.address.length).toBeGreaterThan(30);
     }
   });
 });

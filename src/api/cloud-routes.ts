@@ -2,7 +2,7 @@
  * Cloud API routes for Milaidy — handles /api/cloud/* endpoints.
  */
 
-import http from "node:http";
+import type http from "node:http";
 import type { CloudManager } from "../cloud/cloud-manager.js";
 import type { MilaidyConfig } from "../config/config.js";
 import { saveMilaidyConfig } from "../config/config.js";

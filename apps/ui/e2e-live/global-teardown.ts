@@ -1,92 +1,32 @@
-/**
- * Playwright global teardown for LIVE E2E tests.
- *
- * Reads the state file written by global-setup.ts, kills the API and Vite
- * server processes, and cleans up the isolated test HOME directory.
- */
+/** Kills spawned servers and cleans up the isolated test HOME. */
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 const STATE_FILE = path.join(os.tmpdir(), "milaidy-e2e-live-state.json");
 
-interface StateData {
-  apiPid: number | null;
-  vitePid: number | null;
-  testHome: string | null;
-  apiPort: number;
-  uiPort: number;
-  reusedApi: boolean;
-  reusedUi: boolean;
-  startedAt: string;
-}
+interface State { apiPid: number | null; vitePid: number | null; testHome: string | null; reusedApi: boolean; reusedUi: boolean }
 
-function killProcess(pid: number, label: string): void {
-  try {
-    process.kill(pid, "SIGTERM");
-    console.log(`  [e2e-live] Sent SIGTERM to ${label} (pid ${pid})`);
-  } catch (err: unknown) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === "ESRCH") {
-      console.log(`  [e2e-live] ${label} (pid ${pid}) already exited`);
-    } else {
-      console.warn(
-        `  [e2e-live] Failed to kill ${label} (pid ${pid}): ${code}`,
-      );
+function kill(pid: number, label: string): void {
+  for (const sig of ["SIGTERM", "SIGKILL"] as const) {
+    try { process.kill(pid, sig); } catch { /* dead */ }
+    if (sig === "SIGTERM") {
+      console.log(`  [e2e-live] SIGTERM → ${label} (${pid})`);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2000);
     }
   }
-
-  // Give the process a moment to exit gracefully, then force kill
-  setTimeout(() => {
-    try {
-      process.kill(pid, "SIGKILL");
-    } catch {
-      // Already dead
-    }
-  }, 3000);
 }
 
 export default async function globalTeardown(): Promise<void> {
-  console.log("\n  [e2e-live] Starting global teardown...\n");
+  if (!fs.existsSync(STATE_FILE)) return;
+  const s: State = JSON.parse(fs.readFileSync(STATE_FILE, "utf-8")) as State;
 
-  if (!fs.existsSync(STATE_FILE)) {
-    console.log("  [e2e-live] No state file found — nothing to clean up");
-    return;
-  }
+  if (s.vitePid && !s.reusedUi) kill(s.vitePid, "Vite");
+  if (s.apiPid && !s.reusedApi) kill(s.apiPid, "API");
 
-  const raw = fs.readFileSync(STATE_FILE, "utf-8");
-  const state: StateData = JSON.parse(raw) as StateData;
+  if (s.testHome?.startsWith(os.tmpdir()))
+    fs.rmSync(s.testHome, { recursive: true, force: true });
 
-  // ── Kill server processes (only ones we started, not reused) ──────────
-  if (state.vitePid && !state.reusedUi) {
-    killProcess(state.vitePid, "Vite UI server");
-  } else if (state.reusedUi) {
-    console.log("  [e2e-live] Skipping Vite teardown (reused existing)");
-  }
-  if (state.apiPid && !state.reusedApi) {
-    killProcess(state.apiPid, "API server");
-  } else if (state.reusedApi) {
-    console.log("  [e2e-live] Skipping API teardown (reused existing)");
-  }
-
-  // ── Clean up temp HOME ────────────────────────────────────────────────
-  if (state.testHome && state.testHome.startsWith(os.tmpdir())) {
-    try {
-      fs.rmSync(state.testHome, { recursive: true, force: true });
-      console.log(`  [e2e-live] Cleaned up test HOME: ${state.testHome}`);
-    } catch (err) {
-      console.warn(
-        `  [e2e-live] Failed to clean up test HOME: ${err instanceof Error ? err.message : err}`,
-      );
-    }
-  }
-
-  // ── Remove state file ────────────────────────────────────────────────
-  try {
-    fs.unlinkSync(STATE_FILE);
-  } catch {
-    // Ignore
-  }
-
-  console.log("  [e2e-live] Teardown complete\n");
+  fs.unlinkSync(STATE_FILE);
+  console.log("  [e2e-live] Teardown done");
 }

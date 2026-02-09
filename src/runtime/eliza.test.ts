@@ -10,19 +10,19 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { findPluginExport } from "../cli/plugins-cli.js";
 import type { MilaidyConfig } from "../config/config.js";
 import {
   applyChannelSecretsToEnv,
   applyCloudConfigToEnv,
   buildCharacterFromConfig,
-  collectPluginNames,
   CUSTOM_PLUGINS_DIRNAME,
+  collectPluginNames,
   mergeDropInPlugins,
   resolvePackageEntry,
   resolvePrimaryModel,
   scanDropInPlugins,
 } from "./eliza.js";
-import { findPluginExport } from "../cli/plugins-cli.js";
 
 // ---------------------------------------------------------------------------
 // helpers

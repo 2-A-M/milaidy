@@ -504,13 +504,6 @@ export type X402Config = {
 /** Release channel that determines which builds the user receives. */
 export type ReleaseChannel = "stable" | "beta" | "nightly";
 
-/** npm dist-tag corresponding to each release channel. */
-export const CHANNEL_DIST_TAGS: Readonly<Record<ReleaseChannel, string>> = {
-  stable: "latest",
-  beta: "beta",
-  nightly: "nightly",
-};
-
 export type UpdateConfig = {
   /** Release channel: "stable" (default), "beta", or "nightly". */
   channel?: ReleaseChannel;

@@ -13,7 +13,7 @@
  * so they work identically for both PGLite and Postgres.
  */
 
-import http from "node:http";
+import type http from "node:http";
 import { type AgentRuntime, logger } from "@elizaos/core";
 import { loadMilaidyConfig, saveMilaidyConfig } from "../config/config.js";
 import type {
@@ -591,7 +591,7 @@ async function handleGetRows(
     if (textColumns.length > 0) {
       const conditions = textColumns.map(
         (col) =>
-          `${quoteIdent(col)}::text ILIKE '%${escapedSearch}%' ESCAPE '\'`,
+          `${quoteIdent(col)}::text ILIKE '%${escapedSearch}%' ESCAPE ''`,
       );
       whereClause = `WHERE (${conditions.join(" OR ")})`;
     }

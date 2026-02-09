@@ -2,20 +2,18 @@
  * Navigation — tabs + onboarding.
  */
 
-export type Tab = "chat" | "workbench" | "inventory" | "plugins" | "marketplace" | "skills" | "database" | "config" | "logs";
+export type Tab = "chat" | "inventory" | "plugins" | "skills" | "database" | "config" | "logs";
 
 export const TAB_GROUPS = [
-  { label: "Chat", tabs: ["chat", "workbench"] as Tab[] },
-  { label: "Manage", tabs: ["inventory", "plugins", "marketplace", "skills", "database"] as Tab[] },
+  { label: "Chat", tabs: ["chat"] as Tab[] },
+  { label: "Manage", tabs: ["inventory", "plugins", "skills", "database"] as Tab[] },
   { label: "Settings", tabs: ["config", "logs"] as Tab[] },
 ] as const;
 
 const TAB_PATHS: Record<Tab, string> = {
   chat: "/chat",
-  workbench: "/workbench",
   inventory: "/inventory",
   plugins: "/plugins",
-  marketplace: "/marketplace",
   skills: "/skills",
   database: "/database",
   config: "/config",
@@ -65,10 +63,8 @@ export function normalizePath(p: string): string {
 export function titleForTab(tab: Tab): string {
   switch (tab) {
     case "chat": return "Chat";
-    case "workbench": return "Workbench";
     case "inventory": return "Inventory";
     case "plugins": return "Plugins";
-    case "marketplace": return "Marketplace";
     case "skills": return "Skills";
     case "database": return "Database";
     case "config": return "Config";
@@ -80,10 +76,8 @@ export function titleForTab(tab: Tab): string {
 export function subtitleForTab(tab: Tab): string {
   switch (tab) {
     case "chat": return "Talk to your agent.";
-    case "workbench": return "Goals, todos, and autonomy control in one place.";
     case "inventory": return "Tokens and NFTs across all wallets.";
     case "plugins": return "Manage plugins and integrations.";
-    case "marketplace": return "Install and review community plugins.";
     case "skills": return "View available skills.";
     case "database": return "Browse, edit, and configure your database.";
     case "config": return "Agent settings and configuration.";
