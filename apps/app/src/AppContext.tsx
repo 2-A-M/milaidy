@@ -54,13 +54,15 @@ export type ThemeName =
   | "web2000"
   | "programmer"
   | "haxor"
-  | "psycho";
+  | "psycho"
+  | "dark";
 
 export const THEMES: ReadonlyArray<{
   id: ThemeName;
   label: string;
   hint: string;
 }> = [
+  { id: "dark", label: "dark", hint: "modern dark mode" },
   { id: "milady", label: "milady", hint: "clean black & white" },
   { id: "qt314", label: "qt3.14", hint: "soft pastels" },
   { id: "web2000", label: "web2000", hint: "green hacker vibes" },
@@ -78,7 +80,7 @@ function loadTheme(): ThemeName {
   } catch {
     /* ignore */
   }
-  return "milady";
+  return "dark";
 }
 
 function applyTheme(name: ThemeName) {
@@ -567,7 +569,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [onboardingOptions, setOnboardingOptions] = useState<OnboardingOptions | null>(null);
   const [onboardingName, setOnboardingName] = useState("");
   const [onboardingStyle, setOnboardingStyle] = useState("");
-  const [onboardingTheme, setOnboardingTheme] = useState<ThemeName>("milady");
+  const [onboardingTheme, setOnboardingTheme] = useState<ThemeName>("dark");
   const [onboardingRunMode, setOnboardingRunMode] = useState<"local" | "cloud" | "">("");
   const [onboardingCloudProvider, setOnboardingCloudProvider] = useState("");
   const [onboardingSmallModel, setOnboardingSmallModel] = useState("claude-haiku");

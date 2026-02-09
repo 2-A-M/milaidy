@@ -2,9 +2,10 @@
  * Onboarding wizard component — multi-step onboarding flow.
  */
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useApp, THEMES, type OnboardingStep } from "../AppContext.js";
 import type { StylePreset, ProviderOption, CloudProviderOption, ModelOption, InventoryProviderOption, RpcProviderOption } from "../api-client";
+import { getProviderLogo } from "../provider-logos.js";
 
 export function OnboardingWizard() {
   const {
@@ -32,6 +33,10 @@ export function OnboardingWizard() {
     setTheme,
     handleCloudLogin,
   } = useApp();
+
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [showProviderConfirmModal, setShowProviderConfirmModal] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<ProviderOption | null>(null);
 
   useEffect(() => {
     if (onboardingStep === "theme") {
@@ -66,10 +71,6 @@ export function OnboardingWizard() {
 
   const handleLargeModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setState("onboardingLargeModel", e.target.value);
-  };
-
-  const handleProviderSelect = (providerId: string) => {
-    setState("onboardingProvider", providerId);
   };
 
   const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -337,39 +338,57 @@ export function OnboardingWizard() {
         );
 
       case "llmProvider":
+        const isDark = onboardingTheme === "dark";
         return (
           <div className="max-w-[500px] mx-auto mt-10 text-center font-body">
+            <img
+              src="/pfp.jpg"
+              alt="milAIdy"
+              className="w-[80px] h-[80px] rounded-full object-cover border-2 border-border mx-auto mb-4 block"
+            />
             <div className="onboarding-speech bg-card border border-border rounded-xl px-5 py-4 mx-auto mb-6 max-w-[360px] relative text-[15px] text-txt leading-relaxed">
-              <h2 className="text-[28px] font-normal mb-1 text-txt-strong">LLM Provider</h2>
+              which AI provider should I use?
             </div>
-            <div className="flex flex-col gap-2 text-left max-w-[360px] mx-auto">
+            <div className="max-w-[360px] mx-auto mb-6 max-h-[400px] overflow-y-auto pr-2">
+              <div className="grid grid-cols-2 gap-3 text-left">
               {onboardingOptions?.providers.map((provider: ProviderOption) => (
                 <div
                   key={provider.id}
-                  className={`px-4 py-3 border cursor-pointer bg-card transition-colors ${
+                  className={`p-5 border-[1.5px] cursor-pointer bg-card transition-all rounded-lg flex flex-col gap-3 ${
                     onboardingProvider === provider.id
-                      ? "border-accent bg-accent-subtle"
-                      : "border-border hover:border-accent"
+                      ? "border-accent bg-accent-subtle shadow-[0_0_0_3px_var(--accent-subtle),var(--shadow-md)]"
+                      : "border-border hover:border-border-hover hover:bg-bg-hover hover:shadow-md hover:-translate-y-0.5"
                   }`}
-                  onClick={() => handleProviderSelect(provider.id)}
+                  onClick={() => {
+                    setSelectedProvider(provider);
+                    setState("onboardingProvider", provider.id);
+                    setState("onboardingApiKey", "");
+
+                    // Check if provider needs API key
+                    const needsKey = provider.envKey && provider.id !== "elizacloud" && provider.id !== "ollama";
+                    if (needsKey) {
+                      setShowApiKeyModal(true);
+                    } else {
+                      setShowProviderConfirmModal(true);
+                    }
+                  }}
                 >
-                  <div className="font-bold text-sm">{provider.name}</div>
-                  {provider.description && <div className="text-xs text-muted mt-0.5">{provider.description}</div>}
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={getProviderLogo(provider.id, isDark)}
+                      alt={provider.name}
+                      className="w-10 h-10 rounded-md object-contain bg-bg-muted p-1.5 shrink-0"
+                    />
+                    <div className="font-semibold text-sm text-txt-strong">{provider.name}</div>
+                  </div>
+                  {provider.description && <div className="text-xs text-muted-strong leading-relaxed">{provider.description}</div>}
                 </div>
               ))}
-            </div>
-            {onboardingProvider && (
-              <div className="max-w-[360px] mx-auto mt-4">
-                <label className="text-[13px] font-bold text-txt-strong block mb-2 text-left">API Key:</label>
-                <input
-                  type="password"
-                  value={onboardingApiKey}
-                  onChange={handleApiKeyChange}
-                  placeholder="Enter your API key"
-                  className="w-full px-3 py-2 border border-border bg-card text-sm mt-2 focus:border-accent focus:outline-none"
-                />
               </div>
-            )}
+            </div>
+
+            {showApiKeyModal && selectedProvider && renderApiKeyModal()}
+            {showProviderConfirmModal && selectedProvider && renderProviderConfirmModal()}
           </div>
         );
 
@@ -444,6 +463,125 @@ export function OnboardingWizard() {
     }
   };
 
+  const renderApiKeyModal = () => {
+    if (!selectedProvider) return null;
+    const isDark = onboardingTheme === "dark";
+
+    return (
+      <div
+        className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 animate-[fade-in_0.2s_ease-out]"
+        onClick={() => setShowApiKeyModal(false)}
+      >
+        <div
+          className="bg-card border border-border rounded-lg p-6 max-w-[450px] w-[90%] shadow-[0_20px_25px_-5px_rgb(0_0_0/0.3),0_8px_10px_-6px_rgb(0_0_0/0.3)] animate-[slideUp_0.2s_ease-out]"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center gap-3 mb-4">
+            <img
+              src={getProviderLogo(selectedProvider.id, isDark)}
+              alt={selectedProvider.name}
+              className="w-10 h-10 rounded-md object-contain bg-bg-muted p-1.5"
+            />
+            <div className="text-lg font-semibold text-txt-strong">{selectedProvider.name} API Key</div>
+          </div>
+          <div className="text-sm text-muted-strong mb-4 leading-relaxed">
+            Enter your API key for {selectedProvider.name}. You can get one from their website.
+          </div>
+          <input
+            type="password"
+            value={onboardingApiKey}
+            onChange={handleApiKeyChange}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && onboardingApiKey.trim()) {
+                setShowApiKeyModal(false);
+                void handleOnboardingNext();
+              }
+            }}
+            placeholder="Paste your API key here"
+            className="w-full px-3 py-2 border border-border bg-card text-sm focus:border-accent focus:outline-none rounded"
+          />
+          <div className="flex gap-2.5 justify-end mt-5">
+            <button
+              className="px-6 py-2 border border-border bg-transparent text-txt text-sm cursor-pointer hover:bg-accent-subtle hover:text-accent rounded-md"
+              onClick={() => setShowApiKeyModal(false)}
+            >
+              Cancel
+            </button>
+            <button
+              className="px-6 py-2 border border-accent bg-accent text-accent-foreground text-sm cursor-pointer hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed rounded-md"
+              onClick={() => {
+                setShowApiKeyModal(false);
+                void handleOnboardingNext();
+              }}
+              disabled={!onboardingApiKey.trim()}
+            >
+              Confirm
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderProviderConfirmModal = () => {
+    if (!selectedProvider) return null;
+    const isDark = onboardingTheme === "dark";
+
+    const getProviderMessage = () => {
+      if (selectedProvider.id === "elizacloud") {
+        return "ElizaCloud provides managed AI inference. No API key required.";
+      }
+      if (selectedProvider.id === "ollama") {
+        return "Ollama runs models locally on your machine. No API key required.";
+      }
+      return `Would you like to use ${selectedProvider.name} as your AI provider?`;
+    };
+
+    return (
+      <div
+        className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 animate-[fade-in_0.2s_ease-out]"
+        onClick={() => setShowProviderConfirmModal(false)}
+      >
+        <div
+          className="bg-card border border-border rounded-lg p-6 max-w-[450px] w-[90%] shadow-[0_20px_25px_-5px_rgb(0_0_0/0.3),0_8px_10px_-6px_rgb(0_0_0/0.3)] animate-[slideUp_0.2s_ease-out]"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center gap-3 mb-4">
+            <img
+              src={getProviderLogo(selectedProvider.id, isDark)}
+              alt={selectedProvider.name}
+              className="w-10 h-10 rounded-md object-contain bg-bg-muted p-1.5"
+            />
+            <div className="text-lg font-semibold text-txt-strong">Use {selectedProvider.name}?</div>
+          </div>
+          <div className="text-sm text-muted-strong mb-4 leading-relaxed">
+            {getProviderMessage()}
+          </div>
+          <div className="flex gap-2.5 justify-end mt-5">
+            <button
+              className="px-6 py-2 border border-border bg-transparent text-txt text-sm cursor-pointer hover:bg-accent-subtle hover:text-accent rounded-md"
+              onClick={() => {
+                setShowProviderConfirmModal(false);
+                setState("onboardingProvider", "");
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              className="px-6 py-2 border border-accent bg-accent text-accent-foreground text-sm cursor-pointer hover:bg-accent-hover rounded-md"
+              onClick={() => {
+                setShowProviderConfirmModal(false);
+                void handleOnboardingNext();
+              }}
+            >
+              Confirm
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const canGoNext = () => {
     switch (onboardingStep) {
       case "welcome":
@@ -463,7 +601,8 @@ export function OnboardingWizard() {
       case "cloudLogin":
         return cloudConnected;
       case "llmProvider":
-        return onboardingProvider.length > 0 && onboardingApiKey.length > 0;
+        // Provider selection is handled by modals which auto-progress
+        return onboardingProvider.length > 0;
       case "inventorySetup":
         return true;
       default:
