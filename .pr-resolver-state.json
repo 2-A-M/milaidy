@@ -1,0 +1,428 @@
+{
+  "pr": "milady-ai/milaidy#47",
+  "branch": "odi-dev",
+  "headSha": "5a6dd005adffa6f78ebe15d87e009588fdca2015",
+  "startedAt": "2026-02-09T08:25:44.826Z",
+  "lastUpdated": "2026-02-09T08:29:32.850Z",
+  "iterations": [
+    {
+      "timestamp": "2026-02-09T08:25:58.995Z",
+      "commentsAddressed": [],
+      "changesMade": [],
+      "verificationResults": {
+        "PRRC_kwDORKgm386lw5g-": {
+          "passed": false,
+          "reason": "File was not modified"
+        },
+        "PRRC_kwDORKgm386lw5hd": {
+          "passed": false,
+          "reason": "No verification result returned by LLM"
+        },
+        "PRRC_kwDORKgm386lw5hx": {
+          "passed": false,
+          "reason": "No verification result returned by LLM"
+        },
+        "PRRC_kwDORKgm386lw5iH": {
+          "passed": false,
+          "reason": "No verification result returned by LLM"
+        },
+        "PRRC_kwDORKgm386lw5iq": {
+          "passed": false,
+          "reason": "No verification result returned by LLM"
+        },
+        "PRRC_kwDORKgm386lw5jK": {
+          "passed": false,
+          "reason": "No verification result returned by LLM"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-02-09T08:26:59.156Z",
+      "commentsAddressed": [],
+      "changesMade": [],
+      "verificationResults": {
+        "PRRC_kwDORKgm386lw5g-": {
+          "passed": false,
+          "reason": "File was not modified"
+        },
+        "PRRC_kwDORKgm386lw5hx": {
+          "passed": false,
+          "reason": "No verification result returned by LLM"
+        },
+        "PRRC_kwDORKgm386lw5iH": {
+          "passed": false,
+          "reason": "No verification result returned by LLM"
+        },
+        "PRRC_kwDORKgm386lw5iq": {
+          "passed": false,
+          "reason": "No verification result returned by LLM"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-02-09T08:27:31.603Z",
+      "commentsAddressed": [],
+      "changesMade": [],
+      "verificationResults": {
+        "PRRC_kwDORKgm386lw5g-": {
+          "passed": false,
+          "reason": "No verification result returned by LLM"
+        },
+        "PRRC_kwDORKgm386lw5hx": {
+          "passed": false,
+          "reason": "No verification result returned by LLM"
+        },
+        "PRRC_kwDORKgm386lw5iH": {
+          "passed": false,
+          "reason": "No verification result returned by LLM"
+        },
+        "PRRC_kwDORKgm386lw5iq": {
+          "passed": false,
+          "reason": "No verification result returned by LLM"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-02-09T08:28:19.221Z",
+      "commentsAddressed": [],
+      "changesMade": [],
+      "verificationResults": {
+        "PRRC_kwDORKgm386lw5hx": {
+          "passed": false,
+          "reason": "File was not modified"
+        },
+        "PRRC_kwDORKgm386lw5iH": {
+          "passed": false,
+          "reason": "No verification result returned by LLM"
+        },
+        "PRRC_kwDORKgm386lw5iq": {
+          "passed": false,
+          "reason": "No verification result returned by LLM"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-02-09T08:28:35.899Z",
+      "commentsAddressed": [],
+      "changesMade": [],
+      "verificationResults": {
+        "PRRC_kwDORKgm386lw5hx": {
+          "passed": false,
+          "reason": "File was not modified"
+        },
+        "PRRC_kwDORKgm386lw5iH": {
+          "passed": false,
+          "reason": "No verification result returned by LLM"
+        },
+        "PRRC_kwDORKgm386lw5iq": {
+          "passed": false,
+          "reason": "No verification result returned by LLM"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-02-09T08:29:24.966Z",
+      "commentsAddressed": [],
+      "changesMade": [],
+      "verificationResults": {
+        "PRRC_kwDORKgm386lw5hx": {
+          "passed": false,
+          "reason": "File was not modified"
+        }
+      }
+    }
+  ],
+  "lessonsLearned": [],
+  "verifiedFixed": [
+    "PRRC_kwDORKgm386lw5jK",
+    "PRRC_kwDORKgm386lw5hd",
+    "PRRC_kwDORKgm386lw5g-",
+    "PRRC_kwDORKgm386lw5iq",
+    "PRRC_kwDORKgm386lw5iH"
+  ],
+  "verifiedComments": [
+    {
+      "commentId": "PRRC_kwDORKgm386lw5jK",
+      "verifiedAt": "2026-02-09T08:26:52.811Z",
+      "verifiedAtIteration": 1
+    },
+    {
+      "commentId": "PRRC_kwDORKgm386lw5hd",
+      "verifiedAt": "2026-02-09T08:26:58.506Z",
+      "verifiedAtIteration": 1
+    },
+    {
+      "commentId": "PRRC_kwDORKgm386lw5g-",
+      "verifiedAt": "2026-02-09T08:28:10.802Z",
+      "verifiedAtIteration": 3
+    },
+    {
+      "commentId": "PRRC_kwDORKgm386lw5iq",
+      "verifiedAt": "2026-02-09T08:29:03.755Z",
+      "verifiedAtIteration": 5
+    },
+    {
+      "commentId": "PRRC_kwDORKgm386lw5iH",
+      "verifiedAt": "2026-02-09T08:29:10.910Z",
+      "verifiedAtIteration": 5
+    }
+  ],
+  "dismissedIssues": [
+    {
+      "commentId": "PRRC_kwDORKgm386lw5g-",
+      "reason": "File was not modified by the fixer tool, so issue could not have been addressed",
+      "dismissedAt": "2026-02-09T08:26:22.163Z",
+      "dismissedAtIteration": 1,
+      "category": "file-unchanged",
+      "filePath": "package.json",
+      "line": 38,
+      "commentBody": "The PR description says `@elizaos/core` is pinned to `2.0.0-alpha.3`, but `package.json` currently specifies `@elizaos/core` as `2.0.0-alpha.10`. Either update the description to match the actual strategy (newer core + pinned plugins) or align the core dependency with the pinned plugin set if alpha.3 compatibility is required."
+    },
+    {
+      "commentId": "PRRC_kwDORKgm386lw5hx",
+      "reason": "File was not modified by the fixer tool, so issue could not have been addressed",
+      "dismissedAt": "2026-02-09T08:28:32.244Z",
+      "dismissedAtIteration": 4,
+      "category": "file-unchanged",
+      "filePath": "src/runtime/eliza.ts",
+      "line": 300,
+      "commentBody": "New behavior (dropping `@elizaos/plugin-local-embedding` when a provider env var is present) isn't asserted in existing tests. Adding a case in `src/runtime/eliza.test.ts` for the provider-env path would prevent regressions and clarify the intended precedence between remote providers and local embedding."
+    }
+  ],
+  "modelPerformance": {
+    "llm-api/claude-opus-4-5-20251101": {
+      "fixes": 0,
+      "failures": 14,
+      "noChanges": 0,
+      "errors": 0,
+      "lastUsed": "2026-02-09T08:29:32.809Z"
+    },
+    "llm-api/claude-sonnet-4-5-20250929": {
+      "fixes": 0,
+      "failures": 7,
+      "noChanges": 0,
+      "errors": 0,
+      "lastUsed": "2026-02-09T08:28:34.888Z"
+    }
+  },
+  "issueAttempts": {
+    "PRRC_kwDORKgm386lw5hd": [
+      {
+        "commentId": "PRRC_kwDORKgm386lw5hd",
+        "tool": "llm-api",
+        "model": "claude-opus-4-5-20251101",
+        "timestamp": "2026-02-09T08:26:26.967Z",
+        "result": "failed"
+      }
+    ],
+    "PRRC_kwDORKgm386lw5hx": [
+      {
+        "commentId": "PRRC_kwDORKgm386lw5hx",
+        "tool": "llm-api",
+        "model": "claude-opus-4-5-20251101",
+        "timestamp": "2026-02-09T08:26:26.967Z",
+        "result": "failed"
+      },
+      {
+        "commentId": "PRRC_kwDORKgm386lw5hx",
+        "tool": "llm-api",
+        "model": "claude-opus-4-5-20251101",
+        "timestamp": "2026-02-09T08:27:30.981Z",
+        "result": "failed"
+      },
+      {
+        "commentId": "PRRC_kwDORKgm386lw5hx",
+        "tool": "llm-api",
+        "model": "claude-sonnet-4-5-20250929",
+        "timestamp": "2026-02-09T08:27:59.612Z",
+        "result": "failed"
+      },
+      {
+        "commentId": "PRRC_kwDORKgm386lw5hx",
+        "tool": "llm-api",
+        "model": "claude-sonnet-4-5-20250929",
+        "timestamp": "2026-02-09T08:28:34.888Z",
+        "result": "no-changes"
+      },
+      {
+        "commentId": "PRRC_kwDORKgm386lw5hx",
+        "tool": "llm-api",
+        "model": "claude-opus-4-5-20251101",
+        "timestamp": "2026-02-09T08:28:49.435Z",
+        "result": "no-changes"
+      },
+      {
+        "commentId": "PRRC_kwDORKgm386lw5hx",
+        "tool": "llm-api",
+        "model": "claude-opus-4-5-20251101",
+        "timestamp": "2026-02-09T08:29:32.809Z",
+        "result": "no-changes"
+      }
+    ],
+    "PRRC_kwDORKgm386lw5iH": [
+      {
+        "commentId": "PRRC_kwDORKgm386lw5iH",
+        "tool": "llm-api",
+        "model": "claude-opus-4-5-20251101",
+        "timestamp": "2026-02-09T08:26:26.967Z",
+        "result": "failed"
+      },
+      {
+        "commentId": "PRRC_kwDORKgm386lw5iH",
+        "tool": "llm-api",
+        "model": "claude-opus-4-5-20251101",
+        "timestamp": "2026-02-09T08:27:30.981Z",
+        "result": "failed"
+      },
+      {
+        "commentId": "PRRC_kwDORKgm386lw5iH",
+        "tool": "llm-api",
+        "model": "claude-sonnet-4-5-20250929",
+        "timestamp": "2026-02-09T08:27:59.612Z",
+        "result": "failed"
+      },
+      {
+        "commentId": "PRRC_kwDORKgm386lw5iH",
+        "tool": "llm-api",
+        "model": "claude-sonnet-4-5-20250929",
+        "timestamp": "2026-02-09T08:28:34.888Z",
+        "result": "failed"
+      },
+      {
+        "commentId": "PRRC_kwDORKgm386lw5iH",
+        "tool": "llm-api",
+        "model": "claude-opus-4-5-20251101",
+        "timestamp": "2026-02-09T08:28:49.435Z",
+        "result": "failed"
+      }
+    ],
+    "PRRC_kwDORKgm386lw5iq": [
+      {
+        "commentId": "PRRC_kwDORKgm386lw5iq",
+        "tool": "llm-api",
+        "model": "claude-opus-4-5-20251101",
+        "timestamp": "2026-02-09T08:26:26.967Z",
+        "result": "failed"
+      },
+      {
+        "commentId": "PRRC_kwDORKgm386lw5iq",
+        "tool": "llm-api",
+        "model": "claude-opus-4-5-20251101",
+        "timestamp": "2026-02-09T08:27:30.981Z",
+        "result": "failed"
+      },
+      {
+        "commentId": "PRRC_kwDORKgm386lw5iq",
+        "tool": "llm-api",
+        "model": "claude-sonnet-4-5-20250929",
+        "timestamp": "2026-02-09T08:27:59.612Z",
+        "result": "failed"
+      },
+      {
+        "commentId": "PRRC_kwDORKgm386lw5iq",
+        "tool": "llm-api",
+        "model": "claude-sonnet-4-5-20250929",
+        "timestamp": "2026-02-09T08:28:34.888Z",
+        "result": "failed"
+      },
+      {
+        "commentId": "PRRC_kwDORKgm386lw5iq",
+        "tool": "llm-api",
+        "model": "claude-opus-4-5-20251101",
+        "timestamp": "2026-02-09T08:28:49.435Z",
+        "result": "failed"
+      }
+    ],
+    "PRRC_kwDORKgm386lw5jK": [
+      {
+        "commentId": "PRRC_kwDORKgm386lw5jK",
+        "tool": "llm-api",
+        "model": "claude-opus-4-5-20251101",
+        "timestamp": "2026-02-09T08:26:26.967Z",
+        "result": "failed"
+      }
+    ],
+    "PRRC_kwDORKgm386lw5g-": [
+      {
+        "commentId": "PRRC_kwDORKgm386lw5g-",
+        "tool": "llm-api",
+        "model": "claude-opus-4-5-20251101",
+        "timestamp": "2026-02-09T08:26:26.967Z",
+        "result": "no-changes"
+      },
+      {
+        "commentId": "PRRC_kwDORKgm386lw5g-",
+        "tool": "llm-api",
+        "model": "claude-opus-4-5-20251101",
+        "timestamp": "2026-02-09T08:27:30.981Z",
+        "result": "no-changes"
+      },
+      {
+        "commentId": "PRRC_kwDORKgm386lw5g-",
+        "tool": "llm-api",
+        "model": "claude-sonnet-4-5-20250929",
+        "timestamp": "2026-02-09T08:27:59.612Z",
+        "result": "failed"
+      }
+    ]
+  },
+  "noProgressCycles": 1,
+  "totalTimings": {
+    "Fetch PR info": 684,
+    "Merge base branch": 1364,
+    "Fetch comments": 285,
+    "Analyze issues": 10442,
+    "Run fixer": 104977,
+    "Verify fixes": 19376
+  },
+  "totalTokenUsage": [
+    {
+      "phase": "Analyze issues",
+      "inputTokens": 3333,
+      "outputTokens": 822,
+      "calls": 1
+    },
+    {
+      "phase": "Verify fixes",
+      "inputTokens": 15085,
+      "outputTokens": 1218,
+      "calls": 5
+    },
+    {
+      "phase": "Verify single fix",
+      "inputTokens": 5755,
+      "outputTokens": 832,
+      "calls": 7
+    },
+    {
+      "phase": "Analyze failure",
+      "inputTokens": 1669,
+      "outputTokens": 56,
+      "calls": 2
+    }
+  ],
+  "modelIndices": {
+    "llm-api": 1
+  },
+  "bailOutRecord": {
+    "timestamp": "2026-02-09T08:29:32.850Z",
+    "reason": "no-progress-cycles",
+    "cyclesCompleted": 1,
+    "remainingIssues": [
+      {
+        "commentId": "PRRC_kwDORKgm386lw5hx",
+        "filePath": "src/runtime/eliza.ts",
+        "line": 300,
+        "summary": "New behavior (dropping `@elizaos/plugin-local-embedding` when a provider env var is present) isn't a"
+      }
+    ],
+    "partialProgress": {
+      "issuesFixed": 5,
+      "issuesRemaining": 1,
+      "lessonsLearned": 0
+    },
+    "toolsExhausted": [
+      "llm-api"
+    ]
+  }
+}
