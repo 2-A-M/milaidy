@@ -347,14 +347,36 @@ describe("Package.json version pinning (issue #10)", () => {
    *
    * This test reads the actual package.json to ensure the fix stays in place.
    */
-  it("affected plugins are pinned to compatible versions", async () => {
+  it("core is pinned to a version that includes MAX_EMBEDDING_TOKENS", async () => {
     const { readFileSync } = await import("node:fs");
     const { resolve } = await import("node:path");
-    const pkgPath = resolve(import.meta.dirname, "../../package.json");
+    // Use process.cwd() for reliable root resolution in forked vitest workers
+    // (import.meta.dirname may not resolve to the source tree in CI forks).
+    const pkgPath = resolve(process.cwd(), "package.json");
     const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as {
       dependencies: Record<string, string>;
     };
 
+    const coreVersion = pkg.dependencies["@elizaos/core"];
+    expect(coreVersion).toBeDefined();
+    // Core must be pinned (not "next") to prevent version skew
+    expect(coreVersion).not.toBe("next");
+    // Should be a specific version
+    expect(coreVersion).toMatch(/^\d+\.\d+\.\d+/);
+    // Must be >= alpha.4 (when MAX_EMBEDDING_TOKENS was introduced)
+    expect(versionSatisfies(coreVersion, "2.0.0-alpha.4")).toBe(true);
+  });
+
+  it("affected plugins are present in dependencies (core pin makes next safe)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    // Use process.cwd() for reliable root resolution in forked vitest workers.
+    const pkgPath = resolve(process.cwd(), "package.json");
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as {
+      dependencies: Record<string, string>;
+    };
+
+    // With core pinned to >= alpha.4, plugins at "next" are safe
     const affectedPlugins = [
       "@elizaos/plugin-openrouter",
       "@elizaos/plugin-openai",
@@ -366,23 +388,8 @@ describe("Package.json version pinning (issue #10)", () => {
     for (const plugin of affectedPlugins) {
       const version = pkg.dependencies[plugin];
       expect(version).toBeDefined();
-      // Must NOT be "next" (which resolves to alpha.4 and breaks)
-      expect(version).not.toBe("next");
-      // Should be pinned to a specific version (alpha.3 or compatible)
-      expect(version).toMatch(/^\d+\.\d+\.\d+/);
+      // Plugins may be at "next" since core is pinned to a compatible version
     }
-  });
-
-  it("core is still on next dist-tag (the plugins are pinned, not core)", async () => {
-    const { readFileSync } = await import("node:fs");
-    const { resolve } = await import("node:path");
-    const pkgPath = resolve(import.meta.dirname, "../../package.json");
-    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as {
-      dependencies: Record<string, string>;
-    };
-
-    // Core should remain on "next" — only the affected plugins are pinned
-    expect(pkg.dependencies["@elizaos/core"]).toBe("next");
   });
 
   it("pinned versions satisfy core@alpha.3 compatibility", () => {
