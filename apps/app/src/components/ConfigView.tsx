@@ -471,6 +471,19 @@ export function ConfigView() {
     void handleWalletApiKeySave(config);
   }, [handleWalletApiKeySave]);
 
+  /* ── Messaging channels state ─────────────────────────────────────── */
+  const [channelsLoading, setChannelsLoading] = useState(false);
+  const [channelsError, setChannelsError] = useState<string | null>(null);
+  const [channelsState, setChannelsState] = useState<Record<string, { configured: boolean; maskedToken?: string | null }>>({});
+  const [telegramTokenInput, setTelegramTokenInput] = useState("");
+  const [telegramTokenVisible, setTelegramTokenVisible] = useState(false);
+  const [telegramTokenDirty, setTelegramTokenDirty] = useState(false);
+  const [telegramMaskedToken, setTelegramMaskedToken] = useState<string | null>(null);
+  const [saveBusy, setSaveBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
   const loadChannels = useCallback(async () => {
     setChannelsLoading(true);
     setChannelsError(null);
@@ -609,19 +622,6 @@ export function ConfigView() {
   /* ── RPC provider selection state ────────────────────────────────── */
   const [selectedEvmRpc, setSelectedEvmRpc] = useState<"alchemy" | "infura" | "ankr">("alchemy");
   const [selectedSolanaRpc, setSelectedSolanaRpc] = useState<"helius" | "birdeye">("helius");
-
-  /* ── Messaging channels state ─────────────────────────────────────── */
-  const [channelsLoading, setChannelsLoading] = useState(false);
-  const [channelsError, setChannelsError] = useState<string | null>(null);
-  const [channelsState, setChannelsState] = useState<Record<string, { configured: boolean; maskedToken?: string | null }>>({});
-  const [telegramTokenInput, setTelegramTokenInput] = useState("");
-  const [telegramTokenVisible, setTelegramTokenVisible] = useState(false);
-  const [telegramTokenDirty, setTelegramTokenDirty] = useState(false);
-  const [telegramMaskedToken, setTelegramMaskedToken] = useState<string | null>(null);
-  const [saveBusy, setSaveBusy] = useState(false);
-  const [deleteBusy, setDeleteBusy] = useState(false);
-  const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   /* ── Export / Import modal state ─────────────────────────────────── */
   const [exportModalOpen, setExportModalOpen] = useState(false);

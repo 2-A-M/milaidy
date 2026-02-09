@@ -277,6 +277,133 @@ function buildParamDefs(
 }
 
 /**
+ * Infer parameter definitions from bare config key names when explicit
+ * pluginParameters metadata is not provided.  Uses naming conventions to
+ * determine type, sensitivity, requirement level, and a human-readable
+ * description.
+ */
+function inferParamDefs(configKeys: string[]): PluginParamDef[] {
+  return configKeys.map((key) => {
+    const upper = key.toUpperCase();
+
+    // Detect sensitive keys
+    const sensitive =
+      upper.includes("_API_KEY") ||
+      upper.includes("_SECRET") ||
+      upper.includes("_TOKEN") ||
+      upper.includes("_PASSWORD") ||
+      upper.includes("_PRIVATE_KEY") ||
+      upper.includes("_SIGNING_") ||
+      upper.includes("ENCRYPTION_");
+
+    // Detect booleans
+    const isBoolean =
+      upper.includes("ENABLED") ||
+      upper.includes("_ENABLE_") ||
+      upper.startsWith("ENABLE_") ||
+      upper.includes("DRY_RUN") ||
+      upper.includes("_DEBUG") ||
+      upper.includes("_VERBOSE") ||
+      upper.includes("AUTO_") ||
+      upper.includes("FORCE_") ||
+      upper.includes("DISABLE_") ||
+      upper.includes("SHOULD_") ||
+      upper.endsWith("_SSL");
+
+    // Detect numbers
+    const isNumber =
+      upper.endsWith("_PORT") ||
+      upper.endsWith("_INTERVAL") ||
+      upper.endsWith("_TIMEOUT") ||
+      upper.endsWith("_MS") ||
+      upper.endsWith("_MINUTES") ||
+      upper.endsWith("_SECONDS") ||
+      upper.endsWith("_LIMIT") ||
+      upper.endsWith("_MAX") ||
+      upper.endsWith("_MIN") ||
+      upper.includes("_MAX_") ||
+      upper.includes("_MIN_") ||
+      upper.endsWith("_COUNT") ||
+      upper.endsWith("_SIZE") ||
+      upper.endsWith("_STEPS");
+
+    const type = isBoolean ? "boolean" : isNumber ? "number" : "string";
+
+    // Primary keys are required (API keys, tokens, bot tokens, account IDs)
+    const required =
+      sensitive &&
+      (upper.endsWith("_API_KEY") ||
+        upper.endsWith("_BOT_TOKEN") ||
+        upper.endsWith("_TOKEN") ||
+        upper.endsWith("_PRIVATE_KEY"));
+
+    // Generate a human-readable description from the key name
+    const description = inferDescription(key);
+
+    const envValue = process.env[key];
+    const isSet = Boolean(envValue?.trim());
+
+    return {
+      key,
+      type,
+      description,
+      required,
+      sensitive,
+      default: undefined,
+      options: undefined,
+      currentValue: isSet
+        ? sensitive
+          ? maskValue(envValue ?? "")
+          : (envValue ?? "")
+        : null,
+      isSet,
+    };
+  });
+}
+
+/** Derive a human-readable description from an environment variable key. */
+function inferDescription(key: string): string {
+  const upper = key.toUpperCase();
+
+  // Special well-known suffixes
+  if (upper.endsWith("_API_KEY")) return `API key for ${prefixLabel(key, "_API_KEY")}`;
+  if (upper.endsWith("_BOT_TOKEN")) return `Bot token for ${prefixLabel(key, "_BOT_TOKEN")}`;
+  if (upper.endsWith("_TOKEN")) return `Authentication token for ${prefixLabel(key, "_TOKEN")}`;
+  if (upper.endsWith("_SECRET")) return `Secret for ${prefixLabel(key, "_SECRET")}`;
+  if (upper.endsWith("_PRIVATE_KEY")) return `Private key for ${prefixLabel(key, "_PRIVATE_KEY")}`;
+  if (upper.endsWith("_PASSWORD")) return `Password for ${prefixLabel(key, "_PASSWORD")}`;
+  if (upper.endsWith("_RPC_URL")) return `RPC endpoint URL for ${prefixLabel(key, "_RPC_URL")}`;
+  if (upper.endsWith("_BASE_URL")) return `Base URL for ${prefixLabel(key, "_BASE_URL")}`;
+  if (upper.endsWith("_URL")) return `URL for ${prefixLabel(key, "_URL")}`;
+  if (upper.endsWith("_ENDPOINT")) return `Endpoint for ${prefixLabel(key, "_ENDPOINT")}`;
+  if (upper.endsWith("_HOST")) return `Host address for ${prefixLabel(key, "_HOST")}`;
+  if (upper.endsWith("_PORT")) return `Port number for ${prefixLabel(key, "_PORT")}`;
+  if (upper.endsWith("_MODEL") || upper.includes("_MODEL_")) return `Model identifier for ${prefixLabel(key, "_MODEL")}`;
+  if (upper.endsWith("_VOICE") || upper.includes("_VOICE_")) return `Voice setting for ${prefixLabel(key, "_VOICE")}`;
+  if (upper.endsWith("_DIR") || upper.endsWith("_PATH")) return `Directory path for ${prefixLabel(key, "_DIR").replace(/_PATH$/i, "")}`;
+  if (upper.endsWith("_ENABLED") || upper.startsWith("ENABLE_")) return `Enable/disable ${prefixLabel(key, "_ENABLED").replace(/^ENABLE_/i, "")}`;
+  if (upper.includes("DRY_RUN")) return `Dry-run mode (no real actions)`;
+  if (upper.endsWith("_INTERVAL") || upper.endsWith("_INTERVAL_MINUTES")) return `Check interval for ${prefixLabel(key, "_INTERVAL")}`;
+  if (upper.endsWith("_TIMEOUT") || upper.endsWith("_TIMEOUT_MS")) return `Timeout setting for ${prefixLabel(key, "_TIMEOUT")}`;
+
+  // Generic: convert KEY_NAME to "Key name"
+  return key
+    .split("_")
+    .map((w, i) => (i === 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase()))
+    .join(" ");
+}
+
+/** Extract the plugin/service prefix label from a key by removing a known suffix. */
+function prefixLabel(key: string, suffix: string): string {
+  const raw = key.replace(new RegExp(`${suffix}$`, "i"), "").replace(/_+$/, "");
+  if (!raw) return key;
+  return raw
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
+/**
  * Discover user-installed plugins from the Store (not bundled in the manifest).
  * Reads from config.plugins.installs and tries to enrich with package.json metadata.
  */
@@ -388,9 +515,14 @@ function discoverPluginsFromManifest(): PluginEntry[] {
                 ),
               )
             : undefined;
+          // Use explicit pluginParameters when available; otherwise infer
+          // parameter definitions from the bare configKeys list so that
+          // every plugin with known env vars gets a configuration UI.
           const parameters = filteredParams
             ? buildParamDefs(filteredParams)
-            : [];
+            : filteredConfigKeys.length > 0
+              ? inferParamDefs(filteredConfigKeys)
+              : [];
           const paramInfos: PluginParamInfo[] = parameters.map((pd) => ({
             key: pd.key,
             required: pd.required,
