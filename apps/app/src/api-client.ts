@@ -704,11 +704,19 @@ export interface RegistryPluginItem {
 }
 
 // App types
+export interface AppViewerAuthMessage {
+  type: string;
+  authToken?: string;
+  sessionToken?: string;
+  agentId?: string;
+}
+
 export interface AppViewerConfig {
   url: string;
   embedParams?: Record<string, string>;
   postMessageAuth?: boolean;
   sandbox?: string;
+  authMessage?: AppViewerAuthMessage;
 }
 export interface RegistryAppInfo {
   name: string;

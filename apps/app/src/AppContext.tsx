@@ -39,7 +39,14 @@ import {
   type ReleaseChannel,
   type Conversation,
   type ConversationMessage,
+  type ConversationMode,
+  type CreateTriggerRequest,
   type StylePreset,
+  type StreamEventEnvelope,
+  type TriggerHealthSnapshot,
+  type TriggerRunRecord,
+  type TriggerSummary,
+  type UpdateTriggerRequest,
 } from "./api-client";
 import { tabFromPath, pathForTab, type Tab } from "./navigation";
 import { SkillScanReportSummary } from "./api-client";
@@ -128,6 +135,13 @@ interface ActionNotice {
   text: string;
 }
 
+export interface GamePostMessageAuthPayload {
+  type: string;
+  authToken?: string;
+  sessionToken?: string;
+  agentId?: string;
+}
+
 // ── Context value type ─────────────────────────────────────────────────
 
 export interface AppState {
@@ -154,6 +168,16 @@ export interface AppState {
   conversations: Conversation[];
   activeConversationId: string | null;
   conversationMessages: ConversationMessage[];
+  autonomousEvents: StreamEventEnvelope[];
+  autonomousLatestEventId: string | null;
+
+  // Triggers
+  triggers: TriggerSummary[];
+  triggersLoading: boolean;
+  triggersSaving: boolean;
+  triggerRunsById: Record<string, TriggerRunRecord[]>;
+  triggerHealth: TriggerHealthSnapshot | null;
+  triggerError: string | null;
 
   // Plugins
   plugins: PluginInfo[];
@@ -333,6 +357,7 @@ export interface AppState {
   activeGameViewerUrl: string;
   activeGameSandbox: string;
   activeGamePostMessageAuth: boolean;
+  activeGamePostMessagePayload: GamePostMessageAuthPayload | null;
 
 }
 
@@ -349,12 +374,21 @@ export interface AppActions {
   handleReset: () => Promise<void>;
 
   // Chat
-  handleChatSend: () => Promise<void>;
+  handleChatSend: (mode?: ConversationMode) => Promise<void>;
   handleChatClear: () => Promise<void>;
   handleNewConversation: () => Promise<void>;
   handleSelectConversation: (id: string) => Promise<void>;
   handleDeleteConversation: (id: string) => Promise<void>;
   handleRenameConversation: (id: string, title: string) => Promise<void>;
+
+  // Triggers
+  loadTriggers: () => Promise<void>;
+  createTrigger: (request: CreateTriggerRequest) => Promise<TriggerSummary | null>;
+  updateTrigger: (id: string, request: UpdateTriggerRequest) => Promise<TriggerSummary | null>;
+  deleteTrigger: (id: string) => Promise<boolean>;
+  runTriggerNow: (id: string) => Promise<boolean>;
+  loadTriggerRuns: (id: string) => Promise<void>;
+  loadTriggerHealth: () => Promise<void>;
 
   // Pairing
   handlePairingSubmit: () => Promise<void>;
@@ -468,6 +502,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>([]);
+  const [autonomousEvents, setAutonomousEvents] = useState<StreamEventEnvelope[]>([]);
+  const [autonomousLatestEventId, setAutonomousLatestEventId] = useState<string | null>(null);
+
+  // --- Triggers ---
+  const [triggers, setTriggers] = useState<TriggerSummary[]>([]);
+  const [triggersLoading, setTriggersLoading] = useState(false);
+  const [triggersSaving, setTriggersSaving] = useState(false);
+  const [triggerRunsById, setTriggerRunsById] = useState<Record<string, TriggerRunRecord[]>>({});
+  const [triggerHealth, setTriggerHealth] = useState<TriggerHealthSnapshot | null>(null);
+  const [triggerError, setTriggerError] = useState<string | null>(null);
 
   // --- Plugins ---
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
@@ -647,6 +691,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [activeGameViewerUrl, setActiveGameViewerUrl] = useState("");
   const [activeGameSandbox, setActiveGameSandbox] = useState("allow-scripts allow-same-origin allow-popups");
   const [activeGamePostMessageAuth, setActiveGamePostMessageAuth] = useState(false);
+  const [activeGamePostMessagePayload, setActiveGamePostMessagePayload] = useState<GamePostMessageAuthPayload | null>(null);
 
 
   // --- Refs for timers ---
@@ -708,6 +753,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const sortTriggersByNextRun = useCallback((items: TriggerSummary[]): TriggerSummary[] => {
+    return [...items].sort((a: TriggerSummary, b: TriggerSummary) => {
+      const aNext = a.nextRunAtMs ?? Number.MAX_SAFE_INTEGER;
+      const bNext = b.nextRunAtMs ?? Number.MAX_SAFE_INTEGER;
+      if (aNext !== bNext) return aNext - bNext;
+      return a.displayName.localeCompare(b.displayName);
+    });
+  }, []);
+
   // ── Data loading ───────────────────────────────────────────────────
 
   const loadPlugins = useCallback(async () => {
@@ -758,6 +812,169 @@ export function AppProvider({ children }: { children: ReactNode }) {
       /* ignore */
     }
   }, [logTagFilter, logLevelFilter, logSourceFilter]);
+
+  const loadTriggerHealth = useCallback(async () => {
+    try {
+      const health = await client.getTriggerHealth();
+      setTriggerHealth(health);
+    } catch {
+      setTriggerHealth(null);
+    }
+  }, []);
+
+  const loadTriggers = useCallback(async () => {
+    setTriggersLoading(true);
+    try {
+      const data = await client.getTriggers();
+      setTriggers(sortTriggersByNextRun(data.triggers));
+      setTriggerError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load triggers";
+      setTriggerError(message);
+      setTriggers([]);
+    } finally {
+      setTriggersLoading(false);
+    }
+  }, [sortTriggersByNextRun]);
+
+  const loadTriggerRuns = useCallback(async (id: string) => {
+    try {
+      const data = await client.getTriggerRuns(id);
+      setTriggerRunsById((prev: Record<string, TriggerRunRecord[]>) => ({
+        ...prev,
+        [id]: data.runs,
+      }));
+      setTriggerError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load trigger runs";
+      setTriggerError(message);
+    }
+  }, []);
+
+  const createTrigger = useCallback(
+    async (request: CreateTriggerRequest): Promise<TriggerSummary | null> => {
+      setTriggersSaving(true);
+      try {
+        const response = await client.createTrigger(request);
+        const created = response.trigger;
+        setTriggers((prev: TriggerSummary[]) => {
+          const merged = prev.filter((item: TriggerSummary) => item.id !== created.id);
+          merged.push(created);
+          return sortTriggersByNextRun(merged);
+        });
+        setTriggerError(null);
+        void loadTriggerHealth();
+        return created;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to create trigger";
+        setTriggerError(message);
+        return null;
+      } finally {
+        setTriggersSaving(false);
+      }
+    },
+    [loadTriggerHealth, sortTriggersByNextRun],
+  );
+
+  const updateTrigger = useCallback(
+    async (
+      id: string,
+      request: UpdateTriggerRequest,
+    ): Promise<TriggerSummary | null> => {
+      setTriggersSaving(true);
+      try {
+        const response = await client.updateTrigger(id, request);
+        const updated = response.trigger;
+        setTriggers((prev: TriggerSummary[]) => {
+          const merged = prev.map((item: TriggerSummary) =>
+            item.id === updated.id ? updated : item,
+          );
+          return sortTriggersByNextRun(merged);
+        });
+        setTriggerError(null);
+        void loadTriggerHealth();
+        return updated;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to update trigger";
+        setTriggerError(message);
+        return null;
+      } finally {
+        setTriggersSaving(false);
+      }
+    },
+    [loadTriggerHealth, sortTriggersByNextRun],
+  );
+
+  const deleteTrigger = useCallback(async (id: string): Promise<boolean> => {
+    setTriggersSaving(true);
+    try {
+      await client.deleteTrigger(id);
+      setTriggers((prev: TriggerSummary[]) =>
+        prev.filter((item: TriggerSummary) => item.id !== id),
+      );
+      setTriggerRunsById((prev: Record<string, TriggerRunRecord[]>) => {
+        const next: Record<string, TriggerRunRecord[]> = {};
+        for (const [key, runs] of Object.entries(prev)) {
+          if (key !== id) next[key] = runs;
+        }
+        return next;
+      });
+      setTriggerError(null);
+      void loadTriggerHealth();
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to delete trigger";
+      setTriggerError(message);
+      return false;
+    } finally {
+      setTriggersSaving(false);
+    }
+  }, [loadTriggerHealth]);
+
+  const runTriggerNow = useCallback(async (id: string): Promise<boolean> => {
+    setTriggersSaving(true);
+    try {
+      const response = await client.runTriggerNow(id);
+      if (response.trigger) {
+        const trigger = response.trigger;
+        setTriggers((prev: TriggerSummary[]) => {
+          const idx = prev.findIndex((item: TriggerSummary) => item.id === id);
+          if (idx === -1) {
+            return sortTriggersByNextRun([...prev, trigger]);
+          }
+          const updated = [...prev];
+          updated[idx] = trigger;
+          return sortTriggersByNextRun(updated);
+        });
+      } else {
+        await loadTriggers();
+      }
+      await loadTriggerRuns(id);
+      void loadTriggerHealth();
+      setTriggerError(null);
+      return response.ok;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to run trigger";
+      setTriggerError(message);
+      return false;
+    } finally {
+      setTriggersSaving(false);
+    }
+  }, [loadTriggerHealth, loadTriggerRuns, loadTriggers, sortTriggersByNextRun]);
+
+  const appendAutonomousEvent = useCallback((event: StreamEventEnvelope) => {
+    setAutonomousEvents((prev) => {
+      if (prev.some((entry) => entry.eventId === event.eventId)) {
+        return prev;
+      }
+      const merged = [...prev, event];
+      if (merged.length > 1200) {
+        return merged.slice(merged.length - 1200);
+      }
+      return merged;
+    });
+    setAutonomousLatestEventId(event.eventId);
+  }, []);
 
   const loadConversations = useCallback(async () => {
     try {
@@ -1032,7 +1249,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [fetchGreeting]);
 
-  const handleChatSend = useCallback(async () => {
+  const handleChatSend = useCallback(async (mode: ConversationMode = "simple") => {
     const text = chatInput.trim();
     if (!text || chatSending) return;
 
@@ -1056,7 +1273,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setChatSending(true);
 
     try {
-      const data = await client.sendConversationMessage(convId, text);
+      const data = await client.sendConversationMessage(convId, text, mode);
       setConversationMessages((prev: ConversationMessage[]) => [
         ...prev,
         { id: `temp-resp-${Date.now()}`, role: "assistant", text: data.text, timestamp: Date.now() },
@@ -1070,7 +1287,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setConversations((prev) => [conversation, ...prev]);
           setActiveConversationId(conversation.id);
           convId = conversation.id;
-          const data = await client.sendConversationMessage(convId, text);
+          const data = await client.sendConversationMessage(convId, text, mode);
           setConversationMessages([
             { id: `temp-${Date.now()}`, role: "user", text, timestamp: Date.now() },
             { id: `temp-resp-${Date.now()}`, role: "assistant", text: data.text, timestamp: Date.now() },
@@ -1927,6 +2144,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       activeGameViewerUrl: setActiveGameViewerUrl as (v: never) => void,
       activeGameSandbox: setActiveGameSandbox as (v: never) => void,
       activeGamePostMessageAuth: setActiveGamePostMessageAuth as (v: never) => void,
+      activeGamePostMessagePayload: setActiveGamePostMessagePayload as (v: never) => void,
       storePlugins: setStorePlugins as (v: never) => void,
       storeLoading: setStoreLoading as (v: never) => void,
       storeInstalling: setStoreInstalling as (v: never) => void,
@@ -1962,6 +2180,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     applyTheme(currentTheme);
+    let unbindStatus: (() => void) | null = null;
+    let unbindAgentEvents: (() => void) | null = null;
+    let unbindHeartbeatEvents: (() => void) | null = null;
 
     const initApp = async () => {
       const MAX_RETRIES = 15;
@@ -2062,9 +2283,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       // Connect WebSocket
       client.connectWs();
-      client.onWsEvent("status", (data: Record<string, unknown>) => {
+      unbindStatus = client.onWsEvent("status", (data: Record<string, unknown>) => {
         setAgentStatus(data as unknown as AgentStatus);
       });
+      unbindAgentEvents = client.onWsEvent("agent_event", (data: Record<string, unknown>) => {
+        appendAutonomousEvent(data as unknown as StreamEventEnvelope);
+      });
+      unbindHeartbeatEvents = client.onWsEvent("heartbeat_event", (data: Record<string, unknown>) => {
+        appendAutonomousEvent(data as unknown as StreamEventEnvelope);
+      });
+
+      try {
+        const replay = await client.getAgentEvents({ limit: 300 });
+        if (replay.events.length > 0) {
+          setAutonomousEvents(replay.events);
+          setAutonomousLatestEventId(replay.latestEventId);
+        }
+      } catch (err) {
+        console.warn("[milaidy] Failed to fetch autonomous event replay", err);
+      }
 
       // Load status
       try {
@@ -2099,6 +2336,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           void loadPlugins();
         }
         if (urlTab === "inventory") void loadInventory();
+        if (urlTab === "triggers") {
+          void loadTriggers();
+          void loadTriggerHealth();
+        }
       }
     };
 
@@ -2115,10 +2356,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("popstate", handlePopState);
       if (cloudPollInterval.current) clearInterval(cloudPollInterval.current);
       if (cloudLoginPollTimer.current) clearInterval(cloudLoginPollTimer.current);
+      unbindStatus?.();
+      unbindAgentEvents?.();
+      unbindHeartbeatEvents?.();
       client.disconnectWs();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [appendAutonomousEvent]);
+
+  useEffect(() => {
+    if (tab !== "triggers") return;
+    void loadTriggers();
+    void loadTriggerHealth();
+    const timer = window.setInterval(() => {
+      void loadTriggers();
+      void loadTriggerHealth();
+    }, 30_000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [tab, loadTriggers, loadTriggerHealth]);
 
   // When agent transitions to "running", send a greeting if conversation is empty
   useEffect(() => {
@@ -2147,6 +2404,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     authRequired, actionNotice,
     pairingEnabled, pairingExpiresAt, pairingCodeInput, pairingError, pairingBusy,
     chatInput, chatSending, conversations, activeConversationId, conversationMessages,
+    autonomousEvents, autonomousLatestEventId,
+    triggers, triggersLoading, triggersSaving, triggerRunsById, triggerHealth, triggerError,
     plugins, pluginFilter, pluginStatusFilter, pluginSearch, pluginSettingsOpen,
     pluginAdvancedOpen, pluginSaving, pluginSaveSuccess,
     skills, skillsSubTab, skillCreateFormOpen, skillCreateName, skillCreateDescription,
@@ -2186,12 +2445,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     droppedFiles, shareIngestNotice,
     activeGameApp, activeGameDisplayName, activeGameViewerUrl, activeGameSandbox,
     activeGamePostMessageAuth,
+    activeGamePostMessagePayload,
 
     // Actions
     setTab, setTheme,
     handleStart, handleStop, handlePauseResume, handleRestart, handleReset,
     handleChatSend, handleChatClear, handleNewConversation,
     handleSelectConversation, handleDeleteConversation, handleRenameConversation,
+    loadTriggers, createTrigger, updateTrigger, deleteTrigger, runTriggerNow,
+    loadTriggerRuns, loadTriggerHealth,
     handlePairingSubmit,
     loadPlugins, handlePluginToggle, handlePluginConfigSave,
     loadSkills, refreshSkills, handleSkillToggle, handleCreateSkill,

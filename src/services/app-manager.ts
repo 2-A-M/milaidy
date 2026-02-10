@@ -24,6 +24,13 @@ import {
 
 const DEFAULT_VIEWER_SANDBOX = "allow-scripts allow-same-origin allow-popups";
 
+export interface AppViewerAuthMessage {
+  type: string;
+  authToken?: string;
+  sessionToken?: string;
+  agentId?: string;
+}
+
 export interface AppLaunchResult {
   /** The plugin was installed (or was already installed) */
   pluginInstalled: boolean;
@@ -41,6 +48,7 @@ export interface AppLaunchResult {
     embedParams?: Record<string, string>;
     postMessageAuth?: boolean;
     sandbox?: string;
+    authMessage?: AppViewerAuthMessage;
   } | null;
 }
 
@@ -82,6 +90,26 @@ function buildViewerUrl(
   const query = queryParams.toString();
   const hash = hashPartRaw ? `#${hashPartRaw}` : "";
   return `${pathPart}${query.length > 0 ? `?${query}` : ""}${hash}`;
+}
+
+function buildViewerAuthMessage(
+  appName: string,
+  postMessageAuth: boolean | undefined,
+): AppViewerAuthMessage | undefined {
+  if (!postMessageAuth) return undefined;
+  if (appName !== "@elizaos/app-hyperscape") return undefined;
+
+  const authToken = process.env.HYPERSCAPE_AUTH_TOKEN?.trim();
+  if (!authToken) return undefined;
+
+  const sessionToken = process.env.HYPERSCAPE_SESSION_TOKEN?.trim();
+  const agentId = process.env.HYPERSCAPE_EMBED_AGENT_ID?.trim();
+  return {
+    type: "HYPERSCAPE_AUTH",
+    authToken,
+    sessionToken: sessionToken && sessionToken.length > 0 ? sessionToken : undefined,
+    agentId: agentId && agentId.length > 0 ? agentId : undefined,
+  };
 }
 
 export class AppManager {
@@ -151,6 +179,10 @@ export class AppManager {
           embedParams: appInfo.viewer.embedParams,
           postMessageAuth: appInfo.viewer.postMessageAuth,
           sandbox: appInfo.viewer.sandbox ?? DEFAULT_VIEWER_SANDBOX,
+          authMessage: buildViewerAuthMessage(
+            appInfo.name,
+            appInfo.viewer.postMessageAuth,
+          ),
         }
       : appInfo.launchType === "connect" || appInfo.launchType === "local"
         ? launchUrl

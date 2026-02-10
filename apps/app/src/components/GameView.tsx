@@ -2,11 +2,14 @@
  * Game View — embeds a running app's game client in an iframe.
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { client } from "../api-client";
 import { useApp } from "../AppContext";
 
 const DEFAULT_VIEWER_SANDBOX = "allow-scripts allow-same-origin allow-popups";
+const READY_EVENT_BY_AUTH_TYPE: Record<string, string> = {
+  HYPERSCAPE_AUTH: "HYPERSCAPE_READY",
+};
 
 export function GameView() {
   const {
@@ -15,10 +18,36 @@ export function GameView() {
     activeGameViewerUrl,
     activeGameSandbox,
     activeGamePostMessageAuth,
+    activeGamePostMessagePayload,
     setState,
     setActionNotice,
   } = useApp();
   const [stopping, setStopping] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  useEffect(() => {
+    if (!activeGamePostMessageAuth || !activeGamePostMessagePayload) return;
+    const expectedReadyType =
+      READY_EVENT_BY_AUTH_TYPE[activeGamePostMessagePayload.type];
+    if (!expectedReadyType) return;
+
+    const onMessage = (event: MessageEvent<{ type?: string }>) => {
+      const iframeWindow = iframeRef.current?.contentWindow;
+      if (!iframeWindow || event.source !== iframeWindow) return;
+      if (event.data?.type !== expectedReadyType) return;
+      iframeWindow.postMessage(activeGamePostMessagePayload, "*");
+      setActionNotice("Viewer auth sent.", "info", 1800);
+    };
+
+    window.addEventListener("message", onMessage);
+    return () => {
+      window.removeEventListener("message", onMessage);
+    };
+  }, [
+    activeGamePostMessageAuth,
+    activeGamePostMessagePayload,
+    setActionNotice,
+  ]);
 
   const handleStop = useCallback(async () => {
     if (!activeGameApp) return;
@@ -30,6 +59,7 @@ export function GameView() {
       setState("activeGameViewerUrl", "");
       setState("activeGameSandbox", DEFAULT_VIEWER_SANDBOX);
       setState("activeGamePostMessageAuth", false);
+      setState("activeGamePostMessagePayload", null);
       setState("tab", "apps");
       setActionNotice("App stopped.", "success");
     } catch (err) {
@@ -85,6 +115,7 @@ export function GameView() {
       </div>
       <div className="flex-1 min-h-0 relative">
         <iframe
+          ref={iframeRef}
           src={activeGameViewerUrl}
           sandbox={activeGameSandbox}
           className="w-full h-full border-none"

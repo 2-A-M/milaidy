@@ -323,6 +323,59 @@ describe("AppManager", () => {
 
       delete process.env.TEST_VIEWER_BOT;
     });
+
+    it("includes hyperscape postMessage auth payload when token is configured", async () => {
+      process.env.HYPERSCAPE_AUTH_TOKEN = "hs-token-123";
+      const { getAppInfo } = await import("./registry-client.js");
+      vi.mocked(getAppInfo).mockResolvedValue({
+        name: "@elizaos/app-hyperscape",
+        displayName: "Hyperscape",
+        description: "Hyperscape",
+        category: "game",
+        launchType: "connect",
+        launchUrl: "http://localhost:3333",
+        icon: null,
+        capabilities: [],
+        stars: 0,
+        repository: "",
+        latestVersion: "1.0.0",
+        supports: { v0: false, v1: false, v2: true },
+        npm: {
+          package: "@elizaos/app-hyperscape",
+          v0Version: null,
+          v1Version: null,
+          v2Version: "1.0.0",
+        },
+        viewer: {
+          url: "http://localhost:3333",
+          postMessageAuth: true,
+        },
+      });
+
+      const { listInstalledPlugins } = await import("./plugin-installer.js");
+      vi.mocked(listInstalledPlugins).mockReturnValue([
+        {
+          name: "@elizaos/app-hyperscape",
+          version: "1.0.0",
+          installPath: "/tmp/hs",
+          installedAt: "2026-01-01",
+        },
+      ]);
+
+      const { AppManager } = await import("./app-manager.js");
+      const mgr = new AppManager();
+      const result = await mgr.launch("@elizaos/app-hyperscape");
+
+      expect(result.viewer?.postMessageAuth).toBe(true);
+      expect(result.viewer?.authMessage).toEqual({
+        type: "HYPERSCAPE_AUTH",
+        authToken: "hs-token-123",
+        sessionToken: undefined,
+        agentId: undefined,
+      });
+
+      delete process.env.HYPERSCAPE_AUTH_TOKEN;
+    });
   });
 
   describe("search", () => {

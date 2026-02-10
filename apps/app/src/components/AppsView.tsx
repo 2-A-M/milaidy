@@ -51,9 +51,11 @@ export function AppsView() {
         setState("activeGameViewerUrl", result.viewer.url);
         setState("activeGameSandbox", result.viewer.sandbox ?? DEFAULT_VIEWER_SANDBOX);
         setState("activeGamePostMessageAuth", Boolean(result.viewer.postMessageAuth));
+        setState("activeGamePostMessagePayload", result.viewer.authMessage ?? null);
         setState("tab", "game");
         return;
       }
+      setState("activeGamePostMessagePayload", null);
       const targetUrl = result.launchUrl ?? app.launchUrl;
       if (targetUrl) {
         window.open(targetUrl, "_blank", "noopener,noreferrer");
