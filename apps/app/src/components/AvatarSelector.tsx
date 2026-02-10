@@ -64,7 +64,7 @@ export function AvatarSelector({
       {/* Selected avatar large preview */}
       {selected > 0 && (
         <div className="flex flex-col items-center mb-4">
-          <div className="w-32 h-32 rounded-xl overflow-hidden border-2 border-accent shadow-lg bg-card">
+          <div className="w-40 h-40 rounded-xl overflow-hidden border-2 border-accent shadow-lg bg-card">
             <img
               src={getVrmPreviewUrl(selected)}
               alt={AVATAR_NAMES[selected] || `Milady ${selected}`}
@@ -77,8 +77,8 @@ export function AvatarSelector({
         </div>
       )}
 
-      {/* Avatar grid — 4 columns for visible thumbnails */}
-      <div className="grid grid-cols-4 gap-2.5">
+      {/* Avatar grid */}
+      <div className="grid grid-cols-4 gap-2 max-w-[320px] mx-auto">
         {avatarIndices.map((i) => (
           <button
             key={i}
