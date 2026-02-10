@@ -628,7 +628,12 @@ async function loadScanReportFromDisk(
 
     if (!fsSync.existsSync(resolved)) continue;
     const content = fsSync.readFileSync(resolved, "utf-8");
-    const parsed = JSON.parse(content);
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      continue;
+    }
     if (
       typeof parsed.scannedAt === "string" &&
       typeof parsed.status === "string" &&
@@ -729,8 +734,12 @@ async function discoverSkills(
               const reportPath = path.join(s.path, ".scan-results.json");
               if (fs.existsSync(reportPath)) {
                 const raw = fs.readFileSync(reportPath, "utf-8");
-                const parsed = JSON.parse(raw);
-                if (parsed?.status) scanStatus = parsed.status;
+                try {
+                  const parsed = JSON.parse(raw);
+                  if (parsed?.status) scanStatus = parsed.status;
+                } catch {
+                  // Malformed scan report — treat as unscanned
+                }
               }
             }
 
