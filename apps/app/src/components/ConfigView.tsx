@@ -768,9 +768,6 @@ export function ConfigView() {
                               {cloudLoginError}
                             </div>
                           )}
-                          <div className="text-xs text-[var(--muted)] mb-3">
-                            Connect to Eliza Cloud for managed AI models, wallets, and RPCs.
-                          </div>
                           <button
                             className="btn text-xs py-[5px] px-3.5 font-bold !mt-0"
                             onClick={() => void handleCloudLogin()}

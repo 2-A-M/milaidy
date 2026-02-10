@@ -44,6 +44,21 @@ import {
 import { tabFromPath, pathForTab, type Tab } from "./navigation";
 import { SkillScanReportSummary } from "./api-client";
 
+// ── VRM helpers ─────────────────────────────────────────────────────────
+
+/** Number of built-in milady VRM avatars shipped with the app. */
+export const VRM_COUNT = 8;
+
+/** Resolve a built-in VRM index (1–8) to its public asset URL. */
+export function getVrmUrl(index: number): string {
+  return `/vrms/${index}.vrm`;
+}
+
+/** Resolve a built-in VRM index (1–8) to its preview thumbnail URL. */
+export function getVrmPreviewUrl(index: number): string {
+  return `/vrms/previews/milady-${index}.png`;
+}
+
 // ── Theme ──────────────────────────────────────────────────────────────
 
 const THEME_STORAGE_KEY = "milaidy:theme";
@@ -614,6 +629,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const actionNoticeTimer = useRef<number | null>(null);
   const cloudPollInterval = useRef<number | null>(null);
   const cloudLoginPollTimer = useRef<number | null>(null);
+  const prevAgentStateRef = useRef<string | null>(null);
 
   // ── Action notice ──────────────────────────────────────────────────
 
@@ -849,10 +865,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const cloudStatus = await client.getCloudStatus().catch(() => null);
     if (!cloudStatus) return;
     setCloudEnabled(cloudStatus.enabled ?? false);
-    setCloudConnected(cloudStatus.connected);
+    // Treat as connected if EITHER the backend says connected OR the config
+    // has the API key saved (hasApiKey).  The CLOUD_AUTH service may not have
+    // refreshed yet, but the key is persisted and model calls will work.
+    const isConnected = cloudStatus.connected || (cloudStatus.enabled && cloudStatus.hasApiKey);
+    setCloudConnected(Boolean(isConnected));
     setCloudUserId(cloudStatus.userId ?? null);
     if (cloudStatus.topUpUrl) setCloudTopUpUrl(cloudStatus.topUpUrl);
-    if (cloudStatus.connected) {
+    if (isConnected) {
       const credits = await client.getCloudCredits().catch(() => null);
       if (credits) {
         setCloudCredits(credits.balance);
@@ -950,16 +970,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ── Chat ───────────────────────────────────────────────────────────
 
+  /** Request an agent greeting for a conversation and add it to messages. */
+  const fetchGreeting = useCallback(async (convId: string) => {
+    setChatSending(true);
+    try {
+      const data = await client.requestGreeting(convId);
+      if (data.text) {
+        setConversationMessages((prev: ConversationMessage[]) => [
+          ...prev,
+          { id: `greeting-${Date.now()}`, role: "assistant", text: data.text, timestamp: Date.now() },
+        ]);
+      }
+    } catch {
+      /* greeting failed silently — user can still chat */
+    } finally {
+      setChatSending(false);
+    }
+  }, []);
+
   const handleNewConversation = useCallback(async () => {
     try {
       const { conversation } = await client.createConversation();
       setConversations((prev) => [conversation, ...prev]);
       setActiveConversationId(conversation.id);
       setConversationMessages([]);
+      // Agent sends the first message
+      void fetchGreeting(conversation.id);
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [fetchGreeting]);
 
   const handleChatSend = useCallback(async () => {
     const text = chatInput.trim();
@@ -1631,8 +1671,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (poll.status === "authenticated") {
             if (cloudLoginPollTimer.current) clearInterval(cloudLoginPollTimer.current);
             setCloudLoginBusy(false);
+            // Immediately reflect the login in the UI — don't wait for the
+            // background poll which may race with the config save.
+            setCloudConnected(true);
+            setCloudEnabled(true);
             setActionNotice("Logged in to Eliza Cloud successfully.", "success", 6000);
-            void pollCloudCredits();
+            // Delay the credit fetch slightly so the backend has time to
+            // persist the API key before we query cloud status / credits.
+            setTimeout(() => void pollCloudCredits(), 2000);
           } else if (poll.status === "expired" || poll.status === "error") {
             if (cloudLoginPollTimer.current) clearInterval(cloudLoginPollTimer.current);
             setCloudLoginError(poll.error ?? "Session expired. Please try again.");
@@ -1880,7 +1926,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if (authRequired) return;
 
-      // Load conversations
+      // Load conversations — if none exist, create one and request a greeting
+      let greetConvId: string | null = null;
       try {
         const { conversations: c } = await client.listConversations();
         setConversations(c);
@@ -1890,12 +1937,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
           try {
             const { messages } = await client.getConversationMessages(latest.id);
             setConversationMessages(messages);
+            // If the latest conversation has no messages, queue a greeting
+            if (messages.length === 0) {
+              greetConvId = latest.id;
+            }
+          } catch {
+            /* ignore */
+          }
+        } else {
+          // First launch — create a conversation and greet
+          try {
+            const { conversation } = await client.createConversation();
+            setConversations([conversation]);
+            setActiveConversationId(conversation.id);
+            setConversationMessages([]);
+            greetConvId = conversation.id;
           } catch {
             /* ignore */
           }
         }
       } catch {
         /* ignore */
+      }
+
+      // If the agent is already running and we have a conversation needing a
+      // greeting, fire it now. Otherwise the agent-state-transition effect
+      // below will trigger it once the agent starts.
+      if (greetConvId) {
+        try {
+          const s = await client.getStatus();
+          if (s.state === "running") {
+            setChatSending(true);
+            try {
+              const data = await client.requestGreeting(greetConvId);
+              if (data.text) {
+                setConversationMessages((prev: ConversationMessage[]) => [
+                  ...prev,
+                  { id: `greeting-${Date.now()}`, role: "assistant", text: data.text, timestamp: Date.now() },
+                ]);
+              }
+            } catch { /* ignore */ }
+            setChatSending(false);
+          }
+        } catch { /* ignore */ }
       }
 
       void loadWorkbench();
@@ -1960,6 +2044,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // When agent transitions to "running", send a greeting if conversation is empty
+  useEffect(() => {
+    const current = agentStatus?.state ?? null;
+    const prev = prevAgentStateRef.current;
+    prevAgentStateRef.current = current;
+
+    if (current === "running" && prev !== null && prev !== "running") {
+      void loadWorkbench();
+
+      // Agent just started — greet if conversation is empty
+      if (activeConversationId && conversationMessages.length === 0 && !chatSending) {
+        void fetchGreeting(activeConversationId);
+      }
+    }
+  }, [agentStatus?.state, loadWorkbench, activeConversationId, conversationMessages.length, chatSending, fetchGreeting]);
 
   // ── Context value ──────────────────────────────────────────────────
 

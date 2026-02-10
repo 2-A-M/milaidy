@@ -4384,6 +4384,7 @@ async function handleRequest(
     const cloudState: CloudRouteState = {
       config: state.config,
       cloudManager: state.cloudManager,
+      runtime: state.runtime,
     };
     const handled = await handleCloudRoute(
       req,
@@ -4496,7 +4497,7 @@ async function handleRequest(
       error(res, "Conversation not found", 404);
       return;
     }
-    if (!state.runtime) {
+    if (!state.runtime || state.agentState !== "running") {
       json(res, { messages: [] });
       return;
     }
@@ -4517,11 +4518,10 @@ async function handleRequest(
       }));
       json(res, { messages });
     } catch (err) {
-      error(
-        res,
-        `Failed to fetch messages: ${err instanceof Error ? err.message : String(err)}`,
-        500,
+      logger.warn(
+        `[conversations] Failed to fetch messages: ${err instanceof Error ? err.message : String(err)}`,
       );
+      json(res, { messages: [] });
     }
     return;
   }
@@ -4600,6 +4600,132 @@ async function handleRequest(
     } catch (err) {
       const msg = err instanceof Error ? err.message : "generation failed";
       error(res, msg, 500);
+    }
+    return;
+  }
+
+  // ── POST /api/conversations/:id/greeting ───────────────────────────
+  // Ask the agent to generate an opening greeting message for a conversation.
+  // If the LLM is not configured or fails, returns a fallback message.
+  if (
+    method === "POST" &&
+    /^\/api\/conversations\/[^/]+\/greeting$/.test(pathname)
+  ) {
+    const convId = decodeURIComponent(pathname.split("/")[3]);
+    const conv = state.conversations.get(convId);
+    if (!conv) {
+      error(res, "Conversation not found", 404);
+      return;
+    }
+
+    const FALLBACK_MSG = "please configure your models so we can chat";
+
+    const runtime = state.runtime;
+    if (!runtime || state.agentState !== "running") {
+      json(res, { text: FALLBACK_MSG, agentName: state.agentName, generated: false });
+      return;
+    }
+
+    // Cloud proxy path
+    const proxy = state.cloudManager?.getProxy();
+    if (proxy) {
+      try {
+        const responseText = await proxy.handleChatMessage(
+          "[system: send a short greeting to open the conversation. introduce yourself briefly in your own style.]",
+        );
+        conv.updatedAt = new Date().toISOString();
+        json(res, { text: responseText, agentName: proxy.agentName, generated: true });
+      } catch {
+        json(res, { text: FALLBACK_MSG, agentName: proxy.agentName, generated: false });
+      }
+      return;
+    }
+
+    // Local LLM path — build a prompt from the agent's character
+    try {
+      const { ModelType } = await import("@elizaos/core");
+      const char = runtime.character;
+      const charName = char.name ?? state.agentName ?? "Milaidy";
+      const bio = Array.isArray(char.bio)
+        ? char.bio.join(" ")
+        : typeof char.bio === "string"
+          ? char.bio
+          : "";
+      const chatStyle = Array.isArray(char.style?.chat)
+        ? char.style.chat.join("; ")
+        : "";
+      const allStyle = Array.isArray(char.style?.all)
+        ? char.style.all.join("; ")
+        : "";
+
+      const prompt = [
+        `You are ${charName}.`,
+        bio ? `About you: ${bio}` : "",
+        char.system ? `${char.system}` : "",
+        chatStyle ? `Your chat style: ${chatStyle}` : "",
+        allStyle ? `General style rules: ${allStyle}` : "",
+        "",
+        "Write a short, natural opening message to greet someone who just started a conversation with you.",
+        "Be yourself — use your own voice, personality, and style.",
+        "Keep it brief (1-2 sentences). Do not use quotation marks around your message.",
+        "Just output the greeting, nothing else.",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      let result: string | undefined;
+      for (const model of [ModelType.TEXT_SMALL, ModelType.TEXT_LARGE]) {
+        try {
+          result = String(
+            await runtime.useModel(model, {
+              prompt,
+              temperature: 0.9,
+              maxTokens: 200,
+            }),
+          );
+          break;
+        } catch (modelErr) {
+          const modelMsg =
+            modelErr instanceof Error ? modelErr.message : "";
+          if (
+            /api.?key|missing|unauthorized|authentication/i.test(modelMsg) &&
+            model === ModelType.TEXT_SMALL
+          ) {
+            continue;
+          }
+          throw modelErr;
+        }
+      }
+
+      if (!result?.trim()) {
+        json(res, { text: FALLBACK_MSG, agentName: charName, generated: false });
+        return;
+      }
+
+      // Store the greeting as a message memory in the conversation room
+      try {
+        await ensureConversationRoom(conv);
+        const agentMemory = createMessageMemory({
+          id: crypto.randomUUID() as UUID,
+          entityId: runtime.agentId,
+          roomId: conv.roomId,
+          content: {
+            text: result.trim(),
+            source: "agent_greeting",
+            channelType: ChannelType.DM,
+          },
+        });
+        await runtime.createMemory(agentMemory, "messages");
+      } catch (memErr) {
+        logger.warn(
+          `[greeting] Failed to store greeting memory: ${memErr instanceof Error ? memErr.message : String(memErr)}`,
+        );
+      }
+
+      conv.updatedAt = new Date().toISOString();
+      json(res, { text: result.trim(), agentName: charName, generated: true });
+    } catch {
+      json(res, { text: FALLBACK_MSG, agentName: state.agentName, generated: false });
     }
     return;
   }

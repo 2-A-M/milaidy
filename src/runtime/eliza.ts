@@ -51,7 +51,6 @@ import {
   loadHooks,
   triggerHook,
 } from "../hooks/index.js";
-import telegramEnhancedPlugin from "../plugins/telegram-enhanced/index.js";
 import {
   ensureAgentWorkspace,
   resolveDefaultAgentWorkspaceDir,
@@ -62,17 +61,6 @@ import {
   createPhettaCompanionPlugin,
   resolvePhettaCompanionOptionsFromEnv,
 } from "./phetta-companion-plugin.js";
-
-// ---------------------------------------------------------------------------
-// Module augmentation: register plugin service types in the core registry
-// so calls to getServiceLoadPromise() are type-safe.
-// ---------------------------------------------------------------------------
-
-declare module "@elizaos/core" {
-  interface ServiceTypeRegistry {
-    AGENT_SKILLS: "AGENT_SKILLS_SERVICE";
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -116,13 +104,13 @@ function cancelOnboarding(): never {
 // ---------------------------------------------------------------------------
 
 /**
- * Maps Milaidy connector config fields to the environment variable names
+ * Maps Milaidy channel config fields to the environment variable names
  * that ElizaOS plugins expect.
  *
- * Milaidy stores connector credentials under `config.connectors.<name>.<field>`,
+ * Milaidy stores channel credentials under `config.channels.<name>.<field>`,
  * while ElizaOS plugins read them from process.env.
  */
-const CONNECTOR_ENV_MAP: Readonly<
+const CHANNEL_ENV_MAP: Readonly<
   Record<string, Readonly<Record<string, string>>>
 > = {
   discord: {
@@ -195,12 +183,10 @@ const _OPTIONAL_NATIVE_PLUGINS: readonly string[] = [
   "@elizaos/plugin-computeruse", // requires platform-specific binaries
 ];
 
-const LOCAL_TELEGRAM_ENHANCED_PLUGIN = "@milaidy/plugin-telegram-enhanced";
-
-/** Maps Milaidy connector names to ElizaOS plugin package names. */
-const CONNECTOR_PLUGIN_MAP: Readonly<Record<string, string>> = {
+/** Maps Milaidy channel names to ElizaOS plugin package names. */
+const CHANNEL_PLUGIN_MAP: Readonly<Record<string, string>> = {
   discord: "@elizaos/plugin-discord",
-  telegram: LOCAL_TELEGRAM_ENHANCED_PLUGIN,
+  telegram: "@elizaos/plugin-telegram",
   slack: "@elizaos/plugin-slack",
   whatsapp: "@elizaos/plugin-whatsapp",
   signal: "@elizaos/plugin-signal",
@@ -279,24 +265,22 @@ export function collectPluginNames(config: MilaidyConfig): Set<string> {
   const hasExplicitAllowList = allowList && allowList.length > 0;
 
   // If there's an explicit allow list, respect it and skip auto-detection —
-  // but always include core plugins that the runtime depends on:
-  //   - @elizaos/plugin-sql: database access (memory, todos, entities)
-  //   - @elizaos/plugin-agent-skills: skill loading and discovery
+  // but always include @elizaos/plugin-sql since the runtime requires it for
+  // database access (memory, todos, entities, etc.).
   if (hasExplicitAllowList) {
     const names = new Set<string>(allowList);
     names.add("@elizaos/plugin-sql");
-    names.add("@elizaos/plugin-agent-skills");
     return names;
   }
 
   // Otherwise, proceed with auto-detection
   const pluginsToLoad = new Set<string>(CORE_PLUGINS);
 
-  // Connector plugins — load when connector has config entries
-  const connectors = config.connectors ?? config.channels ?? {};
-  for (const [connectorName, connectorConfig] of Object.entries(connectors)) {
-    if (connectorConfig && typeof connectorConfig === "object") {
-      const pluginName = CONNECTOR_PLUGIN_MAP[connectorName];
+  // Channel plugins — load when channel has config entries
+  const channels = config.channels ?? {};
+  for (const [channelName, channelConfig] of Object.entries(channels)) {
+    if (channelConfig && typeof channelConfig === "object") {
+      const pluginName = CHANNEL_PLUGIN_MAP[channelName];
       if (pluginName) {
         pluginsToLoad.add(pluginName);
       }
@@ -304,15 +288,22 @@ export function collectPluginNames(config: MilaidyConfig): Set<string> {
   }
 
   // Model-provider plugins — load when env key is present
+  let hasRemoteModelProvider = false;
   for (const [envKey, pluginName] of Object.entries(PROVIDER_PLUGIN_MAP)) {
     if (process.env[envKey]) {
       pluginsToLoad.add(pluginName);
+      hasRemoteModelProvider = true;
     }
   }
 
-  // Always keep plugin-local-embedding loaded regardless of remote providers.
-  // We want deterministic, cost-free local embeddings even when remote model
-  // providers (OpenAI, Anthropic, etc.) are configured for chat/completion.
+  // Why: plugin-local-embedding downloads a ~400 MB GGUF model and runs it
+  // via node-llama-cpp on CPU.  In containers or machines without a GPU this
+  // burns several GB of RAM for no benefit when a remote provider (Ollama,
+  // OpenAI, etc.) already supplies embeddings.  Keeping it in CORE_PLUGINS
+  // ensures offline / zero-config setups still work.
+  if (hasRemoteModelProvider) {
+    pluginsToLoad.delete("@elizaos/plugin-local-embedding");
+  }
 
   // ElizaCloud plugin — also load when cloud config is explicitly enabled
   if (config.cloud?.enabled) {
@@ -464,6 +455,10 @@ export function mergeDropInPlugins(params: {
 }
 
 // ---------------------------------------------------------------------------
+// Plugin resolution
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Browser server pre-flight
 // ---------------------------------------------------------------------------
 
@@ -478,7 +473,7 @@ export function mergeDropInPlugins(params: {
  * find it.  Returns `true` when the server index.js is available (or was made
  * available via symlink), `false` otherwise.
  */
-export function ensureBrowserServerLink(): boolean {
+function ensureBrowserServerLink(): boolean {
   try {
     // Resolve the plugin-browser package root via its package.json.
     const req = createRequire(import.meta.url);
@@ -614,11 +609,7 @@ async function resolvePlugins(
     try {
       let mod: PluginModuleShape;
 
-      if (pluginName === LOCAL_TELEGRAM_ENHANCED_PLUGIN) {
-        mod = {
-          default: telegramEnhancedPlugin,
-        } as PluginModuleShape;
-      } else if (installRecord?.installPath) {
+      if (installRecord?.installPath) {
         // User-installed plugin — load from its install directory on disk.
         // This works cross-platform including .app bundles where we can't
         // modify the app's node_modules.
@@ -817,21 +808,20 @@ export async function resolvePackageEntry(pkgRoot: string): Promise<string> {
 // ---------------------------------------------------------------------------
 
 /**
- * Propagate connector credentials from Milaidy config into process.env so
+ * Propagate channel credentials from Milaidy config into process.env so
  * that ElizaOS plugins can find them.
  */
 /** @internal Exported for testing. */
-export function applyConnectorSecretsToEnv(config: MilaidyConfig): void {
-  // Support both `connectors` and legacy `channels` key
-  const connectors = config.connectors ?? config.channels ?? {};
+export function applyChannelSecretsToEnv(config: MilaidyConfig): void {
+  const channels = config.channels ?? {};
 
-  for (const [connectorName, connectorConfig] of Object.entries(connectors)) {
-    if (!connectorConfig || typeof connectorConfig !== "object") continue;
+  for (const [channelName, channelConfig] of Object.entries(channels)) {
+    if (!channelConfig || typeof channelConfig !== "object") continue;
 
-    const envMap = CONNECTOR_ENV_MAP[connectorName];
+    const envMap = CHANNEL_ENV_MAP[channelName];
     if (!envMap) continue;
 
-    const configObj = connectorConfig as Record<string, unknown>;
+    const configObj = channelConfig as Record<string, unknown>;
     for (const [configField, envKey] of Object.entries(envMap)) {
       const value = configObj[configField];
       if (typeof value === "string" && value.trim() && !process.env[envKey]) {
@@ -850,11 +840,14 @@ export function applyCloudConfigToEnv(config: MilaidyConfig): void {
   const cloud = config.cloud;
   if (!cloud) return;
 
-  // Config file is the source of truth.  Always overwrite env vars so that
+  // Config file is the source of truth — always overwrite env vars so that
   // hot-reloads within the same process pick up config changes (e.g. cloud
   // enabled mid-session during onboarding, or API key rotated).
   if (cloud.enabled) {
     process.env.ELIZAOS_CLOUD_ENABLED = "true";
+    logger.info(
+      `[milaidy] Cloud config: enabled=${cloud.enabled}, hasApiKey=${Boolean(cloud.apiKey)}, baseUrl=${cloud.baseUrl ?? "(default)"}`,
+    );
   }
   if (cloud.apiKey) {
     process.env.ELIZAOS_CLOUD_API_KEY = cloud.apiKey;
@@ -863,10 +856,8 @@ export function applyCloudConfigToEnv(config: MilaidyConfig): void {
     process.env.ELIZAOS_CLOUD_BASE_URL = cloud.baseUrl;
   }
 
-  // Propagate user-selected model names so the cloud plugin picks them up.
-  // Falls back to sensible defaults when cloud is enabled but no models were
-  // explicitly chosen (e.g. cloud enabled from the config page rather than
-  // the onboarding wizard).
+  // Propagate model names so the cloud plugin picks them up.  Falls back to
+  // sensible defaults when cloud is enabled but no explicit selection exists.
   const models = (config as Record<string, unknown>).models as
     | { small?: string; large?: string }
     | undefined;
@@ -875,7 +866,6 @@ export function applyCloudConfigToEnv(config: MilaidyConfig): void {
     const large = models?.large || "anthropic/claude-sonnet-4.5";
     process.env.SMALL_MODEL = small;
     process.env.LARGE_MODEL = large;
-    // Also set the cloud-specific variants so the plugin finds them first
     if (!process.env.ELIZAOS_CLOUD_SMALL_MODEL) {
       process.env.ELIZAOS_CLOUD_SMALL_MODEL = small;
     }
@@ -1052,7 +1042,7 @@ import { pickRandomNames } from "./onboarding-names.js";
 // Style presets — shared between CLI and GUI onboarding
 // ---------------------------------------------------------------------------
 
-import { STYLE_PRESETS, composeCharacter } from "../onboarding-presets.js";
+import { STYLE_PRESETS } from "../onboarding-presets.js";
 
 /**
  * Detect whether this is the first run (no agent name configured)
@@ -1129,12 +1119,13 @@ async function runFirstTimeSetup(
 
             // Use execFile (not exec) to avoid shell interpretation.
             // On Windows, "start" is a cmd built-in so we invoke via cmd.exe.
-            const child = process.platform === "win32"
-              ? cp.execFile("cmd", ["/c", "start", "", safeUrl])
-              : cp.execFile(
-                  process.platform === "darwin" ? "open" : "xdg-open",
-                  [safeUrl],
-                );
+            const child =
+              process.platform === "win32"
+                ? cp.execFile("cmd", ["/c", "start", "", safeUrl])
+                : cp.execFile(
+                    process.platform === "darwin" ? "open" : "xdg-open",
+                    [safeUrl],
+                  );
             // Handle missing binary (e.g. xdg-open on minimal Linux) to
             // avoid an unhandled error crash — fall back to printing the URL.
             child.on("error", () => {
@@ -1293,7 +1284,6 @@ async function runFirstTimeSetup(
 
   let providerEnvKey: string | undefined;
   let providerApiKey: string | undefined;
-  let selectedOpenRouterModel: string | undefined;
 
   // In cloud mode, skip provider selection entirely.
   if (runMode === "cloud") {
@@ -1345,44 +1335,6 @@ async function runFirstTimeSetup(
           if (clack.isCancel(apiKeyInput)) cancelOnboarding();
 
           providerApiKey = apiKeyInput.trim();
-        }
-
-        // OpenRouter requires explicit model selection (it's a gateway to many models)
-        if (chosen.id === "openrouter" && providerApiKey) {
-          const modelChoice = await clack.select({
-            message: `${name}: Which model should I use via OpenRouter?`,
-            options: [
-              {
-                value: "anthropic/claude-sonnet-4",
-                label: "Claude Sonnet 4",
-                hint: "balanced speed & intelligence (recommended)",
-              },
-              {
-                value: "anthropic/claude-opus-4",
-                label: "Claude Opus 4",
-                hint: "most capable, slower",
-              },
-              {
-                value: "openai/gpt-4o",
-                label: "GPT-4o",
-                hint: "OpenAI's flagship model",
-              },
-              {
-                value: "google/gemini-2.5-pro-preview",
-                label: "Gemini 2.5 Pro",
-                hint: "Google's latest model",
-              },
-              {
-                value: "deepseek/deepseek-chat-v3",
-                label: "DeepSeek V3",
-                hint: "cost-effective alternative",
-              },
-            ],
-          });
-
-          if (clack.isCancel(modelChoice)) cancelOnboarding();
-
-          selectedOpenRouterModel = modelChoice as string;
         }
       }
     }
@@ -1516,9 +1468,8 @@ async function runFirstTimeSetup(
   // Apply the chosen style template to the agent config entry so the
   // personality is persisted — not just the name.
   if (chosenTemplate) {
-    const composed = composeCharacter(chosenTemplate);
-    agentConfigEntry.bio = composed.bio;
-    agentConfigEntry.system = composed.system;
+    agentConfigEntry.bio = chosenTemplate.bio;
+    agentConfigEntry.system = chosenTemplate.system;
     agentConfigEntry.style = chosenTemplate.style;
     agentConfigEntry.adjectives = chosenTemplate.adjectives;
     agentConfigEntry.topics = chosenTemplate.topics;
@@ -1550,23 +1501,6 @@ async function runFirstTimeSetup(
     // Also set immediately in process.env for the current run
     process.env[providerEnvKey] = providerApiKey;
   }
-
-  // Persist the selected OpenRouter model in the agent config
-  if (selectedOpenRouterModel) {
-    const agentList = updated.agents?.list;
-    if (agentList && agentList.length > 0) {
-      (agentList[0] as Record<string, unknown>).model = selectedOpenRouterModel;
-    }
-    // Also persist in config.agent.model (OpenRouter format)
-    (updated as Record<string, unknown>).agent = {
-      ...(((updated as Record<string, unknown>).agent as Record<
-        string,
-        unknown
-      >) || {}),
-      model: `openrouter/${selectedOpenRouterModel}`,
-    };
-  }
-
   if (process.env.EVM_PRIVATE_KEY && !hasEvmKey) {
     envBucket.EVM_PRIVATE_KEY = process.env.EVM_PRIVATE_KEY;
   }
@@ -1643,8 +1577,8 @@ export async function startEliza(
     process.env.LOG_LEVEL = config.logging?.level ?? "info";
   }
 
-  // 2. Push connector secrets into process.env for plugin discovery
-  applyConnectorSecretsToEnv(config);
+  // 2. Push channel secrets into process.env for plugin discovery
+  applyChannelSecretsToEnv(config);
 
   // 2b. Propagate cloud config into process.env for ElizaCloud plugin
   applyCloudConfigToEnv(config);
@@ -1675,8 +1609,6 @@ export async function startEliza(
   try {
     const { applySubscriptionCredentials } = await import("../auth/index");
     await applySubscriptionCredentials();
-    const { applyClaudeCodeStealth } = await import("../auth/index");
-    applyClaudeCodeStealth();
   } catch (err) {
     logger.warn(`[milaidy] Failed to apply subscription credentials: ${err}`);
   }
@@ -1814,6 +1746,7 @@ export async function startEliza(
       ...otherPlugins.map((p) => p.plugin),
     ],
     ...(runtimeLogLevel ? { logLevel: runtimeLogLevel } : {}),
+    enableAutonomy: false,
     settings: {
       // Forward Milaidy config env vars as runtime settings
       ...(primaryModel ? { MODEL_PROVIDER: primaryModel } : {}),
@@ -1842,6 +1775,7 @@ export async function startEliza(
   //     this.adapter is undefined, so plugins that use runtime.db will fail.
   if (sqlPlugin) {
     await runtime.registerPlugin(sqlPlugin.plugin);
+    console.log("sqlPlugin", sqlPlugin);
 
     // 7c. Eagerly initialize the database adapter so it's fully ready (connection
     //     open, schema bootstrapped) BEFORE other plugins run their init().
@@ -1866,55 +1800,20 @@ export async function startEliza(
     );
   }
 
-  // 8. Initialize the runtime (registers remaining plugins, starts services)
-  await runtime.initialize();
-
-  // 8b. Wait for AgentSkillsService to finish loading.
-  //     runtime.initialize() resolves the internal initPromise which unblocks
-  //     service registration, but services start asynchronously.  Without this
-  //     explicit await the runtime would be returned to the caller (API server,
-  //     dev-server) before skills are loaded, causing the /api/skills endpoint
-  //     to return an empty list.
-  try {
-    const skillServicePromise = runtime.getServiceLoadPromise(
-      "AGENT_SKILLS_SERVICE",
-    );
-    // Give the service up to 30 s to load (matches the core runtime timeout).
-    const timeout = new Promise<never>((_resolve, reject) => {
-      setTimeout(() => {
-        reject(
-          new Error(
-            "[milaidy] AgentSkillsService timed out waiting to initialise (30 s)",
-          ),
-        );
-      }, 30_000);
-    });
-    await Promise.race([skillServicePromise, timeout]);
-
-    // Log skill-loading summary now that the service is guaranteed ready.
-    const svc = runtime.getService("AGENT_SKILLS_SERVICE") as
-      | {
-          getCatalogStats?: () => {
-            loaded: number;
-            total: number;
-            storageType: string;
-          };
-        }
-      | null
-      | undefined;
-    if (svc?.getCatalogStats) {
-      const stats = svc.getCatalogStats();
-      logger.info(
-        `[milaidy] AgentSkills ready — ${stats.loaded} skills loaded, ` +
-          `${stats.total} in catalog (storage: ${stats.storageType})`,
-      );
-    }
-  } catch (err) {
-    // Non-fatal — the agent can operate without skills.
-    logger.warn(
-      `[milaidy] AgentSkillsService did not initialise in time: ${formatError(err)}`,
+  // 7c. Eagerly initialize the database adapter so it's fully ready (connection
+  //     open, schema bootstrapped) BEFORE other plugins run their init().
+  //     runtime.initialize() also calls adapter.init() but that happens AFTER
+  //     all plugin inits — too late for plugins that need runtime.db during init.
+  //     The call is idempotent (runtime.initialize checks adapter.isReady()).
+  if (runtime.adapter && !(await runtime.adapter.isReady())) {
+    await runtime.adapter.init();
+    logger.info(
+      "[milaidy] Database adapter initialized early (before plugin inits)",
     );
   }
+
+  // 8. Initialize the runtime (registers remaining plugins, starts services)
+  await runtime.initialize();
 
   // 9. Graceful shutdown handler
   //
@@ -2000,7 +1899,7 @@ export async function startEliza(
           // startup does this in startEliza(); the hot-reload must repeat it
           // because the config may have changed (e.g. cloud enabled during
           // onboarding).
-          applyConnectorSecretsToEnv(freshConfig);
+          applyChannelSecretsToEnv(freshConfig);
           applyCloudConfigToEnv(freshConfig);
           applyX402ConfigToEnv(freshConfig);
           applyDatabaseConfigToEnv(freshConfig);
@@ -2020,90 +1919,18 @@ export async function startEliza(
               "main",
           });
 
-          // Re-resolve bundled skills directory for the fresh runtime
-          let freshBundledSkillsDir: string | null = null;
-          try {
-            const { getSkillsDir } = (await import("@elizaos/skills")) as {
-              getSkillsDir: () => string;
-            };
-            freshBundledSkillsDir = getSkillsDir();
-          } catch {
-            // @elizaos/skills not available — non-fatal
-          }
-
-          const freshWorkspaceDir =
-            freshConfig.agents?.defaults?.workspace ?? workspaceDir;
-          const freshWorkspaceSkillsDir = freshWorkspaceDir
-            ? `${freshWorkspaceDir}/skills`
-            : null;
-
-          // Separate plugin-sql for pre-registration (same as initial boot)
-          const freshSqlPlugin = resolvedPlugins.find(
-            (p) => p.name === "@elizaos/plugin-sql",
-          );
-          const freshOtherPlugins = resolvedPlugins.filter(
-            (p) => p.name !== "@elizaos/plugin-sql",
-          );
-
-          // Create new runtime with updated plugins and skill settings
+          // Create new runtime with updated plugins
           const newRuntime = new AgentRuntime({
             character: runtime.character,
             plugins: [
               freshMilaidyPlugin,
-              ...freshOtherPlugins.map((p) => p.plugin),
+              ...resolvedPlugins.map((p) => p.plugin),
             ],
             ...(runtimeLogLevel ? { logLevel: runtimeLogLevel } : {}),
-            settings: {
-              ...(freshBundledSkillsDir
-                ? { BUNDLED_SKILLS_DIRS: freshBundledSkillsDir }
-                : {}),
-              ...(freshWorkspaceSkillsDir
-                ? { WORKSPACE_SKILLS_DIR: freshWorkspaceSkillsDir }
-                : {}),
-              ...(freshConfig.skills?.allowBundled
-                ? {
-                    SKILLS_ALLOWLIST: freshConfig.skills.allowBundled.join(","),
-                  }
-                : {}),
-              ...(freshConfig.skills?.denyBundled
-                ? {
-                    SKILLS_DENYLIST: freshConfig.skills.denyBundled.join(","),
-                  }
-                : {}),
-              ...(freshConfig.skills?.load?.extraDirs?.length
-                ? {
-                    EXTRA_SKILLS_DIRS:
-                      freshConfig.skills.load.extraDirs.join(","),
-                  }
-                : {}),
-            },
+            enableAutonomy: false,
           });
 
-          // Pre-register plugin-sql so DB is ready before other plugins init
-          if (freshSqlPlugin) {
-            await newRuntime.registerPlugin(freshSqlPlugin.plugin);
-            if (newRuntime.adapter && !(await newRuntime.adapter.isReady())) {
-              await newRuntime.adapter.init();
-            }
-          }
-
           await newRuntime.initialize();
-
-          // Wait for AgentSkillsService to finish loading skills
-          try {
-            const svcPromise = newRuntime.getServiceLoadPromise(
-              "AGENT_SKILLS_SERVICE",
-            );
-            const svcTimeout = new Promise<never>((_r, rej) =>
-              setTimeout(() => rej(new Error("timeout")), 30_000),
-            );
-            await Promise.race([svcPromise, svcTimeout]);
-          } catch {
-            logger.warn(
-              "[milaidy] Hot-reload: AgentSkillsService did not initialise in time",
-            );
-          }
-
           runtime = newRuntime;
           logger.info("[milaidy] Hot-reload: Runtime restarted successfully");
           return newRuntime;
