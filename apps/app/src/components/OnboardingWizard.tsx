@@ -714,7 +714,7 @@ export function OnboardingWizard() {
                       className="w-full px-3 py-2 border border-border bg-card text-sm focus:border-accent focus:outline-none"
                     />
                     <p className="text-xs text-muted mt-2 whitespace-pre-line">
-                      {"Paste your Claude Code setup token.\nGet it from: claude.ai/settings/api → \"Claude Code\" → \"Use setup token\""}
+                      {"How to get your setup token:\n\n• Option A: Run  claude setup-token  in your terminal (if you have Claude Code CLI installed)\n\n• Option B: Go to claude.ai/settings/api → \"Claude Code\" → \"Use setup token\""}
                     </p>
                   </>
                 ) : anthropicConnected ? (
