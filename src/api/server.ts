@@ -4826,8 +4826,7 @@ async function handleRequest(
     }
 
     const runtime = state.runtime;
-    const charName =
-      runtime?.character.name ?? state.agentName ?? "Milaidy";
+    const charName = runtime?.character.name ?? state.agentName ?? "Milaidy";
     const FALLBACK_MSG = `Hey! I'm ${charName}. What's on your mind?`;
 
     if (!runtime || state.agentState !== "running") {
@@ -5185,15 +5184,15 @@ async function handleRequest(
       // The cloud API returns either { balance: number } (direct)
       // or { success: true, data: { balance: number } } (wrapped).
       // Handle both formats gracefully.
-      const creditResponse = await client.get<Record<string, unknown>>(
-        "/credits/balance",
-      );
+      const creditResponse =
+        await client.get<Record<string, unknown>>("/credits/balance");
       const rawBalance =
         typeof creditResponse?.balance === "number"
           ? creditResponse.balance
-          : typeof (creditResponse?.data as Record<string, unknown>)?.balance ===
-              "number"
-            ? (creditResponse.data as Record<string, unknown>).balance as number
+          : typeof (creditResponse?.data as Record<string, unknown>)
+                ?.balance === "number"
+            ? ((creditResponse.data as Record<string, unknown>)
+                .balance as number)
             : undefined;
       if (typeof rawBalance !== "number") {
         logger.debug(
