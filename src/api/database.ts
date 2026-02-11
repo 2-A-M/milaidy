@@ -15,6 +15,7 @@
 
 import dns from "node:dns";
 import type http from "node:http";
+import net from "node:net";
 import { promisify } from "node:util";
 import { type AgentRuntime, logger } from "@elizaos/core";
 import { loadMilaidyConfig, saveMilaidyConfig } from "../config/config.js";
@@ -187,8 +188,34 @@ const PRIVATE_IP_PATTERNS: RegExp[] = [
   /^172\.(1[6-9]|2\d|3[01])\./, // RFC 1918 Class B
   /^192\.168\./, // RFC 1918 Class C
   /^::1$/, // IPv6 loopback
-  /^fc00:/i, // IPv6 ULA
+  /^f[cd][0-9a-f]{2}:/i, // IPv6 ULA (fc00::/7)
 ];
+
+function normalizeHostLike(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "");
+}
+
+function decodeIpv6MappedHex(mapped: string): string | null {
+  const match = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(mapped);
+  if (!match) return null;
+  const hi = Number.parseInt(match[1], 16);
+  const lo = Number.parseInt(match[2], 16);
+  if (!Number.isFinite(hi) || !Number.isFinite(lo)) return null;
+  const octets = [hi >> 8, hi & 0xff, lo >> 8, lo & 0xff];
+  return octets.join(".");
+}
+
+function normalizeIpForPolicy(ip: string): string {
+  const base = normalizeHostLike(ip).split("%")[0];
+  if (!base.startsWith("::ffff:")) return base;
+
+  const mapped = base.slice("::ffff:".length);
+  if (net.isIP(mapped) === 4) return mapped;
+  return decodeIpv6MappedHex(mapped) ?? mapped;
+}
 
 /**
  * Returns true when the API server is bound to a loopback-only address.
@@ -207,16 +234,50 @@ function isApiLoopbackOnly(): boolean {
  * Extract the host from a Postgres connection string or credentials object.
  * Returns `null` if no host can be determined.
  */
-function extractHost(creds: PostgresCredentials): string | null {
-  if (creds.connectionString) {
-    try {
-      const url = new URL(creds.connectionString);
-      return url.hostname || null;
-    } catch {
-      return null; // Unparseable — will be rejected
+function parseConnectionStringHosts(connectionString: string): string[] {
+  try {
+    const url = new URL(connectionString);
+    const hosts: string[] = [];
+
+    const hostParam = url.searchParams.get("host");
+    if (hostParam) {
+      hosts.push(
+        ...hostParam
+          .split(",")
+          .map((host) => normalizeHostLike(host))
+          .filter(Boolean),
+      );
     }
+
+    const hostAddrParam = url.searchParams.get("hostaddr");
+    if (hostAddrParam) {
+      hosts.push(
+        ...hostAddrParam
+          .split(",")
+          .map((host) => normalizeHostLike(host))
+          .filter(Boolean),
+      );
+    }
+
+    if (url.hostname) {
+      hosts.push(normalizeHostLike(url.hostname));
+    }
+
+    return [...new Set(hosts)];
+  } catch {
+    return [];
   }
-  return creds.host ?? null;
+}
+
+function extractHosts(creds: PostgresCredentials): string[] {
+  if (creds.connectionString) {
+    return parseConnectionStringHosts(creds.connectionString);
+  }
+  if (creds.host) {
+    const host = normalizeHostLike(creds.host);
+    return host ? [host] : [];
+  }
+  return [];
 }
 
 /**
@@ -224,9 +285,14 @@ function extractHost(creds: PostgresCredentials): string | null {
  * When the API is remotely reachable, private ranges are also blocked.
  */
 function isBlockedIp(ip: string): boolean {
-  if (ALWAYS_BLOCKED_IP_PATTERNS.some((p) => p.test(ip))) return true;
-  if (!isApiLoopbackOnly() && PRIVATE_IP_PATTERNS.some((p) => p.test(ip)))
+  const normalized = normalizeIpForPolicy(ip);
+  if (ALWAYS_BLOCKED_IP_PATTERNS.some((p) => p.test(normalized))) return true;
+  if (
+    !isApiLoopbackOnly() &&
+    PRIVATE_IP_PATTERNS.some((p) => p.test(normalized))
+  ) {
     return true;
+  }
   return false;
 }
 
@@ -242,38 +308,38 @@ function isBlockedIp(ip: string): boolean {
 async function validateDbHost(
   creds: PostgresCredentials,
 ): Promise<string | null> {
-  const host = extractHost(creds);
-  if (!host) {
+  const hosts = extractHosts(creds);
+  if (hosts.length === 0) {
     return "Could not determine target host from the provided credentials.";
   }
 
-  // First check the literal host string (catches raw IPs without DNS lookup)
-  if (isBlockedIp(host)) {
-    return `Connection to "${host}" is blocked: link-local and metadata addresses are not allowed.`;
-  }
-
-  // Resolve DNS and check all resulting IPs
-  try {
-    const results = await dnsLookupAll(host, { all: true });
-    const addresses = Array.isArray(results) ? results : [results];
-    for (const entry of addresses) {
-      const ip =
-        typeof entry === "string"
-          ? entry
-          : (entry as { address: string }).address;
-      // Strip IPv6-mapped IPv4 prefix (::ffff:169.254.x.y → 169.254.x.y)
-      const normalized = ip.replace(/^::ffff:/i, "");
-      if (isBlockedIp(normalized)) {
-        return (
-          `Connection to "${host}" is blocked: it resolves to ${ip} ` +
-          `which is a link-local or metadata address.`
-        );
-      }
+  for (const host of hosts) {
+    // First check the literal host string (catches raw IPs without DNS lookup)
+    if (isBlockedIp(host)) {
+      return `Connection to "${host}" is blocked: link-local and metadata addresses are not allowed.`;
     }
-  } catch {
-    // DNS resolution failed — let the Postgres client handle the error
-    // rather than blocking legitimate hostnames that may be temporarily
-    // unresolvable from this context
+
+    // Resolve DNS and check all resulting IPs
+    try {
+      const results = await dnsLookupAll(host, { all: true });
+      const addresses = Array.isArray(results) ? results : [results];
+      for (const entry of addresses) {
+        const ip =
+          typeof entry === "string"
+            ? entry
+            : (entry as { address: string }).address;
+        if (isBlockedIp(ip)) {
+          return (
+            `Connection to "${host}" is blocked: it resolves to ${ip} ` +
+            `which is a link-local or metadata address.`
+          );
+        }
+      }
+    } catch {
+      // DNS resolution failed — let the Postgres client handle the error
+      // rather than blocking legitimate hostnames that may be temporarily
+      // unresolvable from this context
+    }
   }
 
   return null;
@@ -488,23 +554,6 @@ async function handlePutConfig(
     return;
   }
 
-  if (body.provider === "postgres" && body.postgres) {
-    const pg = body.postgres;
-    if (!pg.connectionString && !pg.host) {
-      errorResponse(
-        res,
-        "Postgres configuration requires either a connectionString or at least a host.",
-      );
-      return;
-    }
-
-    const hostError = await validateDbHost(pg);
-    if (hostError) {
-      errorResponse(res, hostError);
-      return;
-    }
-  }
-
   // Load current config, merge database section, save
   const config = loadMilaidyConfig();
   const existingDb = config.database ?? {};
@@ -522,6 +571,57 @@ async function handlePutConfig(
   // If switching to pglite, ensure pglite config is present
   if (merged.provider === "pglite" && body.pglite) {
     merged.pglite = { ...existingDb.pglite, ...body.pglite };
+  }
+
+  const targetProvider = merged.provider ?? "pglite";
+  const mergedPostgres = merged.postgres;
+
+  if (
+    body.provider === "postgres" &&
+    body.postgres &&
+    !body.postgres.connectionString &&
+    !body.postgres.host
+  ) {
+    errorResponse(
+      res,
+      "Postgres configuration requires either a connectionString or at least a host.",
+    );
+    return;
+  }
+
+  // Validate newly provided postgres credentials even when postgres is not
+  // currently active, so unsafe hosts cannot be staged for later activation.
+  if (
+    body.postgres &&
+    (body.postgres.connectionString || body.postgres.host) &&
+    targetProvider !== "postgres"
+  ) {
+    const hostError = await validateDbHost(body.postgres);
+    if (hostError) {
+      errorResponse(res, hostError);
+      return;
+    }
+  }
+
+  // If postgres is the target provider, validate the final merged credentials
+  // (including any pre-existing values retained from prior config).
+  if (targetProvider === "postgres") {
+    if (
+      !mergedPostgres ||
+      (!mergedPostgres.connectionString && !mergedPostgres.host)
+    ) {
+      errorResponse(
+        res,
+        "Postgres configuration requires either a connectionString or at least a host.",
+      );
+      return;
+    }
+
+    const hostError = await validateDbHost(mergedPostgres);
+    if (hostError) {
+      errorResponse(res, hostError);
+      return;
+    }
   }
 
   config.database = merged;

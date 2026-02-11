@@ -2,7 +2,12 @@
 
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { SandboxEngineType } from "./sandbox-engine.js";
+import {
+  createEngine,
+  detectBestEngine,
+  type ISandboxEngine,
+  type SandboxEngineType,
+} from "./sandbox-engine.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -97,6 +102,7 @@ export interface SandboxEvent {
 export class SandboxManager {
   private state: SandboxState = "uninitialized";
   private config: SandboxManagerConfig;
+  private engine: ISandboxEngine;
   private containerId: string | null = null;
   private browserContainerId: string | null = null;
   private eventLog: SandboxEvent[] = [];
@@ -114,6 +120,9 @@ export class SandboxManager {
       pidsLimit: 256,
       ...config,
     };
+    this.engine = config.engineType
+      ? createEngine(config.engineType)
+      : detectBestEngine();
   }
 
   getState(): SandboxState {
@@ -170,7 +179,9 @@ export class SandboxManager {
         try {
           await this.engine.pullImage(image);
         } catch {
-          throw new Error(`Sandbox image "${image}" not found. Build with: scripts/sandbox-setup.sh`);
+          throw new Error(
+            `Sandbox image "${image}" not found. Build with: scripts/sandbox-setup.sh`,
+          );
         }
       }
 
@@ -186,7 +197,9 @@ export class SandboxManager {
         image,
         name: `${this.config.containerPrefix}-${Date.now()}`,
         detach: true,
-        mounts: [{ host: wsRoot, container: this.config.workdir!, readonly: false }],
+        mounts: [
+          { host: wsRoot, container: this.config.workdir!, readonly: false },
+        ],
         env: this.config.env ?? {},
         network: this.config.network!,
         user: this.config.user!,
@@ -275,7 +288,9 @@ export class SandboxManager {
         image: this.config.image!,
         name: `${this.config.containerPrefix}-${Date.now()}`,
         detach: true,
-        mounts: [{ host: wsRoot, container: this.config.workdir!, readonly: false }],
+        mounts: [
+          { host: wsRoot, container: this.config.workdir!, readonly: false },
+        ],
         env: this.config.env ?? {},
         network: this.config.network!,
         user: this.config.user!,
@@ -406,7 +421,8 @@ export class SandboxManager {
     const name = `${this.config.containerPrefix}-browser-${Date.now()}`;
     const cdpPort = this.config.browser?.cdpPort ?? 9222;
     const vncPort = this.config.browser?.vncPort ?? 5900;
-    const image = this.config.browser?.image ?? "milaidy-sandbox-browser:bookworm-slim";
+    const image =
+      this.config.browser?.image ?? "milaidy-sandbox-browser:bookworm-slim";
 
     return this.engine.runContainer({
       image,

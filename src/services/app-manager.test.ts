@@ -376,7 +376,9 @@ describe("AppManager", () => {
       const mgr = new AppManager();
       const result = await mgr.launch("@elizaos/app-2004scape");
 
-      expect(result.viewer?.url).toBe("http://localhost:8880/webclient?bot=testbot");
+      expect(result.viewer?.url).toBe(
+        "http://localhost:8880/webclient?bot=testbot",
+      );
     });
 
     it("includes hyperscape postMessage auth payload when token is configured", async () => {

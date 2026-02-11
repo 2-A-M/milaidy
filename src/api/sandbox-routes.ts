@@ -5,8 +5,8 @@ import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { platform, tmpdir } from "node:os";
 import { join } from "node:path";
-import type { SandboxManager } from "../services/sandbox-manager.js";
 import type { RemoteSigningService } from "../services/remote-signing-service.js";
+import type { SandboxManager } from "../services/sandbox-manager.js";
 
 interface SandboxRouteState {
   sandboxManager: SandboxManager | null;
@@ -334,22 +334,33 @@ export async function handleSandboxRoute(
       return true;
     }
     const body = await readBody(req);
-    if (!body) { sendJson(res, 400, { error: "Missing body" }); return true; }
+    if (!body) {
+      sendJson(res, 400, { error: "Missing body" });
+      return true;
+    }
     try {
       const request = JSON.parse(body);
       const result = await signer.submitSigningRequest(request);
       sendJson(res, result.success ? 200 : 403, result);
     } catch (err) {
-      sendJson(res, 400, { error: `Invalid request: ${err instanceof Error ? err.message : String(err)}` });
+      sendJson(res, 400, {
+        error: `Invalid request: ${err instanceof Error ? err.message : String(err)}`,
+      });
     }
     return true;
   }
 
   if (method === "POST" && pathname === "/api/sandbox/sign/approve") {
     const signer = state.signingService;
-    if (!signer) { sendJson(res, 503, { error: "Signing service not configured" }); return true; }
+    if (!signer) {
+      sendJson(res, 503, { error: "Signing service not configured" });
+      return true;
+    }
     const body = await readBody(req);
-    if (!body) { sendJson(res, 400, { error: "Missing body" }); return true; }
+    if (!body) {
+      sendJson(res, 400, { error: "Missing body" });
+      return true;
+    }
     try {
       const { requestId } = JSON.parse(body) as { requestId: string };
       const result = await signer.approveRequest(requestId);
@@ -362,9 +373,15 @@ export async function handleSandboxRoute(
 
   if (method === "POST" && pathname === "/api/sandbox/sign/reject") {
     const signer = state.signingService;
-    if (!signer) { sendJson(res, 503, { error: "Signing service not configured" }); return true; }
+    if (!signer) {
+      sendJson(res, 503, { error: "Signing service not configured" });
+      return true;
+    }
     const body = await readBody(req);
-    if (!body) { sendJson(res, 400, { error: "Missing body" }); return true; }
+    if (!body) {
+      sendJson(res, 400, { error: "Missing body" });
+      return true;
+    }
     try {
       const { requestId } = JSON.parse(body) as { requestId: string };
       const rejected = signer.rejectRequest(requestId);
@@ -377,14 +394,20 @@ export async function handleSandboxRoute(
 
   if (method === "GET" && pathname === "/api/sandbox/sign/pending") {
     const signer = state.signingService;
-    if (!signer) { sendJson(res, 503, { error: "Signing service not configured" }); return true; }
+    if (!signer) {
+      sendJson(res, 503, { error: "Signing service not configured" });
+      return true;
+    }
     sendJson(res, 200, { pending: signer.getPendingApprovals() });
     return true;
   }
 
   if (method === "GET" && pathname === "/api/sandbox/sign/address") {
     const signer = state.signingService;
-    if (!signer) { sendJson(res, 503, { error: "Signing service not configured" }); return true; }
+    if (!signer) {
+      sendJson(res, 503, { error: "Signing service not configured" });
+      return true;
+    }
     try {
       const address = await signer.getAddress();
       sendJson(res, 200, { address });

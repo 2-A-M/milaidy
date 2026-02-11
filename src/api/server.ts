@@ -30,7 +30,6 @@ import {
 } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
 import { CharacterSchema } from "../config/zod-schema.js";
-import { resolveDefaultAgentWorkspaceDir } from "../providers/workspace.js";
 import {
   AgentExportError,
   estimateExportSize,
@@ -43,6 +42,7 @@ import {
   searchMcpMarketplace,
 } from "../services/mcp-marketplace.js";
 import type { SandboxManager } from "../services/sandbox-manager.js";
+import { TrainingService } from "../services/training-service.js";
 import {
   installMarketplaceSkill,
   listInstalledMarketplaceSkills,
@@ -56,6 +56,7 @@ import {
   validatePluginConfig,
 } from "./plugin-validation.js";
 import { handleSandboxRoute } from "./sandbox-routes.js";
+import { handleTrainingRoutes } from "./training-routes.js";
 import { handleTriggerRoutes } from "./trigger-routes.js";
 import {
   fetchEvmBalances,
@@ -72,6 +73,17 @@ import {
   type WalletConfigStatus,
   type WalletNftsResponse,
 } from "./wallet.js";
+
+function resolveDefaultAgentWorkspaceDir(
+  env: NodeJS.ProcessEnv = process.env,
+  homedir: () => string = os.homedir,
+): string {
+  const profile = env.MILAIDY_PROFILE?.trim();
+  if (profile && profile.toLowerCase() !== "default") {
+    return path.join(homedir(), ".milaidy", `workspace-${profile}`);
+  }
+  return path.join(homedir(), ".milaidy", "workspace");
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -146,6 +158,8 @@ interface ServerState {
   sandboxManager: SandboxManager | null;
   /** App manager for launching and managing ElizaOS apps. */
   appManager: AppManager;
+  /** Fine-tuning/training orchestration service. */
+  trainingService: TrainingService | null;
   /** In-memory queue for share ingest items. */
   shareIngestQueue: ShareIngestItem[];
   /** Transient OAuth flow state for subscription auth. */
@@ -248,7 +262,7 @@ interface AgentEventServiceLike {
   ) => () => void;
 }
 
-type StreamEventType = "agent_event" | "heartbeat_event";
+type StreamEventType = "agent_event" | "heartbeat_event" | "training_event";
 
 interface StreamEventEnvelope {
   type: StreamEventType;
@@ -700,7 +714,12 @@ async function loadScanReportFromDisk(
 
     if (!fsSync.existsSync(resolved)) continue;
     const content = fsSync.readFileSync(resolved, "utf-8");
-    const parsed = JSON.parse(content);
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(content) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
     if (
       typeof parsed.scannedAt === "string" &&
       typeof parsed.status === "string" &&
@@ -801,8 +820,18 @@ async function discoverSkills(
               const reportPath = path.join(s.path, ".scan-results.json");
               if (fs.existsSync(reportPath)) {
                 const raw = fs.readFileSync(reportPath, "utf-8");
-                const parsed = JSON.parse(raw);
-                if (parsed?.status) scanStatus = parsed.status;
+                try {
+                  const parsed = JSON.parse(raw) as { status?: string };
+                  if (parsed.status) {
+                    scanStatus = parsed.status as
+                      | "clean"
+                      | "warning"
+                      | "critical"
+                      | "blocked";
+                  }
+                } catch {
+                  // Malformed scan report — treat as unscanned.
+                }
               }
             }
 
@@ -1095,6 +1124,69 @@ function json(res: http.ServerResponse, data: unknown, status = 200): void {
 
 function error(res: http.ServerResponse, message: string, status = 400): void {
   json(res, { error: message }, status);
+}
+
+interface ChatGenerationResult {
+  text: string;
+  agentName: string;
+}
+
+interface ChatGenerateOptions {
+  onChunk?: (chunk: string) => void;
+  isAborted?: () => boolean;
+}
+
+function initSse(res: http.ServerResponse): void {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+}
+
+function writeSse(
+  res: http.ServerResponse,
+  payload: Record<string, string | number | boolean | null | undefined>,
+): void {
+  if (res.writableEnded || res.destroyed) return;
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+async function generateChatResponse(
+  runtime: AgentRuntime,
+  message: ReturnType<typeof createMessageMemory>,
+  agentName: string,
+  opts?: ChatGenerateOptions,
+): Promise<ChatGenerationResult> {
+  let responseText = "";
+
+  const result = await runtime.messageService?.handleMessage(
+    runtime,
+    message,
+    async (content: Content) => {
+      if (opts?.isAborted?.()) {
+        throw new Error("client_disconnected");
+      }
+
+      if (content?.text) {
+        responseText += content.text;
+        opts?.onChunk?.(content.text);
+      }
+      return [];
+    },
+  );
+
+  // Fallback: if callback wasn't used for text, stream + return final text.
+  if (!responseText && result?.responseContent?.text) {
+    responseText = result.responseContent.text;
+    opts?.onChunk?.(result.responseContent.text);
+  }
+
+  return {
+    text: responseText || "(no response)",
+    agentName,
+  };
 }
 
 function parseBoundedLimit(rawLimit: string | null, fallback = 15): number {
@@ -1638,6 +1730,7 @@ const PAIRING_TTL_MS = 10 * 60 * 1000;
 const PAIRING_WINDOW_MS = 10 * 60 * 1000;
 const PAIRING_MAX_ATTEMPTS = 5;
 const PAIRING_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const API_RESTART_EXIT_CODE = 75;
 
 let pairingCode: string | null = null;
 let pairingExpiresAt = 0;
@@ -1708,15 +1801,98 @@ function extractAuthToken(req: http.IncomingMessage): string | null {
   return null;
 }
 
+function tokenMatches(expected: string, provided: string): boolean {
+  const a = Buffer.from(expected, "utf8");
+  const b = Buffer.from(provided, "utf8");
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
+function isLoopbackBindHost(host: string): boolean {
+  const normalized = host
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "");
+  if (!normalized) return true;
+  if (
+    normalized === "localhost" ||
+    normalized === "::1" ||
+    normalized === "::ffff:127.0.0.1"
+  ) {
+    return true;
+  }
+  if (normalized.startsWith("127.")) return true;
+  return false;
+}
+
+function ensureApiTokenForBindHost(host: string): void {
+  const token = process.env.MILAIDY_API_TOKEN?.trim();
+  if (token) return;
+  if (isLoopbackBindHost(host)) return;
+
+  const generated = crypto.randomBytes(32).toString("hex");
+  process.env.MILAIDY_API_TOKEN = generated;
+
+  logger.warn(
+    `[milaidy-api] MILAIDY_API_BIND=${host} is non-loopback and MILAIDY_API_TOKEN is unset.`,
+  );
+  logger.warn(
+    `[milaidy-api] Generated temporary MILAIDY_API_TOKEN=${generated}. Set MILAIDY_API_TOKEN explicitly to override.`,
+  );
+}
+
 function isAuthorized(req: http.IncomingMessage): boolean {
   const expected = process.env.MILAIDY_API_TOKEN?.trim();
   if (!expected) return true;
   const provided = extractAuthToken(req);
   if (!provided) return false;
-  const a = Buffer.from(expected, "utf8");
-  const b = Buffer.from(provided, "utf8");
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
+  return tokenMatches(expected, provided);
+}
+
+function extractWsQueryToken(url: URL): string | null {
+  const token =
+    url.searchParams.get("token") ??
+    url.searchParams.get("apiKey") ??
+    url.searchParams.get("api_key");
+  return token?.trim() || null;
+}
+
+function isWebSocketAuthorized(
+  request: http.IncomingMessage,
+  url: URL,
+): boolean {
+  const expected = process.env.MILAIDY_API_TOKEN?.trim();
+  if (!expected) return true;
+
+  const headerToken = extractAuthToken(request);
+  if (headerToken) return tokenMatches(expected, headerToken);
+
+  const queryToken = extractWsQueryToken(url);
+  if (!queryToken) return false;
+  return tokenMatches(expected, queryToken);
+}
+
+function rejectWebSocketUpgrade(
+  socket: import("node:net").Socket,
+  statusCode: number,
+  message: string,
+): void {
+  const statusText =
+    statusCode === 401
+      ? "Unauthorized"
+      : statusCode === 403
+        ? "Forbidden"
+        : "Bad Request";
+  const body = `${message}\n`;
+  socket.write(
+    `HTTP/1.1 ${statusCode} ${statusText}\r\n` +
+      "Connection: close\r\n" +
+      "Content-Type: text/plain; charset=utf-8\r\n" +
+      `Content-Length: ${Buffer.byteLength(body)}\r\n` +
+      "\r\n" +
+      body,
+  );
+  socket.destroy();
 }
 
 async function handleRequest(
@@ -1732,6 +1908,45 @@ async function handleRequest(
   );
   const pathname = url.pathname;
   const isAuthEndpoint = pathname.startsWith("/api/auth/");
+
+  const scheduleRuntimeRestart = (reason: string, delayMs = 300): void => {
+    const restart = () => {
+      if (ctx?.onRestart) {
+        logger.info(`[milaidy-api] Triggering runtime restart (${reason})...`);
+        Promise.resolve(ctx.onRestart())
+          .then((newRuntime) => {
+            if (!newRuntime) {
+              logger.warn("[milaidy-api] Runtime restart returned null");
+              return;
+            }
+            state.runtime = newRuntime;
+            state.chatConnectionReady = null;
+            state.chatConnectionPromise = null;
+            state.agentState = "running";
+            state.agentName = newRuntime.character.name ?? "Milaidy";
+            state.startedAt = Date.now();
+            logger.info("[milaidy-api] Runtime restarted successfully");
+          })
+          .catch((err) => {
+            logger.error(
+              `[milaidy-api] Runtime restart failed: ${err instanceof Error ? err.message : err}`,
+            );
+          });
+        return;
+      }
+
+      logger.info(
+        `[milaidy-api] No in-process restart handler; exiting for external restart (${reason})`,
+      );
+      process.exit(API_RESTART_EXIT_CODE);
+    };
+
+    if (delayMs <= 0) {
+      restart();
+      return;
+    }
+    setTimeout(restart, delayMs);
+  };
 
   if (!applyCors(req, res)) {
     json(res, { error: "Origin not allowed" }, 403);
@@ -2148,7 +2363,12 @@ async function handleRequest(
       if (!(config.agents.defaults as Record<string, unknown>).sandbox) {
         (config.agents.defaults as Record<string, unknown>).sandbox = {};
       }
-      ((config.agents.defaults as Record<string, unknown>).sandbox as Record<string, unknown>).mode = sandboxMode;
+      (
+        (config.agents.defaults as Record<string, unknown>).sandbox as Record<
+          string,
+          unknown
+        >
+      ).mode = sandboxMode;
       logger.info(`[milaidy-api] Sandbox mode set to: ${sandboxMode}`);
     }
 
@@ -3144,30 +3364,7 @@ async function handleRequest(
         );
       }
 
-      // Trigger runtime restart if available
-      if (ctx?.onRestart) {
-        logger.info("[milaidy-api] Triggering runtime restart...");
-        ctx
-          .onRestart()
-          .then((newRuntime) => {
-            if (newRuntime) {
-              state.runtime = newRuntime;
-              state.chatConnectionReady = null;
-              state.chatConnectionPromise = null;
-              state.agentState = "running";
-              state.agentName = newRuntime.character.name ?? "Milaidy";
-              state.startedAt = Date.now();
-              logger.info("[milaidy-api] Runtime restarted successfully");
-            } else {
-              logger.warn("[milaidy-api] Runtime restart returned null");
-            }
-          })
-          .catch((err) => {
-            logger.error(
-              `[milaidy-api] Runtime restart failed: ${err instanceof Error ? err.message : err}`,
-            );
-          });
-      }
+      scheduleRuntimeRestart(`Plugin toggle: ${pluginId}`, 300);
     }
 
     json(res, { ok: true, plugin });
@@ -3323,17 +3520,7 @@ async function handleRequest(
 
       // If autoRestart is not explicitly false, restart the agent
       if (body.autoRestart !== false && result.requiresRestart) {
-        const { requestRestart } = await import("../runtime/restart.js");
-        // Defer the restart so the HTTP response is sent first
-        setTimeout(() => {
-          Promise.resolve(
-            requestRestart(`Plugin ${result.pluginName} installed`),
-          ).catch((err) => {
-            logger.error(
-              `[api] Restart after install failed: ${err instanceof Error ? err.message : String(err)}`,
-            );
-          });
-        }, 500);
+        scheduleRuntimeRestart(`Plugin ${result.pluginName} installed`, 500);
       }
 
       json(res, {
@@ -3383,16 +3570,7 @@ async function handleRequest(
       }
 
       if (body.autoRestart !== false && result.requiresRestart) {
-        const { requestRestart } = await import("../runtime/restart.js");
-        setTimeout(() => {
-          Promise.resolve(
-            requestRestart(`Plugin ${pluginName} uninstalled`),
-          ).catch((err) => {
-            logger.error(
-              `[api] Restart after uninstall failed: ${err instanceof Error ? err.message : String(err)}`,
-            );
-          });
-        }, 500);
+        scheduleRuntimeRestart(`Plugin ${pluginName} uninstalled`, 500);
       }
 
       json(res, {
@@ -3544,18 +3722,10 @@ async function handleRequest(
     }
 
     // Auto-restart so the change takes effect
-    try {
-      const { requestRestart } = await import("../runtime/restart.js");
-      setTimeout(() => {
-        Promise.resolve(
-          requestRestart(
-            `Plugin ${shortId} ${body.enabled ? "enabled" : "disabled"}`,
-          ),
-        ).catch(() => {});
-      }, 300);
-    } catch {
-      /* restart module not available */
-    }
+    scheduleRuntimeRestart(
+      `Plugin ${shortId} ${body.enabled ? "enabled" : "disabled"}`,
+      300,
+    );
 
     json(res, {
       ok: true,
@@ -5174,6 +5344,120 @@ async function handleRequest(
   // ── POST /api/conversations/:id/messages ────────────────────────────
   if (
     method === "POST" &&
+    /^\/api\/conversations\/[^/]+\/messages\/stream$/.test(pathname)
+  ) {
+    const convId = decodeURIComponent(pathname.split("/")[3]);
+    const conv = state.conversations.get(convId);
+    if (!conv) {
+      error(res, "Conversation not found", 404);
+      return;
+    }
+
+    const body = await readJsonBody<{ text?: string; mode?: string }>(req, res);
+    if (!body) return;
+    if (!body.text?.trim()) {
+      error(res, "text is required");
+      return;
+    }
+    if (body.mode && body.mode !== "simple" && body.mode !== "power") {
+      error(res, "mode must be 'simple' or 'power'", 400);
+      return;
+    }
+    const mode: ChatMode = body.mode === "simple" ? "simple" : "power";
+    const prompt = body.text.trim();
+
+    // Cloud proxy path
+    const proxy = state.cloudManager?.getProxy();
+    if (proxy) {
+      initSse(res);
+      let fullText = "";
+      try {
+        for await (const chunk of proxy.handleChatMessageStream(
+          prompt,
+          conv.roomId,
+          mode,
+        )) {
+          fullText += chunk;
+          writeSse(res, { type: "token", text: chunk });
+        }
+
+        conv.updatedAt = new Date().toISOString();
+        writeSse(res, {
+          type: "done",
+          fullText,
+          agentName: proxy.agentName,
+        });
+      } catch (err) {
+        writeSse(res, {
+          type: "error",
+          message: err instanceof Error ? err.message : "generation failed",
+        });
+      } finally {
+        res.end();
+      }
+      return;
+    }
+
+    if (!state.runtime) {
+      error(res, "Agent is not running", 503);
+      return;
+    }
+
+    initSse(res);
+    let aborted = false;
+    req.on("close", () => {
+      aborted = true;
+    });
+
+    try {
+      const runtime = state.runtime;
+      const userId = ensureAdminEntityId();
+      await ensureConversationRoom(conv);
+
+      const message = createMessageMemory({
+        id: crypto.randomUUID() as UUID,
+        entityId: userId,
+        roomId: conv.roomId,
+        content: {
+          text: prompt,
+          mode,
+          simple: mode === "simple",
+          source: "client_chat",
+          channelType: ChannelType.DM,
+        },
+      });
+
+      const result = await generateChatResponse(runtime, message, state.agentName, {
+        isAborted: () => aborted,
+        onChunk: (chunk) => {
+          writeSse(res, { type: "token", text: chunk });
+        },
+      });
+
+      if (!aborted) {
+        conv.updatedAt = new Date().toISOString();
+        writeSse(res, {
+          type: "done",
+          fullText: result.text,
+          agentName: result.agentName,
+        });
+      }
+    } catch (err) {
+      if (!aborted) {
+        writeSse(res, {
+          type: "error",
+          message: err instanceof Error ? err.message : "generation failed",
+        });
+      }
+    } finally {
+      res.end();
+    }
+    return;
+  }
+
+  // ── POST /api/conversations/:id/messages ────────────────────────────
+  if (
+    method === "POST" &&
     /^\/api\/conversations\/[^/]+\/messages$/.test(pathname)
   ) {
     const convId = decodeURIComponent(pathname.split("/")[3]);
@@ -5229,29 +5513,16 @@ async function handleRequest(
         },
       });
 
-      let responseText = "";
-      const result = await runtime.messageService?.handleMessage(
+      const result = await generateChatResponse(
         runtime,
         message,
-        async (content: Content) => {
-          if (content?.text) {
-            responseText += content.text;
-          }
-          return [];
-        },
+        state.agentName,
       );
-
-      // Fallback: if the callback didn't capture text (e.g. "actions" mode
-      // where processActions drives the callback), pull it from the return
-      // value which always carries the primary responseContent.
-      if (!responseText && result?.responseContent?.text) {
-        responseText = result.responseContent.text;
-      }
 
       conv.updatedAt = new Date().toISOString();
       json(res, {
-        text: responseText || "(no response)",
-        agentName: state.agentName,
+        text: result.text,
+        agentName: result.agentName,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "generation failed";
@@ -5348,6 +5619,113 @@ async function handleRequest(
     const convId = decodeURIComponent(pathname.split("/")[3]);
     state.conversations.delete(convId);
     json(res, { ok: true });
+    return;
+  }
+
+  // ── POST /api/chat/stream ────────────────────────────────────────────
+  if (method === "POST" && pathname === "/api/chat/stream") {
+    const body = await readJsonBody<{ text?: string; mode?: string }>(req, res);
+    if (!body) return;
+    if (!body.text?.trim()) {
+      error(res, "text is required");
+      return;
+    }
+    if (body.mode && body.mode !== "simple" && body.mode !== "power") {
+      error(res, "mode must be 'simple' or 'power'", 400);
+      return;
+    }
+    const mode: ChatMode = body.mode === "simple" ? "simple" : "power";
+    const prompt = body.text.trim();
+
+    // Cloud proxy path
+    const proxy = state.cloudManager?.getProxy();
+    if (proxy) {
+      initSse(res);
+      let fullText = "";
+      try {
+        for await (const chunk of proxy.handleChatMessageStream(
+          prompt,
+          "web-chat",
+          mode,
+        )) {
+          fullText += chunk;
+          writeSse(res, { type: "token", text: chunk });
+        }
+
+        writeSse(res, {
+          type: "done",
+          fullText,
+          agentName: proxy.agentName,
+        });
+      } catch (err) {
+        writeSse(res, {
+          type: "error",
+          message: err instanceof Error ? err.message : "generation failed",
+        });
+      } finally {
+        res.end();
+      }
+      return;
+    }
+
+    if (!state.runtime) {
+      error(res, "Agent is not running", 503);
+      return;
+    }
+
+    initSse(res);
+    let aborted = false;
+    req.on("close", () => {
+      aborted = true;
+    });
+
+    try {
+      const runtime = state.runtime;
+      const agentName = runtime.character.name ?? "Milaidy";
+      await ensureLegacyChatConnection(runtime, agentName);
+      const chatUserId = state.chatUserId;
+      const chatRoomId = state.chatRoomId;
+      if (!chatUserId || !chatRoomId) {
+        throw new Error("Legacy chat connection was not initialized");
+      }
+
+      const message = createMessageMemory({
+        id: crypto.randomUUID() as UUID,
+        entityId: chatUserId,
+        roomId: chatRoomId,
+        content: {
+          text: prompt,
+          mode,
+          simple: mode === "simple",
+          source: "client_chat",
+          channelType: ChannelType.DM,
+        },
+      });
+
+      const result = await generateChatResponse(runtime, message, state.agentName, {
+        isAborted: () => aborted,
+        onChunk: (chunk) => {
+          writeSse(res, { type: "token", text: chunk });
+        },
+      });
+
+      if (!aborted) {
+        writeSse(res, {
+          type: "done",
+          fullText: result.text,
+          agentName: result.agentName,
+        });
+      }
+    } catch (err) {
+      if (!aborted) {
+        writeSse(res, {
+          type: "error",
+          message: err instanceof Error ? err.message : "generation failed",
+        });
+      }
+    } finally {
+      res.end();
+    }
     return;
   }
 
@@ -6256,6 +6634,7 @@ export async function startApiServer(opts?: {
   const port = opts?.port ?? 2138;
   const host =
     (process.env.MILAIDY_API_BIND ?? "127.0.0.1").trim() || "127.0.0.1";
+  ensureApiTokenForBindHost(host);
 
   let config: MilaidyConfig;
   try {
@@ -6304,8 +6683,20 @@ export async function startApiServer(opts?: {
     cloudManager: null,
     sandboxManager: null,
     appManager: new AppManager(),
+    trainingService: null,
     shareIngestQueue: [],
   };
+
+  const trainingService = new TrainingService({
+    getRuntime: () => state.runtime,
+    getConfig: () => state.config,
+    setConfig: (nextConfig: MilaidyConfig) => {
+      state.config = nextConfig;
+      saveMilaidyConfig(nextConfig);
+    },
+  });
+  await trainingService.initialize();
+  state.trainingService = trainingService;
   const configuredAdminEntityId = config.agents?.defaults?.adminEntityId;
   if (configuredAdminEntityId && isUuidLike(configuredAdminEntityId)) {
     state.adminEntityId = configuredAdminEntityId;
@@ -6385,12 +6776,23 @@ export async function startApiServer(opts?: {
         ]);
       },
     });
-    mgr.init();
-    state.cloudManager = mgr;
-    addLog("info", "Cloud manager initialised (Eliza Cloud enabled)", "cloud", [
-      "server",
-      "cloud",
-    ]);
+    try {
+      await mgr.init();
+      state.cloudManager = mgr;
+      addLog(
+        "info",
+        "Cloud manager initialised (Eliza Cloud enabled)",
+        "cloud",
+        ["server", "cloud"],
+      );
+    } catch (initErr) {
+      addLog(
+        "warn",
+        `Cloud manager init failed: ${initErr instanceof Error ? initErr.message : String(initErr)}`,
+        "cloud",
+        ["server", "cloud"],
+      );
+    }
   }
 
   addLog(
@@ -6542,6 +6944,7 @@ export async function startApiServer(opts?: {
   };
 
   let detachRuntimeStreams: (() => void) | null = null;
+  let detachTrainingStream: (() => void) | null = null;
   const bindRuntimeStreams = (runtime: AgentRuntime | null) => {
     if (detachRuntimeStreams) {
       detachRuntimeStreams();
@@ -6578,25 +6981,59 @@ export async function startApiServer(opts?: {
     };
   };
 
+  const bindTrainingStream = () => {
+    if (detachTrainingStream) {
+      detachTrainingStream();
+      detachTrainingStream = null;
+    }
+    if (!state.trainingService) return;
+    detachTrainingStream = state.trainingService.subscribe((event) => {
+      pushEvent({
+        type: "training_event",
+        ts: Date.now(),
+        payload: event,
+      });
+    });
+  };
+
   // ── WebSocket Server ─────────────────────────────────────────────────────
   const wss = new WebSocketServer({ noServer: true });
   const wsClients = new Set<WebSocket>();
   bindRuntimeStreams(opts?.runtime ?? null);
+  bindTrainingStream();
 
   // Handle upgrade requests for WebSocket
   server.on("upgrade", (request, socket, head) => {
     try {
-      const { pathname: wsPath } = new URL(
+      const wsUrl = new URL(
         request.url ?? "/",
-        `http://${request.headers.host}`,
+        `http://${request.headers.host ?? "localhost"}`,
       );
-      if (wsPath === "/ws") {
-        wss.handleUpgrade(request, socket, head, (ws) => {
-          wss.emit("connection", ws, request);
-        });
-      } else {
+      if (wsUrl.pathname !== "/ws") {
         socket.destroy();
+        return;
       }
+
+      // Enforce the same origin allowlist used by HTTP routes.
+      const origin =
+        typeof request.headers.origin === "string"
+          ? request.headers.origin
+          : undefined;
+      const allowedOrigin = resolveCorsOrigin(origin);
+      if (origin && !allowedOrigin) {
+        rejectWebSocketUpgrade(socket, 403, "Origin not allowed");
+        return;
+      }
+
+      // Enforce API token auth for WebSocket upgrades.
+      if (!isWebSocketAuthorized(request, wsUrl)) {
+        rejectWebSocketUpgrade(socket, 401, "Unauthorized");
+        return;
+      }
+
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit("connection", ws, request);
+      });
     } catch (err) {
       logger.error(
         `[milaidy-api] WebSocket upgrade error: ${err instanceof Error ? err.message : err}`,
@@ -6791,6 +7228,10 @@ export async function startApiServer(opts?: {
             if (detachRuntimeStreams) {
               detachRuntimeStreams();
               detachRuntimeStreams = null;
+            }
+            if (detachTrainingStream) {
+              detachTrainingStream();
+              detachTrainingStream = null;
             }
             wss.close();
             server.close(() => r());

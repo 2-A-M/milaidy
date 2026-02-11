@@ -1531,7 +1531,11 @@ export class MilaidyClient {
     if (!host) return;
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const url = `${protocol}//${host}/ws`;
+    let url = `${protocol}//${host}/ws`;
+    const token = this.apiToken;
+    if (token) {
+      url += `?token=${encodeURIComponent(token)}`;
+    }
 
     this.ws = new WebSocket(url);
 
@@ -1590,6 +1594,127 @@ export class MilaidyClient {
     };
   }
 
+  private async streamChatEndpoint(
+    path: string,
+    text: string,
+    onToken: (token: string) => void,
+    mode: ConversationMode = "simple",
+    signal?: AbortSignal,
+  ): Promise<{ text: string; agentName: string }> {
+    if (!this.apiAvailable) {
+      throw new Error("API not available (no HTTP origin)");
+    }
+
+    const token = this.apiToken;
+    const res = await fetch(`${this.baseUrl}${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ text, mode }),
+      signal,
+    });
+
+    if (!res.ok) {
+      const body = await res
+        .json()
+        .catch(() => ({ error: res.statusText })) as Record<string, string>;
+      const err = new Error(body.error ?? `HTTP ${res.status}`);
+      (err as Error & { status?: number }).status = res.status;
+      throw err;
+    }
+
+    if (!res.body) {
+      throw new Error("Streaming not supported by this browser");
+    }
+
+    const decoder = new TextDecoder();
+    const reader = res.body.getReader();
+    let buffer = "";
+    let fullText = "";
+    let doneText: string | null = null;
+    let doneAgentName: string | null = null;
+
+    const parseDataLine = (line: string): void => {
+      const payload = line.startsWith("data:") ? line.slice(5).trim() : "";
+      if (!payload) return;
+
+      let parsed: {
+        type?: string;
+        text?: string;
+        fullText?: string;
+        agentName?: string;
+        message?: string;
+      };
+      try {
+        parsed = JSON.parse(payload) as {
+          type?: string;
+          text?: string;
+          fullText?: string;
+          agentName?: string;
+          message?: string;
+        };
+      } catch {
+        return;
+      }
+
+      if (parsed.type === "token") {
+        const chunk = parsed.text ?? "";
+        if (chunk) {
+          fullText += chunk;
+          onToken(chunk);
+        }
+        return;
+      }
+
+      if (parsed.type === "done") {
+        if (parsed.fullText) doneText = parsed.fullText;
+        if (parsed.agentName) doneAgentName = parsed.agentName;
+        return;
+      }
+
+      if (parsed.type === "error") {
+        throw new Error(parsed.message ?? "generation failed");
+      }
+
+      // Backward compatibility with legacy stream payloads: { text: "..." }
+      if (parsed.text) {
+        fullText += parsed.text;
+        onToken(parsed.text);
+      }
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      let eventBreak = buffer.indexOf("\n\n");
+      while (eventBreak !== -1) {
+        const rawEvent = buffer.slice(0, eventBreak);
+        buffer = buffer.slice(eventBreak + 2);
+        for (const line of rawEvent.split("\n")) {
+          if (!line.startsWith("data:")) continue;
+          parseDataLine(line);
+        }
+        eventBreak = buffer.indexOf("\n\n");
+      }
+    }
+
+    if (buffer.trim()) {
+      for (const line of buffer.split("\n")) {
+        if (line.startsWith("data:")) parseDataLine(line);
+      }
+    }
+
+    return {
+      text: doneText ?? fullText,
+      agentName: doneAgentName ?? "Milaidy",
+    };
+  }
+
   /**
    * Send a chat message via the REST endpoint (reliable — does not depend on
    * a WebSocket connection).  Returns the agent's response text.
@@ -1602,6 +1727,21 @@ export class MilaidyClient {
       method: "POST",
       body: JSON.stringify({ text, mode }),
     });
+  }
+
+  async sendChatStream(
+    text: string,
+    onToken: (token: string) => void,
+    mode: ConversationMode = "simple",
+    signal?: AbortSignal,
+  ): Promise<{ text: string; agentName: string }> {
+    return this.streamChatEndpoint(
+      "/api/chat/stream",
+      text,
+      onToken,
+      mode,
+      signal,
+    );
   }
 
   // Conversations
@@ -1630,6 +1770,22 @@ export class MilaidyClient {
       method: "POST",
       body: JSON.stringify({ text, mode }),
     });
+  }
+
+  async sendConversationMessageStream(
+    id: string,
+    text: string,
+    onToken: (token: string) => void,
+    mode: ConversationMode = "simple",
+    signal?: AbortSignal,
+  ): Promise<{ text: string; agentName: string }> {
+    return this.streamChatEndpoint(
+      `/api/conversations/${encodeURIComponent(id)}/messages/stream`,
+      text,
+      onToken,
+      mode,
+      signal,
+    );
   }
 
   async requestGreeting(id: string): Promise<{ text: string; agentName: string; generated: boolean }> {

@@ -858,6 +858,8 @@ describe("Agent Runtime E2E", () => {
           server?.port,
           "POST",
           `/api/triggers/${encodeURIComponent(triggerId)}/execute`,
+          undefined,
+          { timeoutMs: 120_000 },
         );
 
         expect(execRes.status).toBe(200);
@@ -952,7 +954,7 @@ describe("Agent Runtime E2E", () => {
 
         logger.info("[e2e] Trigger lifecycle test complete (real LLM)");
       },
-      180_000,
+      240_000,
     );
   });
 

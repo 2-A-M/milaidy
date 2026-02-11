@@ -6,6 +6,7 @@ import type http from "node:http";
 import type { AgentRuntime } from "@elizaos/core";
 import { logger } from "@elizaos/core";
 import type { CloudManager } from "../cloud/cloud-manager.js";
+import { validateCloudBaseUrl } from "../cloud/validate-url.js";
 import type { MilaidyConfig } from "../config/config.js";
 import { saveMilaidyConfig } from "../config/config.js";
 
@@ -65,6 +66,11 @@ export async function handleCloudRoute(
   // POST /api/cloud/login
   if (method === "POST" && pathname === "/api/cloud/login") {
     const baseUrl = state.config.cloud?.baseUrl ?? "https://www.elizacloud.ai";
+    const urlError = await validateCloudBaseUrl(baseUrl);
+    if (urlError) {
+      err(res, urlError);
+      return true;
+    }
     const sessionId = crypto.randomUUID();
 
     const createRes = await fetch(`${baseUrl}/api/auth/cli-session`, {
@@ -99,6 +105,11 @@ export async function handleCloudRoute(
     }
 
     const baseUrl = state.config.cloud?.baseUrl ?? "https://www.elizacloud.ai";
+    const urlError = await validateCloudBaseUrl(baseUrl);
+    if (urlError) {
+      err(res, urlError);
+      return true;
+    }
     const pollRes = await fetch(
       `${baseUrl}/api/auth/cli-session/${encodeURIComponent(sessionId)}`,
     );
@@ -170,8 +181,9 @@ export async function handleCloudRoute(
       }
 
       // ── 4. Init cloud manager if needed ─────────────────────────────
-      if (state.cloudManager && !state.cloudManager.getClient())
-        state.cloudManager.init();
+      if (state.cloudManager && !state.cloudManager.getClient()) {
+        await state.cloudManager.init();
+      }
 
       json(res, { status: "authenticated", keyPrefix: data.keyPrefix });
     } else {
@@ -199,8 +211,13 @@ export async function handleCloudRoute(
       return true;
     }
 
-    const raw = await readBody(req);
-    const parsed: unknown = JSON.parse(raw);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(await readBody(req));
+    } catch {
+      err(res, "Invalid JSON in request body");
+      return true;
+    }
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       err(res, "Request body must be a JSON object");
       return true;

@@ -9,18 +9,8 @@
  */
 
 import type { Command } from "commander";
-import { loadMilaidyConfig, saveMilaidyConfig } from "../../config/config.js";
 import type { ReleaseChannel } from "../../config/types.milaidy.js";
 import { VERSION } from "../../runtime/version.js";
-import {
-  detectInstallMethod,
-  performUpdate,
-} from "../../services/self-updater.js";
-import {
-  checkForUpdate,
-  fetchAllChannelVersions,
-  resolveChannel,
-} from "../../services/update-checker.js";
 import { theme } from "../../terminal/theme.js";
 
 const ALL_CHANNELS: readonly ReleaseChannel[] = ["stable", "beta", "nightly"];
@@ -58,6 +48,15 @@ async function updateAction(opts: {
   check?: boolean;
   force?: boolean;
 }): Promise<void> {
+  const { loadMilaidyConfig, saveMilaidyConfig } = await import(
+    "../../config/config.js"
+  );
+  const { checkForUpdate, resolveChannel } = await import(
+    "../../services/update-checker.js"
+  );
+  const { detectInstallMethod, performUpdate } = await import(
+    "../../services/self-updater.js"
+  );
   const config = loadMilaidyConfig();
   let newChannel: ReleaseChannel | undefined;
 
@@ -166,6 +165,13 @@ async function updateAction(opts: {
 }
 
 async function statusAction(): Promise<void> {
+  const { loadMilaidyConfig } = await import("../../config/config.js");
+  const { resolveChannel, fetchAllChannelVersions } = await import(
+    "../../services/update-checker.js"
+  );
+  const { detectInstallMethod } = await import(
+    "../../services/self-updater.js"
+  );
   console.log(`\n${theme.heading("Version Status")}\n`);
 
   const config = loadMilaidyConfig();
@@ -195,6 +201,10 @@ async function statusAction(): Promise<void> {
 }
 
 async function channelAction(channelArg: string | undefined): Promise<void> {
+  const { loadMilaidyConfig, saveMilaidyConfig } = await import(
+    "../../config/config.js"
+  );
+  const { resolveChannel } = await import("../../services/update-checker.js");
   const config = loadMilaidyConfig();
   const current = resolveChannel(config.update);
 

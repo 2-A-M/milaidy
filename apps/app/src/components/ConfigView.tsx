@@ -292,6 +292,8 @@ function PluginField({
 
 /* ── ConfigView ───────────────────────────────────────────────────────── */
 
+type InventoryProvider = "alchemy" | "helius" | "birdeye";
+
 export function ConfigView() {
   const {
     // Cloud
@@ -500,6 +502,68 @@ export function ConfigView() {
   /* ── RPC provider selection state ────────────────────────────────── */
   const [selectedEvmRpc, setSelectedEvmRpc] = useState<"eliza-cloud" | "alchemy" | "infura" | "ankr">("eliza-cloud");
   const [selectedSolanaRpc, setSelectedSolanaRpc] = useState<"eliza-cloud" | "helius-birdeye">("eliza-cloud");
+  const [walletProviderModal, setWalletProviderModal] = useState<InventoryProvider | null>(null);
+
+  const walletProviderModalContent: {
+    title: string;
+    configured: boolean;
+    description: string;
+    configKey: string;
+    placeholder: string;
+    steps: React.ReactNode;
+  } | null = (() => {
+    if (walletProviderModal === "alchemy") {
+      return {
+        title: "Alchemy",
+        configured: walletConfig?.alchemyKeySet ?? false,
+        description: "EVM chain data for Ethereum, Base, Arbitrum, Optimism, and Polygon.",
+        configKey: "ALCHEMY_API_KEY",
+        placeholder: walletConfig?.alchemyKeySet ? "Already set - leave blank to keep" : "Paste your Alchemy API key",
+        steps: (
+          <ol className="pl-4 list-decimal space-y-1">
+            <li>Create a free account at <a href="https://dashboard.alchemy.com/signup" target="_blank" rel="noopener" className="text-[var(--accent)]">dashboard.alchemy.com</a></li>
+            <li>Create an app and enable the networks you use</li>
+            <li>Copy the API key and paste it below</li>
+          </ol>
+        ),
+      };
+    }
+    if (walletProviderModal === "helius") {
+      return {
+        title: "Helius",
+        configured: walletConfig?.heliusKeySet ?? false,
+        description: "Solana chain data for tokens, NFTs, and enhanced RPC endpoints.",
+        configKey: "HELIUS_API_KEY",
+        placeholder: walletConfig?.heliusKeySet ? "Already set - leave blank to keep" : "Paste your Helius API key",
+        steps: (
+          <ol className="pl-4 list-decimal space-y-1">
+            <li>Create a free account at <a href="https://dev.helius.xyz/dashboard/app" target="_blank" rel="noopener" className="text-[var(--accent)]">dev.helius.xyz</a></li>
+            <li>Copy the API key from your dashboard</li>
+            <li>Paste it below</li>
+          </ol>
+        ),
+      };
+    }
+    if (walletProviderModal === "birdeye") {
+      return {
+        title: "Birdeye",
+        configured: walletConfig?.birdeyeKeySet ?? false,
+        description: "Optional Solana price data provider used for USD token valuations.",
+        configKey: "BIRDEYE_API_KEY",
+        placeholder: walletConfig?.birdeyeKeySet
+          ? "Already set - leave blank to keep"
+          : "Paste your Birdeye API key (optional)",
+        steps: (
+          <ol className="pl-4 list-decimal space-y-1">
+            <li>Create a free account at <a href="https://birdeye.so/user/api-management" target="_blank" rel="noopener" className="text-[var(--accent)]">birdeye.so</a></li>
+            <li>Open the API section in your profile</li>
+            <li>Copy the API key and paste it below</li>
+          </ol>
+        ),
+      };
+    }
+    return null;
+  })();
 
   /* ── Export / Import modal state ─────────────────────────────────── */
   const [exportModalOpen, setExportModalOpen] = useState(false);
@@ -922,7 +986,12 @@ export function ConfigView() {
                   {walletConfig?.alchemyKeySet && <span className="text-[10px] text-[var(--ok,#16a34a)]">configured</span>}
                   <a href="https://dashboard.alchemy.com/" target="_blank" rel="noopener" className="text-[10px] text-[var(--accent)] ml-auto">Get key</a>
                 </div>
-                <input type="password" data-wallet-config="ALCHEMY_API_KEY" placeholder={walletConfig?.alchemyKeySet ? "Already set — leave blank to keep" : "Enter API key"} className="w-full py-1.5 px-2 border border-[var(--border)] bg-[var(--card)] text-xs font-[var(--mono)] box-border focus:border-[var(--accent)] focus:outline-none" />
+                <button
+                  className="btn text-xs py-1.5 px-3 !mt-0 self-start"
+                  onClick={() => setWalletProviderModal("alchemy")}
+                >
+                  Open setup
+                </button>
               </div>
             )}
             {selectedEvmRpc === "infura" && (
@@ -1015,7 +1084,12 @@ export function ConfigView() {
                     {walletConfig?.heliusKeySet && <span className="text-[10px] text-[var(--ok,#16a34a)]">configured</span>}
                     <a href="https://dev.helius.xyz/" target="_blank" rel="noopener" className="text-[10px] text-[var(--accent)] ml-auto">Get key</a>
                   </div>
-                  <input type="password" data-wallet-config="HELIUS_API_KEY" placeholder={walletConfig?.heliusKeySet ? "Already set — leave blank to keep" : "Enter API key"} className="w-full py-1.5 px-2 border border-[var(--border)] bg-[var(--card)] text-xs font-[var(--mono)] box-border focus:border-[var(--accent)] focus:outline-none" />
+                  <button
+                    className="btn text-xs py-1.5 px-3 !mt-0 self-start"
+                    onClick={() => setWalletProviderModal("helius")}
+                  >
+                    Open setup
+                  </button>
                 </div>
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-1.5 text-xs">
@@ -1023,10 +1097,58 @@ export function ConfigView() {
                     {walletConfig?.birdeyeKeySet && <span className="text-[10px] text-[var(--ok,#16a34a)]">configured</span>}
                     <a href="https://birdeye.so/" target="_blank" rel="noopener" className="text-[10px] text-[var(--accent)] ml-auto">Get key</a>
                   </div>
-                  <input type="password" data-wallet-config="BIRDEYE_API_KEY" placeholder={walletConfig?.birdeyeKeySet ? "Already set — leave blank to keep" : "Enter API key"} className="w-full py-1.5 px-2 border border-[var(--border)] bg-[var(--card)] text-xs font-[var(--mono)] box-border focus:border-[var(--accent)] focus:outline-none" />
+                  <button
+                    className="btn text-xs py-1.5 px-3 !mt-0 self-start"
+                    onClick={() => setWalletProviderModal("birdeye")}
+                  >
+                    Open setup
+                  </button>
                 </div>
               </div>
             )}
+          </div>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-[var(--border)]">
+          <div className="text-xs font-semibold mb-1">Inventory Provider Setup</div>
+          <div className="text-[11px] text-[var(--muted)] mb-3">
+            Progressive disclosure: open a provider tile to configure API keys without cluttering this page.
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {([
+              {
+                id: "alchemy" as const,
+                label: "Alchemy",
+                configured: walletConfig?.alchemyKeySet ?? false,
+              },
+              {
+                id: "helius" as const,
+                label: "Helius",
+                configured: walletConfig?.heliusKeySet ?? false,
+              },
+              {
+                id: "birdeye" as const,
+                label: "Birdeye",
+                configured: walletConfig?.birdeyeKeySet ?? false,
+                optional: true,
+              },
+            ]).map((provider) => (
+              <button
+                key={provider.id}
+                className="relative border border-[var(--border)] bg-[var(--card)] hover:border-[var(--accent)] transition-colors px-2 py-4 text-center"
+                onClick={() => setWalletProviderModal(provider.id)}
+              >
+                <div className="absolute top-1.5 right-1.5 text-[10px]">
+                  {provider.configured ? (
+                    <span className="text-[var(--ok,#16a34a)]">configured</span>
+                  ) : provider.optional ? (
+                    <span className="text-[var(--muted)]">optional</span>
+                  ) : null}
+                </div>
+                <div className="text-xl font-bold text-[var(--muted)]">?</div>
+                <div className="text-xs font-semibold mt-1">{provider.label}</div>
+              </button>
+            ))}
           </div>
         </div>
 
@@ -1341,6 +1463,41 @@ export function ConfigView() {
             </button>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        open={walletProviderModalContent !== null}
+        onClose={() => setWalletProviderModal(null)}
+        title={walletProviderModalContent?.title ?? "Provider Setup"}
+      >
+        {walletProviderModalContent && (
+          <div className="flex flex-col gap-3">
+            <div className="text-xs text-[var(--muted)] leading-relaxed">
+              {walletProviderModalContent.description}
+            </div>
+            <div className="text-xs text-[var(--muted)]">
+              {walletProviderModalContent.steps}
+            </div>
+            <input
+              type="password"
+              data-wallet-config={walletProviderModalContent.configKey}
+              placeholder={walletProviderModalContent.placeholder}
+              className="px-2.5 py-1.5 border border-[var(--border)] bg-[var(--card)] text-xs font-[var(--mono)] focus:border-[var(--accent)] focus:outline-none"
+            />
+            <div className="flex justify-between items-center gap-2">
+              <div className="text-[11px] text-[var(--muted)]">
+                {walletProviderModalContent.configured ? "Currently configured" : "Not configured"}
+              </div>
+              <button
+                className="btn text-xs py-1.5 px-4 !mt-0"
+                onClick={handleWalletSaveAll}
+                disabled={walletApiKeySaving}
+              >
+                {walletApiKeySaving ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* ═══════════════════════════════════════════════════════════════
