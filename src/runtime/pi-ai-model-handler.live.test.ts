@@ -1,5 +1,10 @@
-import { type Api, complete, getModel, type Model } from "@mariozechner/pi-ai";
+import { complete } from "@mariozechner/pi-ai";
 import { describe, expect, it } from "vitest";
+import {
+  DEFAULT_PI_MODEL_SPEC,
+  getPiModel,
+  parseModelSpec,
+} from "../utils/pi-ai.js";
 
 // Requires a real provider API key.
 // Run with: MILAIDY_LIVE_TEST=1 pnpm test:live (or equivalent)
@@ -8,12 +13,9 @@ describe("pi-ai integration", () => {
   it.skipIf(!process.env.ANTHROPIC_API_KEY)(
     "can complete a simple prompt",
     async () => {
-      const getModelUnsafe = getModel as unknown as (
-        provider: string,
-        modelId: string,
-      ) => Model<Api>;
+      const { provider, id } = parseModelSpec(DEFAULT_PI_MODEL_SPEC);
+      const model = getPiModel(provider, id);
 
-      const model = getModelUnsafe("anthropic", "claude-sonnet-4-20250514");
       const result = await complete(model, {
         systemPrompt: "You are helpful.",
         messages: [

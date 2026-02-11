@@ -32,6 +32,7 @@ import {
 import { resolveStateDir } from "../config/paths.js";
 import { CharacterSchema } from "../config/zod-schema.js";
 import { resolveDefaultAgentWorkspaceDir } from "../providers/workspace.js";
+import { createPiCredentialProvider } from "../runtime/pi-credentials.js";
 import {
   AgentExportError,
   estimateExportSize,
@@ -49,7 +50,6 @@ import {
   searchSkillsMarketplace,
   uninstallMarketplaceSkill,
 } from "../services/skill-marketplace.js";
-import { createPiCredentialProvider } from "../tui/pi-credentials.js";
 import { type CloudRouteState, handleCloudRoute } from "./cloud-routes.js";
 import { handleDatabaseRoute } from "./database.js";
 import {

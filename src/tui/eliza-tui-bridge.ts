@@ -11,12 +11,12 @@ import {
   type UUID,
 } from "@elizaos/core";
 import { Loader, Spacer, Text } from "@mariozechner/pi-tui";
+import type { StreamEvent } from "../runtime/pi-ai-model-handler.js";
 import {
   AssistantMessageComponent,
   ToolExecutionComponent,
   UserMessageComponent,
 } from "./components/index.js";
-import type { StreamEvent } from "./pi-ai-model-handler.js";
 import { milaidyMarkdownTheme, tuiTheme } from "./theme.js";
 import type { MilaidyTUI } from "./tui-app.js";
 

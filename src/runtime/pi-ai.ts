@@ -1,8 +1,12 @@
 import process from "node:process";
 import type { IAgentRuntime } from "@elizaos/core";
-import { type Api, getModel, type Model } from "@mariozechner/pi-ai";
-import { registerPiAiModelHandler } from "../tui/pi-ai-model-handler.js";
-import { createPiCredentialProvider } from "../tui/pi-credentials.js";
+import {
+  DEFAULT_PI_MODEL_SPEC,
+  getPiModel,
+  parseModelSpec,
+} from "../utils/pi-ai.js";
+import { registerPiAiModelHandler } from "./pi-ai-model-handler.js";
+import { createPiCredentialProvider } from "./pi-credentials.js";
 
 export function isPiAiEnabledFromEnv(
   env: NodeJS.ProcessEnv = process.env,
@@ -11,16 +15,6 @@ export function isPiAiEnabledFromEnv(
   if (!raw) return false;
   const v = String(raw).trim().toLowerCase();
   return v === "1" || v === "true" || v === "yes";
-}
-
-function parseModelSpec(spec: string): { provider: string; id: string } {
-  const [provider, ...rest] = spec.split("/");
-  if (!provider || rest.length === 0) {
-    throw new Error(
-      `Invalid model spec: ${spec}. Expected format: provider/modelId`,
-    );
-  }
-  return { provider, id: rest.join("/") };
 }
 
 export type RegisterPiAiRuntimeOptions = {
@@ -47,8 +41,7 @@ export async function registerPiAiRuntime(
   const piCreds = await createPiCredentialProvider();
 
   const defaultSpec =
-    (await piCreds.getDefaultModelSpec()) ??
-    "anthropic/claude-sonnet-4-20250514";
+    (await piCreds.getDefaultModelSpec()) ?? DEFAULT_PI_MODEL_SPEC;
 
   const largeSpec = opts.largeModelSpec ?? opts.modelSpec ?? defaultSpec;
   const smallSpec = opts.smallModelSpec ?? opts.modelSpec ?? largeSpec;
@@ -56,15 +49,8 @@ export async function registerPiAiRuntime(
   const { provider: largeProvider, id: largeId } = parseModelSpec(largeSpec);
   const { provider: smallProvider, id: smallId } = parseModelSpec(smallSpec);
 
-  // pi-ai's getModel is typed with provider literals; we support dynamic provider
-  // strings (from config), so cast to a looser signature.
-  const getModelUnsafe = getModel as unknown as (
-    provider: string,
-    modelId: string,
-  ) => Model<Api>;
-
-  const largeModel = getModelUnsafe(largeProvider, largeId);
-  const smallModel = getModelUnsafe(smallProvider, smallId);
+  const largeModel = getPiModel(largeProvider, largeId);
+  const smallModel = getPiModel(smallProvider, smallId);
 
   const aliases = Array.from(new Set([largeSpec, smallSpec]));
 

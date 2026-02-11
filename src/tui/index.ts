@@ -1,29 +1,24 @@
 import process from "node:process";
 import type { AgentRuntime } from "@elizaos/core";
-import { type Api, getModel, type Model } from "@mariozechner/pi-ai";
+import type { Api, Model } from "@mariozechner/pi-ai";
 import { Text } from "@mariozechner/pi-tui";
+import { registerPiAiModelHandler } from "../runtime/pi-ai-model-handler.js";
+import { createPiCredentialProvider } from "../runtime/pi-credentials.js";
+import {
+  DEFAULT_PI_MODEL_SPEC,
+  getPiModel,
+  parseModelSpec,
+} from "../utils/pi-ai.js";
 import { ElizaTUIBridge } from "./eliza-tui-bridge.js";
-import { registerPiAiModelHandler } from "./pi-ai-model-handler.js";
-import { createPiCredentialProvider } from "./pi-credentials.js";
 import { MilaidyTUI } from "./tui-app.js";
 
+export { registerPiAiModelHandler } from "../runtime/pi-ai-model-handler.js";
 export { ElizaTUIBridge } from "./eliza-tui-bridge.js";
-export { registerPiAiModelHandler } from "./pi-ai-model-handler.js";
 export { MilaidyTUI } from "./tui-app.js";
 
 export interface LaunchTUIOptions {
   /** Override model, format: provider/modelId (e.g. anthropic/claude-sonnet-4-20250514) */
   modelOverride?: string;
-}
-
-function parseModelSpec(spec: string): { provider: string; id: string } {
-  const [provider, ...rest] = spec.split("/");
-  if (!provider || rest.length === 0) {
-    throw new Error(
-      `Invalid model spec: ${spec}. Expected format: provider/modelId`,
-    );
-  }
-  return { provider, id: rest.join("/") };
 }
 
 export async function launchTUI(
@@ -35,16 +30,11 @@ export async function launchTUI(
   const modelSpec =
     options.modelOverride ??
     (await piCreds.getDefaultModelSpec()) ??
-    "anthropic/claude-sonnet-4-20250514";
+    DEFAULT_PI_MODEL_SPEC;
 
   const { provider, id } = parseModelSpec(modelSpec);
 
-  const getModelUnsafe = getModel as unknown as (
-    provider: string,
-    modelId: string,
-  ) => Model<Api>;
-
-  const largeModel = getModelUnsafe(provider, id);
+  const largeModel = getPiModel(provider, id);
   const smallModel = largeModel;
 
   const tui = new MilaidyTUI({ runtime });
@@ -102,7 +92,7 @@ export async function launchTUI(
           }
 
           const { provider: p, id: m } = parseModelSpec(argText);
-          const model = getModelUnsafe(p, m);
+          const model = getPiModel(p, m);
           switchModel(model);
           return;
         }
