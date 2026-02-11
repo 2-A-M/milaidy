@@ -480,6 +480,10 @@ export function OnboardingWizard() {
           grok: { name: "xAI (Grok)" },
           groq: { name: "Groq" },
           deepseek: { name: "DeepSeek" },
+          "pi-ai": {
+            name: "Pi Credentials (pi-ai)",
+            description: "Use pi auth (~/.pi/agent/auth.json) for API keys / OAuth",
+          },
         };
 
         const getProviderDisplay = (provider: ProviderOption) => {
@@ -848,7 +852,8 @@ export function OnboardingWizard() {
               onboardingProvider !== "anthropic-subscription" &&
               onboardingProvider !== "openai-subscription" &&
               onboardingProvider !== "elizacloud" &&
-              onboardingProvider !== "ollama" && (
+              onboardingProvider !== "ollama" &&
+              onboardingProvider !== "pi-ai" && (
                 <div className="text-left">
                   <label className="text-[13px] font-bold text-txt-strong block mb-2">API Key:</label>
                   <input
@@ -1185,7 +1190,11 @@ export function OnboardingWizard() {
         if (onboardingProvider === "openai-subscription") {
           return openaiConnected;
         }
-        if (onboardingProvider === "elizacloud" || onboardingProvider === "ollama") {
+        if (
+          onboardingProvider === "elizacloud" ||
+          onboardingProvider === "ollama" ||
+          onboardingProvider === "pi-ai"
+        ) {
           return true;
         }
         return onboardingProvider.length > 0 && onboardingApiKey.length > 0;

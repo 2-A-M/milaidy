@@ -1128,6 +1128,15 @@ function getProviderOptions(): Array<{
       description: "Use your $20-200/mo ChatGPT subscription via OAuth.",
     },
     {
+      id: "pi-ai",
+      name: "Pi Credentials (pi-ai)",
+      envKey: null,
+      pluginName: "@mariozechner/pi-ai",
+      keyPrefix: null,
+      description:
+        "Use pi auth (~/.pi/agent/auth.json) for API keys / OAuth (no Milaidy API key required).",
+    },
+    {
       id: "anthropic",
       name: "Anthropic (API Key)",
       envKey: "ANTHROPIC_API_KEY",
@@ -2023,11 +2032,31 @@ async function handleRequest(
     }
 
     // ── Local LLM provider ────────────────────────────────────────────────
-    if (runMode === "local" && body.provider) {
-      if (body.providerApiKey) {
-        if (!config.env) config.env = {};
+    // Also supports pi-ai (reads credentials from ~/.pi/agent/auth.json).
+    {
+      // Ensure we don't keep stale pi-ai mode when the user switches providers.
+      if (!config.env) config.env = {};
+      const envCfg = config.env as Record<string, unknown>;
+      const vars = (envCfg.vars ?? {}) as Record<string, string>;
+
+      const providerId = typeof body.provider === "string" ? body.provider : "";
+      const wantsPiAi = runMode === "local" && providerId === "pi-ai";
+
+      if (wantsPiAi) {
+        vars.MILAIDY_USE_PI_AI = "1";
+        process.env.MILAIDY_USE_PI_AI = "1";
+      } else {
+        delete vars.MILAIDY_USE_PI_AI;
+        delete process.env.MILAIDY_USE_PI_AI;
+      }
+
+      // Persist vars back onto config.env
+      (envCfg as Record<string, unknown>).vars = vars;
+
+      // API-key providers (envKey backed)
+      if (runMode === "local" && providerId && body.providerApiKey) {
         const providerOpt = getProviderOptions().find(
-          (p) => p.id === body.provider,
+          (p) => p.id === providerId,
         );
         if (providerOpt?.envKey) {
           (config.env as Record<string, string>)[providerOpt.envKey] =

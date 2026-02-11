@@ -62,6 +62,7 @@ import {
   createPhettaCompanionPlugin,
   resolvePhettaCompanionOptionsFromEnv,
 } from "./phetta-companion-plugin.js";
+import { isPiAiEnabledFromEnv, registerPiAiRuntime } from "./pi-ai.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -703,7 +704,9 @@ async function resolvePlugins(
 
   // Diagnose version-skew issues when AI providers failed to load (#10)
   const loadedNames = plugins.map((p) => p.name);
-  const diagnostic = diagnoseNoAIProvider(loadedNames, failedPlugins);
+  const diagnostic = isPiAiEnabledFromEnv()
+    ? null
+    : diagnoseNoAIProvider(loadedNames, failedPlugins);
   if (diagnostic) {
     if (opts?.quiet) {
       // In headless/GUI mode before onboarding, this is expected — the user
@@ -1905,6 +1908,23 @@ export async function startEliza(
     },
   });
 
+  // Optional: route all model calls through pi-ai using pi credentials
+  // (~/.pi/agent/auth.json). This is useful for OAuth-backed providers
+  // (e.g. Claude Max / Codex Max) without putting API keys in Milaidy config.
+  if (isPiAiEnabledFromEnv()) {
+    try {
+      const reg = await registerPiAiRuntime(runtime, {
+        // Prefer Milaidy's primary model spec when set; otherwise pi settings.json decides.
+        modelSpec: primaryModel,
+      });
+      logger.info(`[milaidy] pi-ai enabled (model: ${reg.modelSpec})`);
+    } catch (err) {
+      logger.warn(
+        `[milaidy] pi-ai enabled but failed to register model handler: ${formatError(err)}`,
+      );
+    }
+  }
+
   // 7b. Pre-register plugin-sql so the adapter is ready before other plugins init.
   //     This is OPTIONAL — without it, some features (memory, todos) won't work.
   //     runtime.db is a getter that returns this.adapter.db and throws when
@@ -2115,6 +2135,22 @@ export async function startEliza(
                 : {}),
             },
           });
+
+          // Re-register pi-ai model handler on hot reload if enabled.
+          if (isPiAiEnabledFromEnv()) {
+            try {
+              const reg = await registerPiAiRuntime(newRuntime, {
+                modelSpec: freshPrimaryModel,
+              });
+              logger.info(
+                `[milaidy] Hot-reload: pi-ai enabled (model: ${reg.modelSpec})`,
+              );
+            } catch (err) {
+              logger.warn(
+                `[milaidy] Hot-reload: pi-ai enabled but failed to register: ${formatError(err)}`,
+              );
+            }
+          }
 
           // Pre-register plugin-sql + local-embedding before initialize()
           // to avoid the same race condition as the initial startup.
