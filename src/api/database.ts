@@ -212,7 +212,7 @@ const PRIVATE_IP_PATTERNS: RegExp[] = [
   /^172\.(1[6-9]|2\d|3[01])\./, // RFC 1918 Class B
   /^192\.168\./, // RFC 1918 Class C
   /^::1$/, // IPv6 loopback
-  /^fc00:/i, // IPv6 ULA
+  /^f[cd][0-9a-f]{2}:/i, // IPv6 ULA (fc00::/7 includes fc00::–fdff::)
 ];
 
 /**
@@ -228,20 +228,87 @@ function isApiLoopbackOnly(): boolean {
   );
 }
 
+function normalizeHostLike(value: string): string {
+  return value.trim().toLowerCase().replace(/^\[|\]$/g, "");
+}
+
 /**
- * Extract the host from a Postgres connection string or credentials object.
- * Returns `null` if no host can be determined.
+ * Decode IPv6-mapped IPv4 hex notation (::ffff:7f00:1 → 127.0.0.1).
+ * Returns null if not a valid hex-encoded IPv4.
  */
-function extractHost(creds: PostgresCredentials): string | null {
+function decodeIpv6MappedHex(mapped: string): string | null {
+  const match = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(mapped);
+  if (!match) return null;
+  const hi = Number.parseInt(match[1], 16);
+  const lo = Number.parseInt(match[2], 16);
+  if (!Number.isFinite(hi) || !Number.isFinite(lo)) return null;
+  const octets = [hi >> 8, hi & 0xff, lo >> 8, lo & 0xff];
+  return octets.join(".");
+}
+
+/**
+ * Normalize an IP for policy checks.
+ * Strips zone ID, handles IPv6-mapped IPv4 (both dotted and hex forms).
+ */
+function normalizeIpForPolicy(ip: string): string {
+  const base = normalizeHostLike(ip).split("%")[0];
+  if (!base.startsWith("::ffff:")) return base;
+
+  const mapped = base.slice("::ffff:".length);
+  // Dotted form like ::ffff:127.0.0.1
+  if (net.isIP(mapped) === 4) return mapped;
+  // Hex form like ::ffff:7f00:1
+  return decodeIpv6MappedHex(mapped) ?? mapped;
+}
+
+/**
+ * Extract all potential hosts from a Postgres connection string or credentials object.
+ * Includes query params like ?host= and ?hostaddr= which Postgres clients honor.
+ * Returns empty array if no host can be determined.
+ */
+function extractHosts(creds: PostgresCredentials): string[] {
   if (creds.connectionString) {
     try {
       const url = new URL(creds.connectionString);
-      return url.hostname || null;
+      const hosts: string[] = [];
+
+      // PostgreSQL connection strings can have ?host= param that overrides URI hostname
+      const hostParam = url.searchParams.get("host");
+      if (hostParam) {
+        hosts.push(
+          ...hostParam
+            .split(",")
+            .map((h) => normalizeHostLike(h))
+            .filter(Boolean),
+        );
+      }
+
+      // Also check hostaddr param
+      const hostAddrParam = url.searchParams.get("hostaddr");
+      if (hostAddrParam) {
+        hosts.push(
+          ...hostAddrParam
+            .split(",")
+            .map((h) => normalizeHostLike(h))
+            .filter(Boolean),
+        );
+      }
+
+      // Include URI hostname
+      if (url.hostname) {
+        hosts.push(normalizeHostLike(url.hostname));
+      }
+
+      return [...new Set(hosts)];
     } catch {
-      return null; // Unparseable — will be rejected
+      return []; // Unparseable — will be rejected
     }
   }
-  return creds.host ?? null;
+  if (creds.host) {
+    const host = normalizeHostLike(creds.host);
+    return host ? [host] : [];
+  }
+  return [];
 }
 
 /**
@@ -249,14 +316,15 @@ function extractHost(creds: PostgresCredentials): string | null {
  * When the API is remotely reachable, private ranges are also blocked.
  */
 function isBlockedIp(ip: string): boolean {
-  if (ALWAYS_BLOCKED_IP_PATTERNS.some((p) => p.test(ip))) return true;
-  if (!isApiLoopbackOnly() && PRIVATE_IP_PATTERNS.some((p) => p.test(ip)))
+  const normalized = normalizeIpForPolicy(ip);
+  if (ALWAYS_BLOCKED_IP_PATTERNS.some((p) => p.test(normalized))) return true;
+  if (!isApiLoopbackOnly() && PRIVATE_IP_PATTERNS.some((p) => p.test(normalized)))
     return true;
   return false;
 }
 
 /**
- * Validate that the target host does not resolve to a blocked address.
+ * Validate that all target hosts do not resolve to blocked addresses.
  *
  * Performs DNS resolution to catch hostnames like `metadata.google.internal`
  * or `169.254.169.254.nip.io` that resolve to link-local / cloud metadata
@@ -267,68 +335,73 @@ function isBlockedIp(ip: string): boolean {
 async function validateDbHost(
   creds: PostgresCredentials,
 ): Promise<{ error: string | null; pinnedHost: string | null }> {
-  const host = extractHost(creds);
-  if (!host) {
+  const hosts = extractHosts(creds);
+  if (hosts.length === 0) {
     return {
       error: "Could not determine target host from the provided credentials.",
       pinnedHost: null,
     };
   }
 
-  const literalNormalized = host.replace(/^::ffff:/i, "");
+  let pinnedHost: string | null = null;
 
-  // First check the literal host string (catches raw IPs without DNS lookup)
-  if (isBlockedIp(literalNormalized)) {
-    return {
-      error: `Connection to "${host}" is blocked: link-local and metadata addresses are not allowed.`,
-      pinnedHost: null,
-    };
-  }
+  for (const host of hosts) {
+    const literalNormalized = host.replace(/^::ffff:/i, "");
 
-  // Literal IPs are already pinned and do not require DNS.
-  if (net.isIP(literalNormalized)) {
-    return { error: null, pinnedHost: literalNormalized };
-  }
-
-  // Resolve DNS and check all resulting IPs
-  try {
-    const results = await dnsLookupAll(host, { all: true });
-    const addresses = Array.isArray(results) ? results : [results];
-    let pinnedHost: string | null = null;
-    for (const entry of addresses) {
-      const ip =
-        typeof entry === "string"
-          ? entry
-          : (entry as { address: string }).address;
-      // Strip IPv6-mapped IPv4 prefix (::ffff:169.254.x.y → 169.254.x.y)
-      const normalized = ip.replace(/^::ffff:/i, "");
-      if (isBlockedIp(normalized)) {
-        return {
-          error:
-            `Connection to "${host}" is blocked: it resolves to ${ip} ` +
-            `which is a link-local or metadata address.`,
-          pinnedHost: null,
-        };
-      }
-      if (!pinnedHost) pinnedHost = normalized;
-    }
-    if (!pinnedHost) {
+    // First check the literal host string (catches raw IPs without DNS lookup)
+    if (isBlockedIp(literalNormalized)) {
       return {
-        error: `Connection to "${host}" could not be validated to a concrete IP address.`,
+        error: `Connection to "${host}" is blocked: link-local and metadata addresses are not allowed.`,
         pinnedHost: null,
       };
     }
-    return { error: null, pinnedHost };
-  } catch {
-    // Reject unresolved hostnames so we can always pin the final target IP.
-    // Allowing unresolved hostnames would re-introduce a DNS-rebinding gap.
+
+    // Literal IPs are already pinned and do not require DNS.
+    if (net.isIP(literalNormalized)) {
+      if (!pinnedHost) pinnedHost = literalNormalized;
+      continue;
+    }
+
+    // Resolve DNS and check all resulting IPs
+    try {
+      const results = await dnsLookupAll(host, { all: true });
+      const addresses = Array.isArray(results) ? results : [results];
+      for (const entry of addresses) {
+        const ip =
+          typeof entry === "string"
+            ? entry
+            : (entry as { address: string }).address;
+        // Strip IPv6-mapped IPv4 prefix (::ffff:169.254.x.y → 169.254.x.y)
+        const normalized = ip.replace(/^::ffff:/i, "");
+        if (isBlockedIp(normalized)) {
+          return {
+            error:
+              `Connection to "${host}" is blocked: it resolves to ${ip} ` +
+              `which is a link-local or metadata address.`,
+            pinnedHost: null,
+          };
+        }
+        if (!pinnedHost) pinnedHost = normalized;
+      }
+    } catch {
+      // Reject unresolved hostnames so we can always pin the final target IP.
+      // Allowing unresolved hostnames would re-introduce a DNS-rebinding gap.
+      return {
+        error:
+          `Connection to "${host}" failed DNS resolution during validation. ` +
+          "Use a resolvable hostname or a literal IP address.",
+        pinnedHost: null,
+      };
+    }
+  }
+
+  if (!pinnedHost) {
     return {
-      error:
-        `Connection to "${host}" failed DNS resolution during validation. ` +
-        "Use a resolvable hostname or a literal IP address.",
+      error: "Could not validate any host to a concrete IP address.",
       pinnedHost: null,
     };
   }
+  return { error: null, pinnedHost };
 }
 
 /** Convert a JS value to a SQL literal for use in raw queries. */

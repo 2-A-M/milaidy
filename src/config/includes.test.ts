@@ -72,9 +72,7 @@ describe("resolveConfigIncludes", () => {
     };
     const resolved = resolve(obj) as Record<string, unknown>;
     expect(resolved).toEqual({ safe: true });
-    expect(Object.prototype.hasOwnProperty.call(resolved, "__proto__")).toBe(
-      false,
-    );
+    expect(Object.hasOwn(resolved, "__proto__")).toBe(false);
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 

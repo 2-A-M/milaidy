@@ -360,6 +360,10 @@ export interface ConversationMessage {
   role: "user" | "assistant";
   text: string;
   timestamp: number;
+  /** Structured content blocks (A2UI). When present, `text` is the fallback. */
+  blocks?: ContentBlock[];
+  /** Source channel when forwarded from another channel (e.g. "autonomy"). */
+  source?: string;
 }
 
 export type ConversationMode = "simple" | "power";
@@ -2013,6 +2017,13 @@ export class MilaidyClient {
       this.connectWs();
     }, this.backoffMs);
     this.backoffMs = Math.min(this.backoffMs * 1.5, 10000);
+  }
+
+  /** Send an arbitrary JSON message over the WebSocket connection. */
+  sendWsMessage(data: Record<string, unknown>): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(data));
+    }
   }
 
   onWsEvent(type: string, handler: WsEventHandler): () => void {

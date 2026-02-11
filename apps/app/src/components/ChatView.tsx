@@ -281,6 +281,14 @@ export function ChatView() {
                         className={`font-bold text-[12px] mb-1 ${isUser ? "text-accent-fg/80" : "text-accent"}`}
                       >
                         {isUser ? "You" : agentName}
+                        {!isUser &&
+                          typeof msg.source === "string" &&
+                          msg.source &&
+                          msg.source !== "client_chat" && (
+                            <span className="ml-1.5 text-[10px] font-normal text-muted px-1.5 py-0.5 bg-bg-hover rounded">
+                              via {msg.source}
+                            </span>
+                          )}
                       </div>
                     )}
                     <div>{renderMessageText(msg.text)}</div>

@@ -16,7 +16,11 @@ import {
   ChannelType,
   type Content,
   createMessageMemory,
+  type IAgentRuntime,
   logger,
+  type Memory,
+  type MessageProcessingOptions,
+  type MessageProcessingResult,
   stringToUuid,
   type UUID,
 } from "@elizaos/core";
@@ -167,6 +171,8 @@ interface ServerState {
   broadcastStatus: (() => void) | null;
   /** Broadcast an arbitrary JSON message to all WebSocket clients. Set by startApiServer. */
   broadcastWs: ((data: Record<string, unknown>) => void) | null;
+  /** Currently active conversation ID from the frontend (sent via WS). */
+  activeConversationId: string | null;
   /** Transient OAuth flow state for subscription auth. */
   _anthropicFlow?: import("../auth/anthropic.js").AnthropicFlow;
   _codexFlow?: import("../auth/openai-codex.js").CodexFlow;
@@ -1944,6 +1950,122 @@ function decodePathComponent(
   }
 }
 
+// ── Autonomy → User message routing ──────────────────────────────────
+
+/**
+ * Route non-conversation output to the user's active conversation.
+ * Stores the message as a Memory in the conversation room and broadcasts
+ * a `proactive-message` WS event to the frontend.
+ *
+ * @param source - Channel label shown in the UI (e.g. "autonomy", "telegram").
+ */
+async function routeAutonomyToUser(
+  state: ServerState,
+  responseMessages: Memory[],
+  source = "autonomy",
+): Promise<void> {
+  const runtime = state.runtime;
+  if (!runtime) return;
+
+  // Collect response text from all response messages
+  const texts: string[] = [];
+  for (const mem of responseMessages) {
+    const text = mem.content?.text?.trim();
+    if (text) texts.push(text);
+  }
+  if (texts.length === 0) return;
+  const responseText = texts.join("\n\n");
+
+  // Find target conversation (active, or most recent)
+  let conv: ConversationMeta | undefined;
+  if (state.activeConversationId) {
+    conv = state.conversations.get(state.activeConversationId);
+  }
+  if (!conv) {
+    // Fall back to most recently updated conversation
+    const sorted = Array.from(state.conversations.values()).sort(
+      (a, b) =>
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    );
+    conv = sorted[0];
+  }
+  if (!conv) return; // No conversations exist yet
+
+  // Store as memory in the conversation's room
+  const agentMessage = createMessageMemory({
+    id: crypto.randomUUID() as UUID,
+    entityId: runtime.agentId,
+    roomId: conv.roomId,
+    content: {
+      text: responseText,
+      source,
+    },
+  });
+  await runtime.createMemory(agentMessage, "messages");
+  conv.updatedAt = new Date().toISOString();
+
+  // Broadcast to all WS clients
+  state.broadcastWs?.({
+    type: "proactive-message",
+    conversationId: conv.id,
+    message: {
+      id: agentMessage.id ?? `auto-${Date.now()}`,
+      role: "assistant",
+      text: responseText,
+      timestamp: Date.now(),
+      source,
+    },
+  });
+}
+
+/**
+ * Monkey-patch `runtime.messageService.handleMessage` to intercept
+ * autonomy output and route it to the user's active conversation.
+ * Follows the same pattern as phetta-companion-plugin.ts:222-280.
+ */
+function patchMessageServiceForAutonomy(state: ServerState): void {
+  const runtime = state.runtime;
+  if (!runtime?.messageService) return;
+
+  const svc = runtime.messageService as unknown as {
+    handleMessage: (
+      rt: IAgentRuntime,
+      message: Memory,
+      callback?: (content: Content) => Promise<Memory[]>,
+      options?: MessageProcessingOptions,
+    ) => Promise<MessageProcessingResult>;
+    __milaidyAutonomyPatched?: boolean;
+  };
+
+  if (svc.__milaidyAutonomyPatched) return;
+  svc.__milaidyAutonomyPatched = true;
+
+  const orig = svc.handleMessage.bind(svc);
+
+  svc.handleMessage = async (
+    rt: IAgentRuntime,
+    message: Memory,
+    callback?: (content: Content) => Promise<Memory[]>,
+    options?: MessageProcessingOptions,
+  ): Promise<MessageProcessingResult> => {
+    const result = await orig(rt, message, callback, options);
+
+    // Detect non-conversation messages (autonomy, background tasks, etc.)
+    const isFromConversation = Array.from(state.conversations.values()).some(
+      (c) => c.roomId === message.roomId,
+    );
+
+    if (!isFromConversation && result?.responseMessages?.length > 0) {
+      // Forward to user's active conversation (fire-and-forget)
+      const rawSource = message.content?.source;
+      const source = typeof rawSource === "string" ? rawSource : "autonomy";
+      void routeAutonomyToUser(state, result.responseMessages, source);
+    }
+
+    return result;
+  };
+}
+
 async function handleRequest(
   req: http.IncomingMessage,
   res: http.ServerResponse,
@@ -1951,10 +2073,13 @@ async function handleRequest(
   ctx?: RequestContext,
 ): Promise<void> {
   const method = req.method ?? "GET";
-  const url = new URL(
-    req.url ?? "/",
-    `http://${req.headers.host ?? "localhost"}`,
-  );
+  let url: URL;
+  try {
+    url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+  } catch {
+    error(res, "Invalid request URL", 400);
+    return;
+  }
   const pathname = url.pathname;
   const isAuthEndpoint = pathname.startsWith("/api/auth/");
 
@@ -2032,6 +2157,10 @@ async function handleRequest(
   const relayHyperscapeApi = async (
     outboundMethod: "GET" | "POST",
     outboundPath: string,
+    options?: {
+      rawBodyOverride?: string;
+      contentTypeOverride?: string | null;
+    },
   ): Promise<void> => {
     const baseUrl = await resolveHyperscapeApiBaseUrl();
 
@@ -2045,7 +2174,9 @@ async function handleRequest(
     }
 
     let rawBody: string | undefined;
-    if (outboundMethod === "POST") {
+    if (options?.rawBodyOverride !== undefined) {
+      rawBody = options.rawBodyOverride;
+    } else if (outboundMethod === "POST") {
       try {
         rawBody = await readBody(req);
       } catch (err) {
@@ -2060,9 +2191,11 @@ async function handleRequest(
 
     const outboundHeaders: Record<string, string> = {};
     const contentType =
-      typeof req.headers["content-type"] === "string"
-        ? req.headers["content-type"]
-        : null;
+      options?.contentTypeOverride !== undefined
+        ? options.contentTypeOverride
+        : typeof req.headers["content-type"] === "string"
+          ? req.headers["content-type"]
+          : null;
     if (contentType && rawBody !== undefined) {
       outboundHeaders["Content-Type"] = contentType;
     }
@@ -2736,6 +2869,10 @@ async function handleRequest(
     const svc = getAutonomySvc(state.runtime);
     if (svc) await svc.enableAutonomy();
 
+    // Patch messageService for autonomy routing (may be first time if runtime
+    // was provided before the API server's patch ran, or after a restart).
+    patchMessageServiceForAutonomy(state);
+
     json(res, {
       ok: true,
       status: {
@@ -2865,6 +3002,7 @@ async function handleRequest(
         state.agentState = "running";
         state.agentName = newRuntime.character.name ?? "Milaidy";
         state.startedAt = Date.now();
+        patchMessageServiceForAutonomy(state);
         json(res, {
           ok: true,
           status: {
@@ -5494,12 +5632,19 @@ async function handleRequest(
       // Sort by createdAt ascending
       memories.sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
       const agentId = state.runtime.agentId;
-      const messages = memories.map((m) => ({
-        id: m.id ?? "",
-        role: m.entityId === agentId ? "assistant" : "user",
-        text: (m.content as { text?: string })?.text ?? "",
-        timestamp: m.createdAt ?? 0,
-      }));
+      const messages = memories.map((m) => {
+        const contentSource = (m.content as Record<string, unknown>)?.source;
+        return {
+          id: m.id ?? "",
+          role: m.entityId === agentId ? "assistant" : "user",
+          text: (m.content as { text?: string })?.text ?? "",
+          timestamp: m.createdAt ?? 0,
+          source:
+            typeof contentSource === "string" && contentSource !== "client_chat"
+              ? contentSource
+              : undefined,
+        };
+      });
       json(res, { messages });
     } catch (err) {
       logger.warn(
@@ -6321,9 +6466,23 @@ async function handleRequest(
     );
     if (messageMatch) {
       const agentId = decodeURIComponent(messageMatch[1]);
+      const body = await readJsonBody<{ content?: string }>(req, res);
+      if (!body) return;
+      const content = body.content?.trim();
+      if (!content) {
+        error(res, "content is required");
+        return;
+      }
       await relayHyperscapeApi(
         "POST",
-        `/api/agents/${encodeURIComponent(agentId)}/message`,
+        `/api/embedded-agents/${encodeURIComponent(agentId)}/command`,
+        {
+          rawBodyOverride: JSON.stringify({
+            command: "chat",
+            data: { message: content },
+          }),
+          contentTypeOverride: "application/json",
+        },
       );
       return;
     }
@@ -6999,6 +7158,7 @@ export async function startApiServer(opts?: {
     shareIngestQueue: [],
     broadcastStatus: null,
     broadcastWs: null,
+    activeConversationId: null,
   };
 
   const trainingService = new TrainingService({
@@ -7396,6 +7556,9 @@ export async function startApiServer(opts?: {
         const msg = JSON.parse(data.toString());
         if (msg.type === "ping") {
           ws.send(JSON.stringify({ type: "pong" }));
+        } else if (msg.type === "active-conversation") {
+          state.activeConversationId =
+            typeof msg.conversationId === "string" ? msg.conversationId : null;
         }
       } catch (err) {
         logger.error(
@@ -7542,7 +7705,12 @@ export async function startApiServer(opts?: {
 
     // Broadcast status update immediately after restart
     broadcastStatus();
+    // Re-patch the new runtime's messageService for autonomy routing
+    patchMessageServiceForAutonomy(state);
   };
+
+  // Patch the initial runtime (if provided) for autonomy routing
+  patchMessageServiceForAutonomy(state);
 
   return new Promise((resolve) => {
     server.listen(port, host, () => {

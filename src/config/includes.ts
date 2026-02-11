@@ -42,9 +42,6 @@ export class CircularIncludeError extends ConfigIncludeError {
   }
 }
 
-/** Keys that must never be merged to prevent prototype pollution. */
-const BLOCKED_MERGE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
-
 export function deepMerge(target: unknown, source: unknown): unknown {
   if (Array.isArray(target) && Array.isArray(source)) {
     return [...target, ...source];
