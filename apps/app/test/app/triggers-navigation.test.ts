@@ -31,10 +31,9 @@ describe("navigation", () => {
     expect(advanced?.tabs.includes("logs")).toBe(true);
   });
 
-  test("keeps Voice as a dedicated top-level group", () => {
+  test("hides Voice from top-level header groups", () => {
     const voice = TAB_GROUPS.find((group) => group.label === "Voice");
-    expect(voice).toBeDefined();
-    expect(voice?.tabs).toEqual(["voice"]);
+    expect(voice).toBeUndefined();
   });
 
   test("keeps /game as a legacy redirect to apps", () => {

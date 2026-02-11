@@ -288,7 +288,7 @@ export function createMilaidyPlugin(config?: MilaidyPluginConfig): Plugin {
   // Create a service class wrapper for the trajectory logger that matches ServiceClass interface
   // This is a proper Service subclass that satisfies the ServiceClass interface
   const TrajectoryLoggerServiceClass = {
-    serviceType: "trajectory_logger" as const,
+    serviceType: "milaidy_trajectory_logger" as const,
 
     async start(runtime: IAgentRuntime): Promise<Service> {
       const service = new PersistentTrajectoryLoggerService(
@@ -364,7 +364,7 @@ export function createMilaidyPlugin(config?: MilaidyPluginConfig): Plugin {
 
           // Create a trajectory for this message if logging is enabled
           const trajectoryLogger = runtime.getService(
-            "trajectory_logger",
+            "milaidy_trajectory_logger",
           ) as PersistentTrajectoryLoggerService | null;
 
           if (trajectoryLogger?.isEnabled()) {
@@ -398,7 +398,7 @@ export function createMilaidyPlugin(config?: MilaidyPluginConfig): Plugin {
           if (!trajectoryStepId) return;
 
           const trajectoryLogger = runtime.getService(
-            "trajectory_logger",
+            "milaidy_trajectory_logger",
           ) as PersistentTrajectoryLoggerService | null;
 
           if (trajectoryLogger) {

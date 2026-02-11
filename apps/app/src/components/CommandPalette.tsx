@@ -15,7 +15,6 @@ export function CommandPalette() {
     commandActiveIndex,
     agentStatus,
     handleStart,
-    handleStop,
     handlePauseResume,
     handleRestart,
     setTab,
@@ -48,25 +47,19 @@ export function CommandPalette() {
         label: "Start Agent",
         action: handleStart,
       });
-    } else {
+    }
+    if (isRunning || isPaused) {
       commands.push({
-        id: "stop-agent",
-        label: "Stop Agent",
-        action: handleStop,
-      });
-      if (isRunning || isPaused) {
-        commands.push({
-          id: "pause-resume-agent",
-          label: isPaused ? "Resume Agent" : "Pause Agent",
-          action: handlePauseResume,
-        });
-      }
-      commands.push({
-        id: "restart-agent",
-        label: "Restart Agent",
-        action: handleRestart,
+        id: "pause-resume-agent",
+        label: isPaused ? "Resume Agent" : "Pause Agent",
+        action: handlePauseResume,
       });
     }
+    commands.push({
+      id: "restart-agent",
+      label: "Restart Agent",
+      action: handleRestart,
+    });
 
     // Navigation commands
     commands.push(
@@ -112,7 +105,6 @@ export function CommandPalette() {
     isRunning,
     isPaused,
     handleStart,
-    handleStop,
     handlePauseResume,
     handleRestart,
     setTab,

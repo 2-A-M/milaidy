@@ -14,7 +14,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { useApp } from "../AppContext.js";
+import { getVrmPreviewUrl, useApp } from "../AppContext.js";
 import { ChatAvatar } from "./ChatAvatar.js";
 import { useVoiceChat } from "../hooks/useVoiceChat.js";
 import { client, type ConversationMode, type VoiceConfig } from "../api-client.js";
@@ -79,7 +79,7 @@ export function ChatView() {
     setState,
     droppedFiles,
     shareIngestNotice,
-    handleStart,
+    selectedVrmIndex,
   } = useApp();
 
   const messagesRef = useRef<HTMLDivElement>(null);
@@ -166,8 +166,9 @@ export function ChatView() {
   const voice = useVoiceChat({ onTranscript: handleVoiceTranscript, voiceConfig });
 
   const agentName = agentStatus?.agentName ?? "Agent";
-  const agentState = agentStatus?.state ?? "not_started";
   const msgs = conversationMessages;
+  const agentAvatarSrc = selectedVrmIndex > 0 ? getVrmPreviewUrl(selectedVrmIndex) : null;
+  const agentInitial = agentName.trim().charAt(0).toUpperCase() || "A";
 
   const lastSpokenIdRef = useRef<string | null>(null);
 
@@ -212,26 +213,6 @@ export function ChatView() {
     }
   };
 
-  // Agent not running: show start box
-  if (agentState === "not_started" || agentState === "stopped") {
-    return (
-      <div className="flex flex-col flex-1 min-h-0 px-5">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-lg font-normal text-txt-strong m-0">Chat</h2>
-        </div>
-        <div className="text-center py-10 px-10 border border-border mt-5">
-          <p className="text-muted mb-4">Agent is not running. Start it to begin chatting.</p>
-          <button
-            className="px-6 py-2 border border-accent bg-accent text-accent-fg text-sm cursor-pointer hover:bg-accent-hover"
-            onClick={handleStart}
-          >
-            Start Agent
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col flex-1 min-h-0 px-3 relative">
       {/* 3D Avatar — behind chat on the right side */}
@@ -252,25 +233,38 @@ export function ChatView() {
             Send a message to start chatting.
           </div>
         ) : (
-          <div className="mx-auto w-full max-w-[720px] px-0">
+          <div className="w-full px-0">
             {msgs.map((msg, i) => {
               const prev = i > 0 ? msgs[i - 1] : null;
               const grouped = prev?.role === msg.role;
               const isUser = msg.role === "user";
-              const hoverTs = new Date(msg.timestamp).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              });
 
               return (
                 <div
                   key={msg.id}
-                  className={`group flex ${isUser ? "justify-end" : "justify-start"} ${grouped ? "mt-1" : "mt-3"}`}
+                  className={`flex items-start gap-2 ${isUser ? "justify-end" : "justify-start"} ${grouped ? "mt-1" : "mt-3"}`}
                   data-testid="chat-message"
                   data-role={msg.role}
                 >
+                  {!isUser &&
+                    (grouped ? (
+                      <div className="w-7 h-7 shrink-0" aria-hidden />
+                    ) : (
+                      <div className="w-7 h-7 shrink-0 rounded-full overflow-hidden border border-border bg-bg-hover">
+                        {agentAvatarSrc ? (
+                          <img
+                            src={agentAvatarSrc}
+                            alt={`${agentName} avatar`}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-[11px] font-bold text-muted">
+                            {agentInitial}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   <div
-                    title={new Date(msg.timestamp).toLocaleString()}
                     className="max-w-[85%] px-0 py-1 text-sm leading-relaxed whitespace-pre-wrap break-words"
                   >
                     {!grouped && (
@@ -287,16 +281,26 @@ export function ChatView() {
                       </div>
                     )}
                     <div><MessageContent message={msg} /></div>
-                    <div className="mt-1 text-[10px] opacity-0 group-hover:opacity-70 transition-opacity">
-                      {hoverTs}
-                    </div>
                   </div>
                 </div>
               );
             })}
 
             {chatSending && !chatFirstTokenReceived && (
-              <div className="mt-3 flex justify-start">
+              <div className="mt-3 flex items-start gap-2 justify-start">
+                <div className="w-7 h-7 shrink-0 rounded-full overflow-hidden border border-border bg-bg-hover">
+                  {agentAvatarSrc ? (
+                    <img
+                      src={agentAvatarSrc}
+                      alt={`${agentName} avatar`}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-[11px] font-bold text-muted">
+                      {agentInitial}
+                    </div>
+                  )}
+                </div>
                 <div className="max-w-[85%] px-0 py-1 text-sm leading-relaxed">
                   <div className="font-bold text-[12px] mb-1 text-accent">{agentName}</div>
                   <div className="flex gap-1 py-1">

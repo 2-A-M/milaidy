@@ -170,7 +170,7 @@ function sqlLiteral(v: unknown): string {
 }
 
 export class PersistentTrajectoryLoggerService extends Service {
-  static serviceType = "trajectory_logger";
+  static serviceType = "milaidy_trajectory_logger";
   capabilityDescription =
     "Captures and persists LLM calls and provider accesses for debugging and analysis";
 

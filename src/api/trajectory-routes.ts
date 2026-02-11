@@ -84,7 +84,7 @@ function getTrajectoryLogger(
 ): PersistentTrajectoryLoggerService | null {
   if (!runtime) return null;
   return runtime.getService(
-    "trajectory_logger",
+    "milaidy_trajectory_logger",
   ) as PersistentTrajectoryLoggerService | null;
 }
 

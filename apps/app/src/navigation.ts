@@ -30,7 +30,6 @@ export const TAB_GROUPS = [
       "logs",
     ] as Tab[],
   },
-  { label: "Voice", tabs: ["voice"] as Tab[] },
   { label: "Settings", tabs: ["settings"] as Tab[] },
 ] as const;
 

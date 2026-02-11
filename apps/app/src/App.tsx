@@ -32,6 +32,7 @@ function ViewRouter() {
     case "database":
     case "logs":
       return <AdvancedPageView />;
+    case "voice":
     case "settings": return <SettingsView />;
     default: return <ChatView />;
   }

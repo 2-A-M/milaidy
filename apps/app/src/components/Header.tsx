@@ -3,7 +3,7 @@ import { useApp } from "../AppContext.js";
 export function Header() {
   const {
     agentStatus, cloudConnected, cloudCredits, cloudCreditsCritical, cloudCreditsLow,
-    cloudTopUpUrl, walletAddresses, handleStart, handleStop, handlePauseResume,
+    cloudTopUpUrl, walletAddresses, handlePauseResume,
     handleRestart, openCommandPalette, copyToClipboard, setTab, setState,
   } = useApp();
 
@@ -39,16 +39,18 @@ export function Header() {
         )}
         <div className="flex items-center gap-1.5">
           <span className={`inline-flex items-center h-7 px-2.5 border font-mono text-xs leading-none ${stateColor}`} data-testid="status-pill">{state}</span>
-          {state === "not_started" || state === "stopped" ? (
-            <button onClick={handleStart} title="Start agent" className={iconBtn}>▶️</button>
-          ) : state === "restarting" ? (
-            <span className="inline-flex items-center justify-center w-7 h-7 text-sm leading-none opacity-60">🔄</span>
-          ) : state === "paused" ? (
-            <button onClick={handlePauseResume} title="Resume agent" className={iconBtn}>▶️</button>
+          {state === "restarting" || state === "not_started" || state === "stopped" ? (
+            <span className="inline-flex items-center justify-center w-7 h-7 text-sm leading-none opacity-60">⏳</span>
           ) : (
-            <button onClick={handleStop} title="Stop agent" className={iconBtn}>⏹️</button>
+            <button
+              onClick={handlePauseResume}
+              title={state === "paused" ? "Resume autonomy" : "Pause autonomy"}
+              className={iconBtn}
+            >
+              {state === "paused" ? "▶️" : "⏸️"}
+            </button>
           )}
-          <button onClick={handleRestart} disabled={state === "restarting" || state === "not_started"} title="Restart agent"
+          <button onClick={handleRestart} disabled={state === "restarting"} title="Restart agent"
             className="inline-flex items-center h-7 px-3 border border-border bg-bg text-xs font-mono cursor-pointer hover:border-accent hover:text-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Restart</button>
         </div>
         <button onClick={() => setTab("logs")} title="Logs" className={iconBtn}>

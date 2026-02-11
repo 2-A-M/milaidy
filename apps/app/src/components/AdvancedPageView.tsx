@@ -5,7 +5,6 @@
  *   - Config: Wallet/RPC providers, secrets (original ConfigPageView content)
  *   - Plugins: Feature/connector/skills plugin management
  *   - Trajectories: LLM call viewer and analysis
- *   - Voice: TTS/STT provider selection
  *   - Runtime: Runtime object inspection
  *   - Databases: Tables/media/vector browser
  *   - Logs: Runtime log viewer
@@ -17,7 +16,6 @@ import { ConfigPageView } from "./ConfigPageView";
 import { PluginsPageView } from "./PluginsPageView";
 import { TrajectoriesView } from "./TrajectoriesView";
 import { TrajectoryDetailView } from "./TrajectoryDetailView";
-import { VoiceConfigView } from "./VoiceConfigView";
 import { RuntimeView } from "./RuntimeView";
 import { DatabasePageView } from "./DatabasePageView";
 import { LogsPageView } from "./LogsPageView";
@@ -27,7 +25,6 @@ type SubTab =
   | "config"
   | "plugins"
   | "trajectories"
-  | "voice"
   | "runtime"
   | "database"
   | "logs";
@@ -36,7 +33,6 @@ const SUB_TABS: Array<{ id: SubTab; label: string; description: string }> = [
   { id: "config", label: "Config", description: "Wallet, RPC providers, and secrets" },
   { id: "plugins", label: "Plugins", description: "Features, connectors, and skills" },
   { id: "trajectories", label: "Trajectories", description: "LLM call history and analysis" },
-  { id: "voice", label: "Voice", description: "TTS and transcription settings" },
   { id: "runtime", label: "Runtime", description: "Deep runtime object introspection and load order" },
   { id: "database", label: "Databases", description: "Tables, media, and vector browser" },
   { id: "logs", label: "Logs", description: "Runtime and service logs" },
@@ -46,7 +42,6 @@ function mapTabToSubTab(tab: Tab): SubTab {
   switch (tab) {
     case "plugins": return "plugins";
     case "trajectories": return "trajectories";
-    case "voice": return "voice";
     case "runtime": return "runtime";
     case "database": return "database";
     case "logs": return "logs";
@@ -68,9 +63,6 @@ export function AdvancedPageView() {
         break;
       case "trajectories":
         setTab("trajectories");
-        break;
-      case "voice":
-        setTab("voice");
         break;
       case "runtime":
         setTab("runtime");
@@ -102,8 +94,6 @@ export function AdvancedPageView() {
         return (
           <TrajectoriesView onSelectTrajectory={setSelectedTrajectoryId} />
         );
-      case "voice":
-        return <VoiceConfigView />;
       case "runtime":
         return <RuntimeView />;
       case "database":

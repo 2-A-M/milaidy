@@ -5,8 +5,9 @@
  *   1. Appearance — theme picker
  *   2. AI Model — provider selection + config
  *   3. Media Generation — image, video, audio, vision provider selection
- *   4. Updates — software update channel + check
- *   5. Advanced (collapsible) — Logs, Core Plugins, Database, Secrets,
+ *   4. Speech (TTS / STT) — provider + transcription config
+ *   5. Updates — software update channel + check
+ *   6. Advanced (collapsible) — Logs, Core Plugins, Database, Secrets,
  *      Chrome Extension, Export/Import, Danger Zone
  */
 
@@ -15,6 +16,7 @@ import { useApp, THEMES } from "../AppContext";
 import { client, type PluginParamDef, type OnboardingOptions } from "../api-client";
 import { ConfigRenderer, defaultRegistry } from "./config-renderer";
 import { MediaSettingsSection } from "./MediaSettingsSection";
+import { VoiceConfigView } from "./VoiceConfigView";
 import type { ConfigUiHint } from "../types";
 import type { JsonSchemaObject } from "./config-catalog";
 
@@ -658,7 +660,15 @@ export function SettingsView() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════
-          4. UPDATES
+          4. SPEECH (TTS / STT)
+          ═══════════════════════════════════════════════════════════════ */}
+      <div className="mt-6 p-4 border border-[var(--border)] bg-[var(--card)]">
+        <div className="font-bold text-sm mb-4">Speech (TTS / STT)</div>
+        <VoiceConfigView />
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════
+          5. UPDATES
           ═══════════════════════════════════════════════════════════════ */}
       <div className="mt-6 p-4 border border-[var(--border)] bg-[var(--card)]">
         <div className="flex justify-between items-center mb-3">

@@ -2683,8 +2683,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       // Load status
       try {
-        setAgentStatus(await client.getStatus());
+        const status = await client.getStatus();
+        setAgentStatus(status);
         setConnected(true);
+
+        // Keep runtime available by default when the app opens.
+        if (status.state === "not_started" || status.state === "stopped") {
+          try {
+            const started = await client.startAgent();
+            setAgentStatus(started);
+          } catch {
+            /* ignore */
+          }
+        }
       } catch {
         setConnected(false);
       }
