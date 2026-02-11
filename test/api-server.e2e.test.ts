@@ -565,6 +565,43 @@ describe("API Server E2E (no runtime)", () => {
     });
   });
 
+  // -- Fine-tuning endpoints --
+
+  describe("GET /api/training/* (no runtime)", () => {
+    it("returns training status with runtimeUnavailable", async () => {
+      const { status, data } = await req(port, "GET", "/api/training/status");
+      expect(status).toBe(200);
+      expect(data.runtimeAvailable).toBe(false);
+      expect(typeof data.runningJobs).toBe("number");
+      expect(typeof data.datasetCount).toBe("number");
+      expect(typeof data.modelCount).toBe("number");
+    });
+
+    it("returns unavailable trajectories when runtime is missing", async () => {
+      const { status, data } = await req(
+        port,
+        "GET",
+        "/api/training/trajectories?limit=10&offset=0",
+      );
+      expect(status).toBe(200);
+      expect(data.available).toBe(false);
+      expect(data.reason).toBe("runtime_not_started");
+    });
+
+    it("returns datasets, jobs, and models lists", async () => {
+      const datasets = await req(port, "GET", "/api/training/datasets");
+      const jobs = await req(port, "GET", "/api/training/jobs");
+      const models = await req(port, "GET", "/api/training/models");
+
+      expect(datasets.status).toBe(200);
+      expect(jobs.status).toBe(200);
+      expect(models.status).toBe(200);
+      expect(Array.isArray(datasets.data.datasets)).toBe(true);
+      expect(Array.isArray(jobs.data.jobs)).toBe(true);
+      expect(Array.isArray(models.data.models)).toBe(true);
+    });
+  });
+
   // -- Plugin discovery (real filesystem) --
 
   describe("GET /api/plugins", () => {

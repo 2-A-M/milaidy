@@ -30,6 +30,7 @@ import {
 } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
 import { CharacterSchema } from "../config/zod-schema.js";
+import { EMOTE_BY_ID, EMOTE_CATALOG } from "../emotes/catalog.js";
 import {
   AgentExportError,
   estimateExportSize,
@@ -162,6 +163,10 @@ interface ServerState {
   trainingService: TrainingService | null;
   /** In-memory queue for share ingest items. */
   shareIngestQueue: ShareIngestItem[];
+  /** Broadcast current agent status to all WebSocket clients. Set by startApiServer. */
+  broadcastStatus: (() => void) | null;
+  /** Broadcast an arbitrary JSON message to all WebSocket clients. Set by startApiServer. */
+  broadcastWs: ((data: Record<string, unknown>) => void) | null;
   /** Transient OAuth flow state for subscription auth. */
   _anthropicFlow?: import("../auth/anthropic.js").AnthropicFlow;
   _codexFlow?: import("../auth/openai-codex.js").CodexFlow;
@@ -6566,6 +6571,32 @@ async function handleRequest(
     return;
   }
 
+  // ── GET /api/emotes ──────────────────────────────────────────────────────
+  if (method === "GET" && pathname === "/api/emotes") {
+    json(res, { emotes: EMOTE_CATALOG });
+    return;
+  }
+
+  // ── POST /api/emote ─────────────────────────────────────────────────────
+  if (method === "POST" && pathname === "/api/emote") {
+    const body = await readJsonBody<{ emoteId?: string }>(req, res);
+    if (!body) return;
+    const emote = body.emoteId ? EMOTE_BY_ID.get(body.emoteId) : undefined;
+    if (!emote) {
+      error(res, `Unknown emote: ${body.emoteId ?? "(none)"}`);
+      return;
+    }
+    state.broadcastWs?.({
+      type: "emote",
+      emoteId: emote.id,
+      glbPath: emote.glbPath,
+      duration: emote.duration,
+      loop: emote.loop,
+    });
+    json(res, { ok: true });
+    return;
+  }
+
   // ── Fallback ────────────────────────────────────────────────────────────
   error(res, "Not found", 404);
 }
@@ -6724,6 +6755,8 @@ export async function startApiServer(opts?: {
     appManager: new AppManager(),
     trainingService: null,
     shareIngestQueue: [],
+    broadcastStatus: null,
+    broadcastWs: null,
   };
 
   const trainingService = new TrainingService({
@@ -7154,6 +7187,25 @@ export async function startApiServer(opts?: {
       model: state.model,
       startedAt: state.startedAt,
     });
+  };
+
+  // Make broadcastStatus accessible to route handlers via state
+  state.broadcastStatus = broadcastStatus;
+
+  // Generic broadcast — sends an arbitrary JSON payload to all WS clients.
+  state.broadcastWs = (data: Record<string, unknown>) => {
+    const message = JSON.stringify(data);
+    for (const client of wsClients) {
+      if (client.readyState === 1) {
+        try {
+          client.send(message);
+        } catch (err) {
+          logger.error(
+            `[milaidy-api] WebSocket broadcast error: ${err instanceof Error ? err.message : err}`,
+          );
+        }
+      }
+    }
   };
 
   // Broadcast status every 5 seconds
