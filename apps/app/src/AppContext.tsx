@@ -996,6 +996,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const chatAbortRef = useRef<AbortController | null>(null);
   /** Synchronous lock so same-tick chat submits cannot double-send. */
   const chatSendBusyRef = useRef(false);
+  /** Synchronous lock for export action to prevent duplicate clicks in the same tick. */
+  const exportBusyRef = useRef(false);
+  /** Synchronous lock for import action to prevent duplicate clicks in the same tick. */
+  const importBusyRef = useRef(false);
 
   // ── Action notice ──────────────────────────────────────────────────
 
@@ -2863,7 +2867,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ── Agent export/import ────────────────────────────────────────────
 
   const handleAgentExport = useCallback(async () => {
-    if (exportBusy) return;
+    if (exportBusyRef.current || exportBusy) return;
     if (!exportPassword) {
       setExportError("Password is required.");
       setExportSuccess(null);
@@ -2876,10 +2880,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setExportSuccess(null);
       return;
     }
-    setExportBusy(true);
-    setExportError(null);
-    setExportSuccess(null);
     try {
+      exportBusyRef.current = true;
+      setExportBusy(true);
+      setExportError(null);
+      setExportSuccess(null);
       const resp = await client.exportAgent(exportPassword, exportIncludeLogs);
       const blob = await resp.blob();
       const disposition = resp.headers.get("Content-Disposition") ?? "";
@@ -2898,12 +2903,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       setExportError(err instanceof Error ? err.message : "Export failed");
     } finally {
+      exportBusyRef.current = false;
       setExportBusy(false);
     }
   }, [exportBusy, exportPassword, exportIncludeLogs]);
 
   const handleAgentImport = useCallback(async () => {
-    if (importBusy) return;
+    if (importBusyRef.current || importBusy) return;
     if (!importFile) {
       setImportError("Select an export file before importing.");
       setImportSuccess(null);
@@ -2921,10 +2927,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setImportSuccess(null);
       return;
     }
-    setImportBusy(true);
-    setImportError(null);
-    setImportSuccess(null);
     try {
+      importBusyRef.current = true;
+      setImportBusy(true);
+      setImportError(null);
+      setImportSuccess(null);
       const fileBuffer = await importFile.arrayBuffer();
       const result = await client.importAgent(importPassword, fileBuffer);
       const counts = result.counts;
@@ -2941,6 +2948,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       setImportError(err instanceof Error ? err.message : "Import failed");
     } finally {
+      importBusyRef.current = false;
       setImportBusy(false);
     }
   }, [importBusy, importFile, importPassword]);
