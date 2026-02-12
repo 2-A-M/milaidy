@@ -23,6 +23,7 @@ import {
   type Character,
   createMessageMemory,
   logger,
+  ModelType,
   mergeCharacterDefaults,
   type Plugin,
   stringToUuid,
@@ -63,6 +64,7 @@ import {
 } from "../services/sandbox-manager.js";
 import { diagnoseNoAIProvider } from "../services/version-compat.js";
 import { CORE_PLUGINS, OPTIONAL_CORE_PLUGINS } from "./core-plugins.js";
+import { MilaidyEmbeddingManager } from "./embedding-manager.js";
 import { createMilaidyPlugin } from "./milaidy-plugin.js";
 import {
   createPhettaCompanionPlugin,
@@ -2091,6 +2093,43 @@ export async function startEliza(
     );
   }
 
+  // 7e. Register Milaidy's optimized TEXT_EMBEDDING handler at priority 100
+  //     (supersedes the upstream plugin-local-embedding's priority 10).
+  //     The upstream plugin still provides TEXT_TOKENIZER_ENCODE/DECODE;
+  //     we only replace its embedding with Metal GPU + idle unloading.
+  //     Uses `let` so hot-reload can swap to a fresh manager instance.
+  let embeddingManager = new MilaidyEmbeddingManager({
+    model: config.embedding?.model,
+    modelRepo: config.embedding?.modelRepo,
+    dimensions: config.embedding?.dimensions,
+    gpuLayers:
+      config.embedding?.gpuLayers ??
+      (process.platform === "darwin" ? "auto" : 0),
+    idleTimeoutMs: (config.embedding?.idleTimeoutMinutes ?? 30) * 60 * 1000,
+  });
+  const embeddingDimensions = config.embedding?.dimensions ?? 768;
+  runtime.registerModel(
+    ModelType.TEXT_EMBEDDING,
+    async (_runtime, params) => {
+      const text =
+        typeof params === "string"
+          ? params
+          : params && typeof params === "object" && "text" in params
+            ? (params as { text: string }).text
+            : null;
+      if (!text) return new Array(embeddingDimensions).fill(0);
+      return embeddingManager.generateEmbedding(text);
+    },
+    "milaidy",
+    100,
+  );
+  logger.info(
+    "[milaidy] Embedding handler registered (priority 100, " +
+      `model=${config.embedding?.model ?? "nomic-embed-text-v1.5.Q5_K_M.gguf"}, ` +
+      `dims=${embeddingDimensions}, ` +
+      `gpu=${config.embedding?.gpuLayers ?? (process.platform === "darwin" ? "auto" : 0)})`,
+  );
+
   // 8. Initialize the runtime (registers remaining plugins, starts services)
   await runtime.initialize();
 
@@ -2194,6 +2233,17 @@ export async function startEliza(
             );
           }
         }
+      } catch (err) {
+        logger.warn(`[milaidy] Sandbox shutdown error: ${formatError(err)}`);
+      }
+      try {
+        await embeddingManager.dispose();
+      } catch (err) {
+        logger.warn(
+          `[milaidy] Error disposing embedding manager: ${formatError(err)}`,
+        );
+      }
+      try {
         await runtime.stop();
       } catch (err) {
         logger.warn(`[milaidy] Error during shutdown: ${formatError(err)}`);
@@ -2248,6 +2298,13 @@ export async function startEliza(
         logger.info("[milaidy] Hot-reload: Restarting runtime...");
         try {
           // Stop the old runtime to release resources (DB connections, timers, etc.)
+          try {
+            await embeddingManager.dispose();
+          } catch (disposeErr) {
+            logger.warn(
+              `[milaidy] Hot-reload: embedding manager dispose failed: ${formatError(disposeErr)}`,
+            );
+          }
           try {
             await runtime.stop();
           } catch (stopErr) {
@@ -2359,15 +2416,55 @@ export async function startEliza(
 
           // Pre-register plugin-sql + local-embedding before initialize()
           // to avoid the same race condition as the initial startup.
-          if (sqlPlugin) {
-            await newRuntime.registerPlugin(sqlPlugin.plugin);
+          // Re-derive from freshly resolved plugins (not outer closure) so
+          // hot-reload picks up any plugin updates.
+          const freshSqlPlugin = resolvedPlugins.find(
+            (p) => p.name === "@elizaos/plugin-sql",
+          );
+          const freshLocalEmbeddingPlugin = resolvedPlugins.find(
+            (p) => p.name === "@elizaos/plugin-local-embedding",
+          );
+          if (freshSqlPlugin) {
+            await newRuntime.registerPlugin(freshSqlPlugin.plugin);
             if (newRuntime.adapter && !(await newRuntime.adapter.isReady())) {
               await newRuntime.adapter.init();
             }
           }
-          if (localEmbeddingPlugin) {
-            await newRuntime.registerPlugin(localEmbeddingPlugin.plugin);
+          if (freshLocalEmbeddingPlugin) {
+            await newRuntime.registerPlugin(freshLocalEmbeddingPlugin.plugin);
           }
+
+          // Re-create embedding manager with fresh config and register
+          // at priority 100 (same as initial startup).
+          const freshEmbeddingManager = new MilaidyEmbeddingManager({
+            model: freshConfig.embedding?.model,
+            modelRepo: freshConfig.embedding?.modelRepo,
+            dimensions: freshConfig.embedding?.dimensions,
+            gpuLayers:
+              freshConfig.embedding?.gpuLayers ??
+              (process.platform === "darwin" ? "auto" : 0),
+            idleTimeoutMs:
+              (freshConfig.embedding?.idleTimeoutMinutes ?? 30) * 60 * 1000,
+          });
+          const freshEmbeddingDims = freshConfig.embedding?.dimensions ?? 768;
+          newRuntime.registerModel(
+            ModelType.TEXT_EMBEDDING,
+            async (_rt, params) => {
+              const text =
+                typeof params === "string"
+                  ? params
+                  : params && typeof params === "object" && "text" in params
+                    ? (params as { text: string }).text
+                    : null;
+              if (!text) return new Array(freshEmbeddingDims).fill(0);
+              return freshEmbeddingManager.generateEmbedding(text);
+            },
+            "milaidy",
+            100,
+          );
+          // Swap the outer reference so shutdown/next-reload disposes
+          // the correct instance.
+          embeddingManager = freshEmbeddingManager;
 
           await newRuntime.initialize();
           runtime = newRuntime;

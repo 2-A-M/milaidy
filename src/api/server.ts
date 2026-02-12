@@ -8061,6 +8061,33 @@ async function handleRequest(
     return;
   }
 
+  // ── GET /api/permissions/shell ─────────────────────────────────────────
+  // Return shell toggle status in a stable shape for UI clients.
+  if (method === "GET" && pathname === "/api/permissions/shell") {
+    const enabled = state.shellEnabled ?? true;
+    if (!state.permissionStates) {
+      state.permissionStates = {};
+    }
+    const shellState = state.permissionStates.shell;
+    const permission = {
+      id: "shell",
+      status: enabled ? "granted" : "denied",
+      lastChecked: shellState?.lastChecked ?? Date.now(),
+      canRequest: false,
+    };
+    state.permissionStates.shell = permission;
+
+    // Keep the legacy top-level permission fields for compatibility with
+    // callers that previously treated /api/permissions/shell as a generic
+    // /api/permissions/:id response.
+    json(res, {
+      enabled,
+      ...permission,
+      permission,
+    });
+    return;
+  }
+
   // ── GET /api/permissions/:id ───────────────────────────────────────────
   // Returns a single permission state
   if (method === "GET" && pathname.startsWith("/api/permissions/")) {
@@ -8149,6 +8176,12 @@ async function handleRequest(
     }
     state.config.features.shellEnabled = enabled;
     saveMilaidyConfig(state.config);
+
+    // If a runtime is active, restart so plugin loading honors the new
+    // shellEnabled flag and shell tools are loaded/unloaded consistently.
+    if (state.runtime && ctx?.onRestart) {
+      scheduleRuntimeRestart(`Shell access ${enabled ? "enabled" : "disabled"}`);
+    }
 
     json(res, {
       shellEnabled: enabled,
@@ -9913,6 +9946,11 @@ async function handleRequest(
   // ── POST /api/terminal/run ──────────────────────────────────────────────
   // Execute a shell command server-side and stream output via WebSocket.
   if (method === "POST" && pathname === "/api/terminal/run") {
+    if (state.shellEnabled === false) {
+      error(res, "Shell access is disabled", 403);
+      return;
+    }
+
     const body = await readJsonBody<{ command?: string }>(req, res);
     if (!body) return;
     const command = typeof body.command === "string" ? body.command.trim() : "";
