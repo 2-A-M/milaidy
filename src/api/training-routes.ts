@@ -1,21 +1,10 @@
-import type http from "node:http";
 import type { AgentRuntime } from "@elizaos/core";
 import type { TrainingService } from "../services/training-service.js";
+import type { RouteHelpers, RouteRequestContext } from "./route-helpers.js";
 
-export interface TrainingRouteHelpers {
-  json: (res: http.ServerResponse, data: object, status?: number) => void;
-  error: (res: http.ServerResponse, message: string, status?: number) => void;
-  readJsonBody: <T extends object>(
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-  ) => Promise<T | null>;
-}
+export type TrainingRouteHelpers = RouteHelpers;
 
-export interface TrainingRouteContext extends TrainingRouteHelpers {
-  req: http.IncomingMessage;
-  res: http.ServerResponse;
-  method: string;
-  pathname: string;
+export interface TrainingRouteContext extends RouteRequestContext {
   runtime: AgentRuntime | null;
   trainingService: TrainingService;
 }

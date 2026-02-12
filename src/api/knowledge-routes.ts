@@ -1,20 +1,9 @@
-import type http from "node:http";
 import type { AgentRuntime, Memory, UUID } from "@elizaos/core";
+import type { RouteHelpers, RouteRequestContext } from "./route-helpers.js";
 
-export interface KnowledgeRouteHelpers {
-  json: (res: http.ServerResponse, data: object, status?: number) => void;
-  error: (res: http.ServerResponse, message: string, status?: number) => void;
-  readJsonBody: <T extends object>(
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-  ) => Promise<T | null>;
-}
+export type KnowledgeRouteHelpers = RouteHelpers;
 
-export interface KnowledgeRouteContext extends KnowledgeRouteHelpers {
-  req: http.IncomingMessage;
-  res: http.ServerResponse;
-  method: string;
-  pathname: string;
+export interface KnowledgeRouteContext extends RouteRequestContext {
   url: URL;
   runtime: AgentRuntime | null;
 }
