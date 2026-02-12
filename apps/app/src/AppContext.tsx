@@ -1005,8 +1005,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const walletApiKeySavingRef = useRef(false);
   /** Synchronous lock for cloud login action to prevent duplicate clicks in the same tick. */
   const cloudLoginBusyRef = useRef(false);
-  /** Synchronous lock for update channel changes to prevent duplicate submits. */
-  const updateChannelSavingRef = useRef(false);
 
   // ── Action notice ──────────────────────────────────────────────────
 
@@ -2872,21 +2870,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const handleChannelChange = useCallback(
     async (channel: ReleaseChannel) => {
-      if (updateChannelSavingRef.current || updateChannelSaving) return;
       if (updateStatus?.channel === channel) return;
-      updateChannelSavingRef.current = true;
       setUpdateChannelSaving(true);
       try {
         await client.setUpdateChannel(channel);
         await loadUpdateStatus(true);
       } catch {
         /* ignore */
-      } finally {
-        updateChannelSavingRef.current = false;
-        setUpdateChannelSaving(false);
       }
+      setUpdateChannelSaving(false);
     },
-    [updateChannelSaving, updateStatus, loadUpdateStatus],
+    [updateStatus, loadUpdateStatus],
   );
 
   // ── Agent export/import ────────────────────────────────────────────
