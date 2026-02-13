@@ -6,6 +6,8 @@ import type {
   UpdateTriggerRequest,
 } from "../api-client";
 import { parsePositiveInteger } from "../../../../src/utils/number-parsing.js";
+import { formatDateTime, formatDurationMs } from "./shared/format";
+import { StatusBadge, StatusDot, StatCard } from "./shared/ui-badges";
 
 type TriggerType = "interval" | "once" | "cron";
 type TriggerWakeMode = "inject_now" | "next_autonomy_cycle";
@@ -36,26 +38,11 @@ const emptyForm: TriggerFormState = {
 
 const accentFg: React.CSSProperties = { color: "var(--accent-foreground)" };
 
-function formatMs(ms?: number): string {
-  if (!ms || ms <= 0) return "—";
-  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
-  if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m`;
-  if (ms < 86_400_000) {
-    const h = ms / 3_600_000;
-    return h === Math.floor(h) ? `${h}h` : `${h.toFixed(1)}h`;
-  }
-  const d = ms / 86_400_000;
-  return d === Math.floor(d) ? `${d}d` : `${d.toFixed(1)}d`;
-}
-
-function formatTimestamp(value?: number): string {
-  if (!value || !Number.isFinite(value)) return "—";
-  return new Date(value).toLocaleString();
-}
-
 function scheduleLabel(t: TriggerSummary): string {
-  if (t.triggerType === "interval") return `Every ${formatMs(t.intervalMs)}`;
-  if (t.triggerType === "once") return t.scheduledAtIso ? `Once at ${new Date(t.scheduledAtIso).toLocaleString()}` : "Once";
+  if (t.triggerType === "interval") return `Every ${formatDurationMs(t.intervalMs)}`;
+  if (t.triggerType === "once") {
+    return t.scheduledAtIso ? `Once at ${formatDateTime(t.scheduledAtIso)}` : "Once";
+  }
   if (t.triggerType === "cron") return `Cron: ${t.cronExpression ?? "—"}`;
   return t.triggerType;
 }
@@ -118,40 +105,6 @@ function validateForm(form: TriggerFormState): string | null {
   }
   if (form.maxRuns.trim() && !parsePositiveInteger(form.maxRuns)) return "Max runs must be a positive integer.";
   return null;
-}
-
-/* ── Stat card ──────────────────────────────────────────────────────── */
-
-function Stat({ label, value, accent }: { label: string; value: string | number; accent?: boolean }) {
-  return (
-    <div className="flex flex-col items-center justify-center p-3 border border-border bg-bg min-w-[80px]">
-      <div className={`text-lg font-bold tabular-nums ${accent ? "text-accent" : ""}`}>{value}</div>
-      <div className="text-[10px] text-muted uppercase tracking-wide mt-0.5">{label}</div>
-    </div>
-  );
-}
-
-/* ── Status badge ────────────────────────────────────────────────── */
-
-function StatusBadge({ enabled }: { enabled: boolean }) {
-  return (
-    <span
-      className={`text-[10px] font-medium uppercase tracking-wider px-2 py-0.5 ${
-        enabled
-          ? "text-ok border border-ok/30 bg-ok/10"
-          : "text-muted border border-border bg-bg"
-      }`}
-    >
-      {enabled ? "active" : "paused"}
-    </span>
-  );
-}
-
-/* ── Run status dot ──────────────────────────────────────────────── */
-
-function RunDot({ status }: { status: string }) {
-  const color = status === "success" ? "bg-ok" : status === "error" ? "bg-danger" : "bg-muted";
-  return <span className={`inline-block w-2 h-2 rounded-full ${color}`} />;
 }
 
 /* ── Main view ──────────────────────────────────────────────────── */
@@ -228,11 +181,14 @@ export function TriggersView() {
         </div>
         {triggerHealth ? (
           <div className="flex gap-2 flex-wrap">
-            <Stat label="Active" value={triggerHealth.activeTriggers} accent />
-            <Stat label="Disabled" value={triggerHealth.disabledTriggers} />
-            <Stat label="Executions" value={triggerHealth.totalExecutions} />
-            <Stat label="Failures" value={triggerHealth.totalFailures} />
-            <Stat label="Last Exec" value={formatTimestamp(triggerHealth.lastExecutionAt)} />
+            <StatCard label="Active" value={triggerHealth.activeTriggers} accent />
+            <StatCard label="Disabled" value={triggerHealth.disabledTriggers} />
+            <StatCard label="Executions" value={triggerHealth.totalExecutions} />
+            <StatCard label="Failures" value={triggerHealth.totalFailures} />
+            <StatCard
+              label="Last Exec"
+              value={formatDateTime(triggerHealth.lastExecutionAt, { fallback: "—" })}
+            />
           </div>
         ) : (
           <div className="text-xs text-muted py-2">No health data yet — triggers will report here after first execution.</div>
@@ -302,7 +258,7 @@ export function TriggersView() {
           {form.triggerType === "interval" && (
             <div>
               <label className="block text-[11px] text-muted mb-1">
-                Interval (ms) — {formatMs(parsePositiveInteger(form.intervalMs))}
+                Interval (ms) — {formatDurationMs(parsePositiveInteger(form.intervalMs))}
               </label>
               <input
                 className="w-full px-3 py-1.5 border border-border bg-bg text-sm focus:border-accent outline-none"
@@ -395,12 +351,15 @@ export function TriggersView() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-bold truncate">{trigger.displayName}</span>
-                        <StatusBadge enabled={trigger.enabled} />
+                        <StatusBadge
+                          label={trigger.enabled ? "active" : "paused"}
+                          tone={trigger.enabled ? "success" : "muted"}
+                        />
                       </div>
                       <div className="text-xs text-muted mt-1">
                         {scheduleLabel(trigger)}
-                        {trigger.runCount > 0 && <> · {trigger.runCount} run{trigger.runCount !== 1 ? "s" : ""}</>}
-                        {trigger.nextRunAtMs && trigger.enabled && <> · next {formatTimestamp(trigger.nextRunAtMs)}</>}
+                          {trigger.runCount > 0 && <> · {trigger.runCount} run{trigger.runCount !== 1 ? "s" : ""}</>}
+                        {trigger.nextRunAtMs && trigger.enabled && <> · next {formatDateTime(trigger.nextRunAtMs, { fallback: "—" })}</>}
                       </div>
                     </div>
                     {/* Actions */}
@@ -458,9 +417,9 @@ export function TriggersView() {
                   {/* Last run status */}
                   {trigger.lastStatus && (
                     <div className="flex items-center gap-1.5 text-xs">
-                      <RunDot status={trigger.lastStatus} />
+                      <StatusDot status={trigger.lastStatus} />
                       <span className="text-muted">
-                        Last run {trigger.lastStatus} {trigger.lastRunAtIso && `at ${new Date(trigger.lastRunAtIso).toLocaleString()}`}
+                        Last run {trigger.lastStatus} {trigger.lastRunAtIso && `at ${formatDateTime(trigger.lastRunAtIso, { fallback: "—" })}`}
                       </span>
                       {trigger.lastError && <span className="text-danger">— {trigger.lastError}</span>}
                     </div>
@@ -476,10 +435,10 @@ export function TriggersView() {
                         <div className="space-y-1">
                           {selectedRuns.slice().reverse().map((run) => (
                             <div key={run.triggerRunId} className="flex items-start gap-2 text-xs border border-border px-3 py-1.5">
-                              <RunDot status={run.status} />
+                      <StatusDot status={run.status} />
                               <div className="flex-1 min-w-0">
                                 <span className="font-medium">{run.status}</span>
-                                <span className="text-muted"> · {formatTimestamp(run.finishedAt)} · {run.latencyMs}ms · {run.source}</span>
+                                <span className="text-muted"> · {formatDateTime(run.finishedAt, { fallback: "—" })} · {formatDurationMs(run.latencyMs)} · {run.source}</span>
                                 {run.error && <div className="text-danger mt-0.5">{run.error}</div>}
                               </div>
                             </div>

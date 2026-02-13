@@ -18,6 +18,7 @@ import {
   type PermissionStatus,
   type PluginInfo,
 } from "../api-client";
+import { StatusBadge } from "./shared/ui-badges";
 
 /** Permission definition for UI rendering. */
 interface PermissionDef {
@@ -101,13 +102,15 @@ const CAPABILITIES: CapabilityDef[] = [
   },
 ];
 
-/** Status badge colors and labels. */
-const STATUS_CONFIG: Record<PermissionStatus, { color: string; label: string }> = {
-  granted: { color: "var(--ok, #16a34a)", label: "Granted" },
-  denied: { color: "var(--danger, #e74c3c)", label: "Denied" },
-  "not-determined": { color: "var(--warning, #f59e0b)", label: "Not Set" },
-  restricted: { color: "var(--muted)", label: "Restricted" },
-  "not-applicable": { color: "var(--muted)", label: "N/A" },
+const PERMISSION_BADGE_LABELS: Record<
+  PermissionStatus,
+  { tone: "success" | "danger" | "warning" | "muted"; label: string }
+> = {
+  granted: { tone: "success", label: "Granted" },
+  denied: { tone: "danger", label: "Denied" },
+  "not-determined": { tone: "warning", label: "Not Set" },
+  restricted: { tone: "muted", label: "Restricted" },
+  "not-applicable": { tone: "muted", label: "N/A" },
 };
 
 /** Icon mapping for permissions. */
@@ -120,23 +123,6 @@ function PermissionIcon({ icon }: { icon: string }) {
     terminal: "⌨️",
   };
   return <span className="text-base">{icons[icon] || "⚙️"}</span>;
-}
-
-/** Status badge component. */
-function StatusBadge({ status }: { status: PermissionStatus }) {
-  const config = STATUS_CONFIG[status];
-  return (
-    <span
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
-      style={{ background: `${config.color}20`, color: config.color }}
-    >
-      <span
-        className="w-1.5 h-1.5 rounded-full"
-        style={{ background: config.color }}
-      />
-      {config.label}
-    </span>
-  );
 }
 
 /** Individual permission row. */
@@ -167,7 +153,12 @@ function PermissionRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="font-semibold text-[13px]">{def.name}</span>
-          <StatusBadge status={status} />
+          <StatusBadge
+            label={PERMISSION_BADGE_LABELS[status].label}
+            tone={PERMISSION_BADGE_LABELS[status].tone}
+            withDot
+            className="rounded-full font-semibold"
+          />
         </div>
         <div className="text-[11px] text-[var(--muted)] mt-0.5 truncate">
           {def.description}

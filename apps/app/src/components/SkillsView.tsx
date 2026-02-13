@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useApp } from "../AppContext";
 import { client } from "../api-client";
 import type { SkillInfo, SkillMarketplaceResult, SkillScanReportSummary } from "../api-client";
+import { StatusBadge } from "./shared/ui-badges";
 
 /* ── Shared style constants ─────────────────────────────────────────── */
 
@@ -50,49 +51,6 @@ function Toggle({
         }`}
       />
     </button>
-  );
-}
-
-/* ── Status Badge ───────────────────────────────────────────────────── */
-
-function StatusBadge({ status, enabled }: { status: SkillInfo["scanStatus"]; enabled: boolean }) {
-  if (status === "blocked") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase bg-[#e74c3c]/15 text-[#e74c3c] rounded-sm">
-        <span className="w-1.5 h-1.5 rounded-full bg-[#e74c3c]" />
-        Blocked
-      </span>
-    );
-  }
-  if (status === "critical") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase bg-[#e74c3c]/15 text-[#e74c3c] rounded-sm">
-        <span className="w-1.5 h-1.5 rounded-full bg-[#e74c3c]" />
-        Critical
-      </span>
-    );
-  }
-  if (status === "warning") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase bg-[#f39c12]/15 text-[#f39c12] rounded-sm">
-        <span className="w-1.5 h-1.5 rounded-full bg-[#f39c12]" />
-        Warning
-      </span>
-    );
-  }
-  if (enabled) {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase bg-[var(--ok,#16a34a)]/15 text-[var(--ok,#16a34a)] rounded-sm">
-        <span className="w-1.5 h-1.5 rounded-full bg-[var(--ok,#16a34a)]" />
-        Active
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase bg-[var(--border)]/30 text-[var(--muted)] rounded-sm">
-      <span className="w-1.5 h-1.5 rounded-full bg-[var(--muted)]" />
-      Inactive
-    </span>
   );
 }
 
@@ -137,12 +95,32 @@ function SkillCard({
       }`}
       data-skill-id={skill.id}
     >
-      {/* Main content area */}
-      <div className="p-4">
-        {/* Top row: badge + toggle */}
-        <div className="flex items-center justify-between mb-2.5">
-          <StatusBadge status={skill.scanStatus} enabled={skill.enabled} />
-          {!isBlocked && !isQuarantined && (
+        {/* Main content area */}
+        <div className="p-4">
+          {/* Top row: badge + toggle */}
+          <div className="flex items-center justify-between mb-2.5">
+            <StatusBadge
+              label={
+                skill.scanStatus === "blocked" || skill.scanStatus === "critical"
+                  ? "Blocked"
+                  : skill.scanStatus === "warning"
+                    ? "Warning"
+                    : skill.enabled
+                      ? "Active"
+                      : "Inactive"
+              }
+              tone={
+                skill.scanStatus === "blocked" || skill.scanStatus === "critical" || skill.scanStatus === "warning"
+                  ? skill.scanStatus === "warning"
+                    ? "warning"
+                    : "danger"
+                  : skill.enabled
+                    ? "success"
+                    : "muted"
+              }
+              withDot
+            />
+            {!isBlocked && !isQuarantined && (
             <Toggle
               checked={skill.enabled}
               disabled={skillToggleAction === skill.id}
