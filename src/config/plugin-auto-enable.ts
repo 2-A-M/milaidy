@@ -116,15 +116,24 @@ function isConnectorConfigured(
     case "imessage":
       return Boolean(config.cliPath);
     case "whatsapp":
-      // Check for direct authDir/sessionPath or accounts with authDir
+      // Check for Baileys-style auth (QR code)
       if (config.authState || config.sessionPath || config.authDir) {
         return true;
       }
-      // Check if any account is configured with authDir
+      // Check for Cloud API credentials
+      if (config.accessToken && config.phoneNumberId) {
+        return true;
+      }
+      // Check if any account is configured with authDir or Cloud API
       if (config.accounts && typeof config.accounts === "object") {
         const accounts = config.accounts as Record<string, unknown>;
         return Object.values(accounts).some(
-          (acc) => acc && typeof acc === "object" && (acc as Record<string, unknown>).authDir
+          (acc) => {
+            if (!acc || typeof acc !== "object") return false;
+            const account = acc as Record<string, unknown>;
+            // Baileys auth or Cloud API
+            return account.authDir || (account.accessToken && account.phoneNumberId);
+          }
         );
       }
       return false;

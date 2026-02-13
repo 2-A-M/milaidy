@@ -881,6 +881,16 @@ export const WhatsAppAccountSchema = z
     messagePrefix: z.string().optional(),
     /** Override auth directory for this WhatsApp account (Baileys multi-file auth state). */
     authDir: z.string().optional(),
+    /** WhatsApp Cloud API access token */
+    accessToken: z.string().optional(),
+    /** WhatsApp business phone number ID (Cloud API) */
+    phoneNumberId: z.string().optional(),
+    /** Webhook verification token (Cloud API) */
+    webhookVerifyToken: z.string().optional(),
+    /** WhatsApp business account ID (Cloud API) */
+    businessAccountId: z.string().optional(),
+    /** WhatsApp Cloud API version (e.g., "v17.0") */
+    apiVersion: z.string().optional(),
     dmPolicy: DmPolicySchema.optional().default("pairing"),
     selfChatMode: z.boolean().optional(),
     allowFrom: z.array(z.string()).optional(),
@@ -947,6 +957,16 @@ export const WhatsAppConfigSchema = z
     markdown: MarkdownConfigSchema,
     configWrites: z.boolean().optional(),
     sendReadReceipts: z.boolean().optional(),
+    /** WhatsApp Cloud API access token */
+    accessToken: z.string().optional(),
+    /** WhatsApp business phone number ID (Cloud API) */
+    phoneNumberId: z.string().optional(),
+    /** Webhook verification token (Cloud API) */
+    webhookVerifyToken: z.string().optional(),
+    /** WhatsApp business account ID (Cloud API) */
+    businessAccountId: z.string().optional(),
+    /** WhatsApp Cloud API version (e.g., "v17.0") */
+    apiVersion: z.string().optional(),
     dmPolicy: DmPolicySchema.optional().default("pairing"),
     messagePrefix: z.string().optional(),
     selfChatMode: z.boolean().optional(),

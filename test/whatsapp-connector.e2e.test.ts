@@ -485,4 +485,73 @@ describe("WhatsApp Connector - Integration", () => {
     // Should not auto-enable when explicitly disabled
     expect(result.config.plugins?.allow?.includes("whatsapp")).toBe(false);
   });
+
+  it("auto-enables when Cloud API credentials are configured", async () => {
+    const { applyPluginAutoEnable } = await import("../src/config/plugin-auto-enable.js");
+
+    const result = applyPluginAutoEnable({
+      config: {
+        connectors: {
+          whatsapp: {
+            accessToken: "EAABsBCS0k...",
+            phoneNumberId: "1234567890",
+          },
+        },
+      },
+      env: {},
+    });
+
+    expect(result.config.plugins?.allow).toContain("whatsapp");
+    expect(result.changes.length).toBeGreaterThan(0);
+    const whatsappChange = result.changes.find(c => c.includes("whatsapp"));
+    expect(whatsappChange).toBeDefined();
+  });
+
+  it("auto-enables with Cloud API in multi-account setup", async () => {
+    const { applyPluginAutoEnable } = await import("../src/config/plugin-auto-enable.js");
+
+    const result = applyPluginAutoEnable({
+      config: {
+        connectors: {
+          whatsapp: {
+            accounts: {
+              "business-api": {
+                accessToken: "EAABsBCS0k...",
+                phoneNumberId: "1234567890",
+              },
+            },
+          },
+        },
+      },
+      env: {},
+    });
+
+    expect(result.config.plugins?.allow).toContain("whatsapp");
+  });
+
+  it("supports hybrid Baileys and Cloud API configuration", async () => {
+    const { applyPluginAutoEnable } = await import("../src/config/plugin-auto-enable.js");
+
+    const result = applyPluginAutoEnable({
+      config: {
+        connectors: {
+          whatsapp: {
+            accounts: {
+              "qr-based": {
+                authDir: "./auth/whatsapp-baileys",
+              },
+              "cloud-api": {
+                accessToken: "EAABsBCS0k...",
+                phoneNumberId: "1234567890",
+              },
+            },
+          },
+        },
+      },
+      env: {},
+    });
+
+    expect(result.config.plugins?.allow).toContain("whatsapp");
+    expect(result.changes.length).toBeGreaterThan(0);
+  });
 });

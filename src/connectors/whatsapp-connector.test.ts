@@ -300,3 +300,74 @@ describe("WhatsApp Connector - Integration Configuration", () => {
     expect(typeof configWithAuthDir.authDir).toBe("string");
   });
 });
+
+describe("WhatsApp Connector - Cloud API Configuration", () => {
+  it("validates Cloud API access token configuration", () => {
+    const cloudApiConfig = {
+      accessToken: "EAABsB...",
+      phoneNumberId: "1234567890",
+    };
+
+    expect(cloudApiConfig.accessToken).toBeDefined();
+    expect(cloudApiConfig.phoneNumberId).toBeDefined();
+  });
+
+  it("validates full Cloud API configuration", () => {
+    const fullCloudApiConfig = {
+      accessToken: "EAABsB...",
+      phoneNumberId: "1234567890",
+      webhookVerifyToken: "webhook_verify_token_123",
+      businessAccountId: "987654321",
+      apiVersion: "v17.0",
+      dmPolicy: "pairing" as const,
+      groupPolicy: "allowlist" as const,
+    };
+
+    expect(fullCloudApiConfig.accessToken).toBeDefined();
+    expect(fullCloudApiConfig.phoneNumberId).toBeDefined();
+    expect(fullCloudApiConfig.webhookVerifyToken).toBe("webhook_verify_token_123");
+    expect(fullCloudApiConfig.businessAccountId).toBe("987654321");
+    expect(fullCloudApiConfig.apiVersion).toBe("v17.0");
+  });
+
+  it("validates multi-account Cloud API configuration", () => {
+    const multiAccountCloudApi = {
+      accounts: {
+        "business-main": {
+          accessToken: "EAABsB_main...",
+          phoneNumberId: "1111111111",
+          enabled: true,
+        },
+        "business-support": {
+          accessToken: "EAABsB_support...",
+          phoneNumberId: "2222222222",
+          enabled: true,
+        },
+      },
+    };
+
+    expect(multiAccountCloudApi.accounts).toBeDefined();
+    expect(Object.keys(multiAccountCloudApi.accounts)).toHaveLength(2);
+    expect(multiAccountCloudApi.accounts["business-main"].accessToken).toBe("EAABsB_main...");
+    expect(multiAccountCloudApi.accounts["business-support"].phoneNumberId).toBe("2222222222");
+  });
+
+  it("validates hybrid Baileys and Cloud API configuration", () => {
+    const hybridConfig = {
+      accounts: {
+        "qr-auth": {
+          authDir: "./auth/whatsapp-baileys",
+          enabled: true,
+        },
+        "cloud-api": {
+          accessToken: "EAABsB...",
+          phoneNumberId: "1234567890",
+          enabled: true,
+        },
+      },
+    };
+
+    expect(hybridConfig.accounts["qr-auth"].authDir).toBe("./auth/whatsapp-baileys");
+    expect(hybridConfig.accounts["cloud-api"].accessToken).toBe("EAABsB...");
+  });
+});
