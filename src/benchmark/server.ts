@@ -27,14 +27,13 @@ import {
   stringToUuid,
   type UUID,
 } from "@elizaos/core";
-
+import { readRequestBody, writeJsonResponseSafe } from "../api/http-helpers.js";
 import { loadMilaidyConfig, type MilaidyConfig } from "../config/config.js";
 import {
   ensureAgentWorkspace,
   resolveDefaultAgentWorkspaceDir,
 } from "../providers/workspace.js";
 import { createMilaidyPlugin } from "../runtime/milaidy-plugin.js";
-
 import {
   BENCHMARK_MESSAGE_TEMPLATE,
   type BenchmarkContext,
@@ -254,25 +253,18 @@ async function createBenchmarkRuntime(
 
 const MAX_BODY_BYTES = 10 * 1024 * 1024; // 10 MB
 
-function readBody(
+async function readBody(
   req: http.IncomingMessage,
   maxBytes = MAX_BODY_BYTES,
 ): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let totalBytes = 0;
-    req.on("data", (chunk: Buffer) => {
-      totalBytes += chunk.length;
-      if (totalBytes > maxBytes) {
-        req.destroy();
-        reject(new Error(`Request body exceeds ${maxBytes} bytes`));
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
-    req.on("error", reject);
+  const body = await readRequestBody(req, {
+    maxBytes,
+    tooLargeMessage: `Request body exceeds ${maxBytes} bytes`,
+    destroyOnTooLarge: true,
+    returnNullOnError: false,
+    returnNullOnTooLarge: false,
   });
+  return body ?? "";
 }
 
 function extractTag(text: string, tag: string): string | undefined {
@@ -286,13 +278,8 @@ function jsonResponse(
   status: number,
   body: object,
 ): void {
-  const json = JSON.stringify(body);
-  res.writeHead(status, {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-    "Content-Length": Buffer.byteLength(json),
-  });
-  res.end(json);
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  writeJsonResponseSafe(res, body, status);
 }
 
 // ---------------------------------------------------------------------------

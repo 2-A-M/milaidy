@@ -81,6 +81,13 @@ import {
 } from "./compat-utils.js";
 import { handleDatabaseRoute } from "./database.js";
 import { DropService } from "./drop-service.js";
+import {
+  readJsonBody as parseJsonBody,
+  readRequestBody,
+  readRequestBodyBuffer,
+  sendJson,
+  sendJsonError,
+} from "./http-helpers.js";
 import { handleKnowledgeRoutes } from "./knowledge-routes.js";
 import {
   type PluginParamInfo,
@@ -1539,53 +1546,6 @@ const MAX_IMPORT_BYTES = 512 * 1_048_576; // 512 MB for agent imports
 const AGENT_TRANSFER_MIN_PASSWORD_LENGTH = 4;
 const AGENT_TRANSFER_MAX_PASSWORD_LENGTH = 1024;
 
-function readBody(req: http.IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let totalBytes = 0;
-    let tooLarge = false;
-    let settled = false;
-    const cleanup = () => {
-      req.off("data", onData);
-      req.off("end", onEnd);
-      req.off("error", onError);
-    };
-    const onData = (c: Buffer) => {
-      if (settled) return;
-      totalBytes += c.length;
-      if (totalBytes > MAX_BODY_BYTES) {
-        // Keep draining the stream, but stop buffering to avoid memory growth.
-        tooLarge = true;
-        return;
-      }
-      chunks.push(c);
-    };
-    const onEnd = () => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      if (tooLarge) {
-        reject(
-          new Error(
-            `Request body exceeds maximum size (${MAX_BODY_BYTES} bytes)`,
-          ),
-        );
-        return;
-      }
-      resolve(Buffer.concat(chunks).toString("utf-8"));
-    };
-    const onError = (err: Error) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(err);
-    };
-    req.on("data", onData);
-    req.on("end", onEnd);
-    req.on("error", onError);
-  });
-}
-
 /**
  * Read raw binary request body with a configurable size limit.
  * Used for agent import file uploads.
@@ -1594,47 +1554,16 @@ function readRawBody(
   req: http.IncomingMessage,
   maxBytes: number,
 ): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let totalBytes = 0;
-    let tooLarge = false;
-    let settled = false;
-    const cleanup = () => {
-      req.off("data", onData);
-      req.off("end", onEnd);
-      req.off("error", onError);
-    };
-    const onData = (c: Buffer) => {
-      if (settled) return;
-      totalBytes += c.length;
-      if (totalBytes > maxBytes) {
-        tooLarge = true;
-        return;
-      }
-      chunks.push(c);
-    };
-    const onEnd = () => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      if (tooLarge) {
-        reject(
-          new Error(`Request body exceeds maximum size (${maxBytes} bytes)`),
+  return readRequestBodyBuffer(req, { maxBytes }).then(
+    (body: Buffer | null) => {
+      if (body === null) {
+        throw new Error(
+          `Request body exceeds maximum size (${maxBytes} bytes)`,
         );
-        return;
       }
-      resolve(Buffer.concat(chunks));
-    };
-    const onError = (err: Error) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(err);
-    };
-    req.on("data", onData);
-    req.on("end", onEnd);
-    req.on("error", onError);
-  });
+      return body;
+    },
+  );
 }
 
 /**
@@ -1645,36 +1574,22 @@ async function readJsonBody<T = Record<string, unknown>>(
   req: http.IncomingMessage,
   res: http.ServerResponse,
 ): Promise<T | null> {
-  let raw: string;
-  try {
-    raw = await readBody(req);
-  } catch (err) {
-    const msg =
-      err instanceof Error ? err.message : "Failed to read request body";
-    error(res, msg, 413);
-    return null;
-  }
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
-      error(res, "Request body must be a JSON object", 400);
-      return null;
-    }
-    return parsed as T;
-  } catch {
-    error(res, "Invalid JSON in request body", 400);
-    return null;
-  }
+  return parseJsonBody(req, res, {
+    maxBytes: MAX_BODY_BYTES,
+  });
 }
 
+const readBody = (req: http.IncomingMessage): Promise<string> =>
+  readRequestBody(req, { maxBytes: MAX_BODY_BYTES }).then(
+    (value) => value ?? "",
+  );
+
 function json(res: http.ServerResponse, data: unknown, status = 200): void {
-  res.statusCode = status;
-  res.setHeader("Content-Type", "application/json");
-  res.end(JSON.stringify(data));
+  sendJson(res, data, status);
 }
 
 function error(res: http.ServerResponse, message: string, status = 400): void {
-  json(res, { error: message }, status);
+  sendJsonError(res, message, status);
 }
 
 // ---------------------------------------------------------------------------

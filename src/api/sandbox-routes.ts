@@ -7,6 +7,12 @@ import { platform, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RemoteSigningService } from "../services/remote-signing-service.js";
 import type { SandboxManager } from "../services/sandbox-manager.js";
+import type { SigningRequest } from "../services/signing-policy.js";
+import {
+  readJsonBody as parseJsonBody,
+  readRequestBody,
+  sendJson as sendJsonResponse,
+} from "./http-helpers.js";
 
 interface SandboxRouteState {
   sandboxManager: SandboxManager | null;
@@ -116,19 +122,12 @@ export async function handleSandboxRoute(
 
   // ── POST /api/sandbox/exec ──────────────────────────────────────────
   if (method === "POST" && pathname === "/api/sandbox/exec") {
-    const body = await readBody(req);
-    if (!body) {
-      sendJson(res, 400, { error: "Missing request body" });
-      return true;
-    }
-
-    let parsed: { command?: string; workdir?: string; timeoutMs?: number };
-    try {
-      parsed = JSON.parse(body);
-    } catch {
-      sendJson(res, 400, { error: "Invalid JSON body" });
-      return true;
-    }
+    const parsed = await readJsonBody<{
+      command?: string;
+      workdir?: string;
+      timeoutMs?: number;
+    }>(req, res);
+    if (!parsed) return true;
 
     if (!parsed.command || typeof parsed.command !== "string") {
       sendJson(res, 400, { error: "Missing 'command' field" });
@@ -174,15 +173,24 @@ export async function handleSandboxRoute(
   // ── POST /api/sandbox/screen/screenshot ─────────────────────────────
   // Returns base64-encoded screenshot for easy consumption by agents
   if (method === "POST" && pathname === "/api/sandbox/screen/screenshot") {
-    const body = await readBody(req);
+    const rawBody = await readBody(req);
+    if (!rawBody || !rawBody.trim()) {
+      sendJson(res, 200, {
+        format: "png",
+        encoding: "base64",
+        width: null,
+        height: null,
+        data: captureScreenshot().toString("base64"),
+      });
+      return true;
+    }
+
     let regionInput: unknown;
-    if (body?.trim()) {
-      try {
-        regionInput = JSON.parse(body);
-      } catch {
-        sendJson(res, 400, { error: "Invalid JSON body" });
-        return true;
-      }
+    try {
+      regionInput = JSON.parse(rawBody);
+    } catch {
+      sendJson(res, 400, { error: "Invalid JSON body" });
+      return true;
     }
 
     const region = resolveScreenshotRegion(regionInput);
@@ -251,19 +259,8 @@ export async function handleSandboxRoute(
 
   // ── POST /api/sandbox/audio/play ────────────────────────────────────
   if (method === "POST" && pathname === "/api/sandbox/audio/play") {
-    const body = await readBody(req);
-    if (!body) {
-      sendJson(res, 400, { error: "Missing request body" });
-      return true;
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(body);
-    } catch {
-      sendJson(res, 400, { error: "Invalid JSON body" });
-      return true;
-    }
+    const parsed = await readJsonBody(req, res);
+    if (!parsed) return true;
 
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       sendJson(res, 400, { error: "Body must be a JSON object" });
@@ -295,19 +292,8 @@ export async function handleSandboxRoute(
 
   // ── POST /api/sandbox/computer/click ────────────────────────────────
   if (method === "POST" && pathname === "/api/sandbox/computer/click") {
-    const body = await readBody(req);
-    if (!body) {
-      sendJson(res, 400, { error: "Missing request body" });
-      return true;
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(body);
-    } catch {
-      sendJson(res, 400, { error: "Invalid JSON body" });
-      return true;
-    }
+    const parsed = await readJsonBody(req, res);
+    if (!parsed) return true;
 
     const clickPayload = resolveClickPayload(parsed);
     if (clickPayload.error) {
@@ -329,19 +315,8 @@ export async function handleSandboxRoute(
 
   // ── POST /api/sandbox/computer/type ─────────────────────────────────
   if (method === "POST" && pathname === "/api/sandbox/computer/type") {
-    const body = await readBody(req);
-    if (!body) {
-      sendJson(res, 400, { error: "Missing request body" });
-      return true;
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(body);
-    } catch {
-      sendJson(res, 400, { error: "Invalid JSON body" });
-      return true;
-    }
+    const parsed = await readJsonBody(req, res);
+    if (!parsed) return true;
 
     const typePayload = resolveTypePayload(parsed);
     if (typePayload.error) {
@@ -363,19 +338,8 @@ export async function handleSandboxRoute(
 
   // ── POST /api/sandbox/computer/keypress ─────────────────────────────
   if (method === "POST" && pathname === "/api/sandbox/computer/keypress") {
-    const body = await readBody(req);
-    if (!body) {
-      sendJson(res, 400, { error: "Missing request body" });
-      return true;
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(body);
-    } catch {
-      sendJson(res, 400, { error: "Invalid JSON body" });
-      return true;
-    }
+    const parsed = await readJsonBody(req, res);
+    if (!parsed) return true;
 
     const keypressPayload = resolveKeypressPayload(parsed);
     if (keypressPayload.error) {
@@ -403,14 +367,10 @@ export async function handleSandboxRoute(
       sendJson(res, 503, { error: "Signing service not configured" });
       return true;
     }
-    const body = await readBody(req);
-    if (!body) {
-      sendJson(res, 400, { error: "Missing body" });
-      return true;
-    }
+    const body = await readJsonBody<unknown>(req, res);
+    if (body === null) return true;
     try {
-      const request = JSON.parse(body);
-      const result = await signer.submitSigningRequest(request);
+      const result = await signer.submitSigningRequest(body as SigningRequest);
       sendJson(res, result.success ? 200 : 403, result);
     } catch (err) {
       sendJson(res, 400, {
@@ -426,13 +386,10 @@ export async function handleSandboxRoute(
       sendJson(res, 503, { error: "Signing service not configured" });
       return true;
     }
-    const body = await readBody(req);
-    if (!body) {
-      sendJson(res, 400, { error: "Missing body" });
-      return true;
-    }
+    const body = await readJsonBody<{ requestId?: string }>(req, res);
+    if (!body) return true;
     try {
-      const { requestId } = JSON.parse(body) as { requestId: string };
+      const { requestId } = body as { requestId: string };
       const result = await signer.approveRequest(requestId);
       sendJson(res, result.success ? 200 : 403, result);
     } catch (err) {
@@ -447,13 +404,10 @@ export async function handleSandboxRoute(
       sendJson(res, 503, { error: "Signing service not configured" });
       return true;
     }
-    const body = await readBody(req);
-    if (!body) {
-      sendJson(res, 400, { error: "Missing body" });
-      return true;
-    }
+    const body = await readJsonBody<{ requestId?: string }>(req, res);
+    if (!body) return true;
     try {
-      const { requestId } = JSON.parse(body) as { requestId: string };
+      const { requestId } = body as { requestId: string };
       const rejected = signer.rejectRequest(requestId);
       sendJson(res, 200, { rejected });
     } catch (err) {
@@ -1375,32 +1329,28 @@ function commandExists(cmd: string): boolean {
 }
 
 function sendJson(res: ServerResponse, status: number, data: object): void {
-  res.writeHead(status, { "Content-Type": "application/json" });
-  res.end(JSON.stringify(data));
+  sendJsonResponse(res, data, status);
 }
 
 function readBody(req: IncomingMessage): Promise<string | null> {
-  return new Promise((resolve) => {
-    const chunks: Buffer[] = [];
-    let totalBytes = 0;
-    const MAX_BODY = 10 * 1024 * 1024; // 10 MB for audio data
+  return readRequestBody(req, {
+    maxBytes: 10 * 1024 * 1024,
+    returnNullOnTooLarge: true,
+    returnNullOnError: true,
+    destroyOnTooLarge: true,
+  });
+}
 
-    req.on("data", (chunk: Buffer) => {
-      totalBytes += chunk.length;
-      if (totalBytes > MAX_BODY) {
-        resolve(null);
-        req.destroy();
-        return;
-      }
-      chunks.push(chunk);
-    });
-
-    req.on("end", () => {
-      resolve(Buffer.concat(chunks).toString("utf-8"));
-    });
-
-    req.on("error", () => {
-      resolve(null);
-    });
+function readJsonBody<T = unknown>(
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<T | null> {
+  return parseJsonBody(req, res, {
+    maxBytes: 10 * 1024 * 1024,
+    requireObject: false,
+    readErrorStatus: 400,
+    parseErrorStatus: 400,
+    readErrorMessage: "Missing request body",
+    parseErrorMessage: "Invalid JSON in request body",
   });
 }

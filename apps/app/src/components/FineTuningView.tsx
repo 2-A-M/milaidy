@@ -12,6 +12,10 @@ import {
   type TrainingTrajectoryDetail,
   type TrainingTrajectoryList,
 } from "../api-client";
+import {
+  parsePositiveFloat,
+  parsePositiveInteger,
+} from "../../../src/utils/number-parsing.js";
 
 const TRAINING_EVENT_KINDS = new Set<TrainingStreamEvent["kind"]>([
   "job_started",
@@ -24,23 +28,6 @@ const TRAINING_EVENT_KINDS = new Set<TrainingStreamEvent["kind"]>([
   "model_activated",
   "model_imported",
 ]);
-
-function parsePositiveInt(value: string): number | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  if (!/^\d+$/.test(trimmed)) return undefined;
-  const parsed = Number(trimmed);
-  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
-  return parsed;
-}
-
-function parsePositiveFloat(value: string): number | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  const parsed = Number(trimmed);
-  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
-  return parsed;
-}
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -231,8 +218,8 @@ export function FineTuningView() {
   const handleBuildDataset = useCallback(async () => {
     setDatasetBuilding(true);
     try {
-      const limit = parsePositiveInt(buildLimit);
-      const minLlmCallsPerTrajectory = parsePositiveInt(buildMinCalls);
+      const limit = parsePositiveInteger(buildLimit);
+      const minLlmCallsPerTrajectory = parsePositiveInteger(buildMinCalls);
       const request: { limit?: number; minLlmCallsPerTrajectory?: number } = {};
       if (typeof limit === "number") request.limit = limit;
       if (typeof minLlmCallsPerTrajectory === "number") {
@@ -265,8 +252,8 @@ export function FineTuningView() {
         datasetId: selectedDatasetId || undefined,
         backend: startBackend,
         model: startModel.trim() || undefined,
-        iterations: parsePositiveInt(startIterations),
-        batchSize: parsePositiveInt(startBatchSize),
+        iterations: parsePositiveInteger(startIterations),
+        batchSize: parsePositiveInteger(startBatchSize),
         learningRate: parsePositiveFloat(startLearningRate),
       };
       const result = await client.startTrainingJob(options);

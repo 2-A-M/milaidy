@@ -1,5 +1,6 @@
 import type { AgentRuntime } from "@elizaos/core";
 import type { TrainingService } from "../services/training-service.js";
+import { parsePositiveInteger } from "../utils/number-parsing.js";
 import type { RouteHelpers, RouteRequestContext } from "./route-helpers.js";
 
 export type TrainingRouteHelpers = RouteHelpers;
@@ -7,13 +8,6 @@ export type TrainingRouteHelpers = RouteHelpers;
 export interface TrainingRouteContext extends RouteRequestContext {
   runtime: AgentRuntime | null;
   trainingService: TrainingService;
-}
-
-function parsePositiveInt(value: string | null, fallback: number): number {
-  if (!value) return fallback;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(1, Math.floor(parsed));
 }
 
 export async function handleTrainingRoutes(
@@ -49,7 +43,7 @@ export async function handleTrainingRoutes(
       req.url ?? "/",
       `http://${req.headers.host ?? "localhost"}`,
     );
-    const limit = parsePositiveInt(url.searchParams.get("limit"), 100);
+    const limit = parsePositiveInteger(url.searchParams.get("limit"), 100);
     const offset = Math.max(0, Number(url.searchParams.get("offset") ?? "0"));
     const result = await trainingService.listTrajectories({ limit, offset });
     json(res, result);

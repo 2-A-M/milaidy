@@ -60,9 +60,15 @@ export class CloudManager {
     this.setStatus("connecting");
     this.activeAgentId = agentId;
 
+    let agent: Awaited<ReturnType<ElizaCloudClient["getAgent"]>>;
     try {
       await this.client.provision(agentId);
-      const agent = await this.client.getAgent(agentId);
+      agent = await this.client.getAgent(agentId);
+    } catch (err) {
+      this.activeAgentId = null;
+      this.setStatus("error");
+      throw err;
+    }
 
       this.proxy = new CloudRuntimeProxy(this.client, agentId, agent.agentName);
 
