@@ -116,7 +116,24 @@ function isConnectorConfigured(
     case "imessage":
       return Boolean(config.cliPath);
     case "whatsapp":
-      return Boolean(config.authState || config.sessionPath);
+      // Check for direct authDir/sessionPath or accounts with authDir
+      if (config.authState || config.sessionPath || config.authDir) {
+        return true;
+      }
+      // Check if any account is configured with authDir
+      if (config.accounts && typeof config.accounts === "object") {
+        const accounts = config.accounts as Record<string, unknown>;
+        return Object.values(accounts).some(
+          (acc) => acc && typeof acc === "object" && (acc as Record<string, unknown>).authDir
+        );
+      }
+      return false;
+    case "twitter":
+      // Twitter uses OAuth 1.0a credentials or OAuth 2.0 client ID
+      return Boolean(
+        (config.apiKey && config.apiSecretKey && config.accessToken && config.accessTokenSecret) ||
+        (config.clientId && config.redirectUri)
+      );
     default:
       return false;
   }
