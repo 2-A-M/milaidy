@@ -718,32 +718,15 @@ export class CanvasWeb extends WebPlugin {
   }
 
   async eval(options: EvalOptions): Promise<EvalResult> {
-    // Try iframe first
-    if (this.webViewIframe?.contentWindow) {
-      try {
-        // Test same-origin access by touching the document
-        void this.webViewIframe.contentDocument;
-        // Same-origin: evaluate in iframe's global scope
-        const rawResult = String((this.webViewIframe.contentWindow as Window & { eval: (s: string) => unknown }).eval(options.script) ?? "");
-        return { result: rawResult };
-      } catch {
-        // Cross-origin: fall back to postMessage protocol
-        return this.evalViaPostMessage(this.webViewIframe.contentWindow, options.script);
-      }
+    const target =
+      this.webViewIframe?.contentWindow ??
+      (this.webViewPopup && !this.webViewPopup.closed ? this.webViewPopup : null);
+
+    if (!target) {
+      throw new Error("No web view active. Call navigate() first.");
     }
 
-    // Try popup window
-    if (this.webViewPopup && !this.webViewPopup.closed) {
-      try {
-        void this.webViewPopup.document;
-        const rawResult = String((this.webViewPopup as Window & { eval: (s: string) => unknown }).eval(options.script) ?? "");
-        return { result: rawResult };
-      } catch {
-        return this.evalViaPostMessage(this.webViewPopup, options.script);
-      }
-    }
-
-    throw new Error("No web view active. Call navigate() first.");
+    return this.evalViaPostMessage(target, options.script);
   }
 
   async snapshot(options?: SnapshotOptions): Promise<SnapshotResult> {

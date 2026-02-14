@@ -123,6 +123,29 @@ function writeEmbeddingMeta(meta: EmbeddingMeta): void {
   }
 }
 
+function isValidGgufFile(filePath: string): boolean {
+  try {
+    const fd = fs.openSync(filePath, "r");
+    try {
+      const magic = Buffer.alloc(4);
+      const bytesRead = fs.readSync(fd, magic, 0, magic.length, 0);
+      return bytesRead === 4 && magic.toString("ascii", 0, 4) === "GGUF";
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return false;
+  }
+}
+
+function describeInvalidGguf(filePath: string, bytesRead: number): string {
+  return (
+    `[milaidy] Invalid embedding model file: ${filePath} ` +
+    `(expected GGUF magic header, read ${bytesRead} bytes). ` +
+    "Remove the file and restart Milaidy, or set embedding.model to a valid GGUF file."
+  );
+}
+
 /**
  * Check if dimensions have changed and log a warning if so.
  * Updates the stored metadata to current values.
@@ -246,9 +269,30 @@ async function ensureModel(
   filename: string,
 ): Promise<string> {
   const modelPath = path.join(modelsDir, filename);
-  if (fs.existsSync(modelPath)) return modelPath;
 
   const log = getLogger();
+
+  if (fs.existsSync(modelPath)) {
+    if (isValidGgufFile(modelPath)) return modelPath;
+
+    const bytesRead = (() => {
+      try {
+        const fd = fs.openSync(modelPath, "r");
+        try {
+          const magic = Buffer.alloc(4);
+          return fs.readSync(fd, magic, 0, magic.length, 0);
+        } finally {
+          fs.closeSync(fd);
+        }
+      } catch {
+        return 0;
+      }
+    })();
+
+    log.warn(describeInvalidGguf(modelPath, bytesRead));
+    safeUnlink(modelPath);
+  }
+
   fs.mkdirSync(modelsDir, { recursive: true });
 
   const url = `https://huggingface.co/${repo}/resolve/main/${filename}`;
@@ -257,6 +301,27 @@ async function ensureModel(
   );
 
   await downloadFile(url, modelPath);
+
+  if (!isValidGgufFile(modelPath)) {
+    const bytesRead = (() => {
+      try {
+        const fd = fs.openSync(modelPath, "r");
+        try {
+          const magic = Buffer.alloc(4);
+          return fs.readSync(fd, magic, 0, magic.length, 0);
+        } finally {
+          fs.closeSync(fd);
+        }
+      } catch {
+        return 0;
+      }
+    })();
+
+    safeUnlink(modelPath);
+    throw new Error(
+      `${describeInvalidGguf(modelPath, bytesRead)} Download may have produced an HTML/error response instead of GGUF.`,
+    );
+  }
   log.info(`[milaidy] Embedding model downloaded: ${modelPath}`);
   return modelPath;
 }
@@ -311,13 +376,13 @@ export class MilaidyEmbeddingManager {
     // re-initializing — prevents using resources mid-dispose.
     if (this.unloading) await this.unloading;
 
-    await this.ensureInitialized();
-
     // Guard against idle unload racing with an active embedding call.
     this.inFlightCount += 1;
     this.lastUsedAt = Date.now();
 
     try {
+      await this.ensureInitialized();
+
       if (!this.embeddingContext) {
         throw new Error("[milaidy] Embedding context not available after init");
       }

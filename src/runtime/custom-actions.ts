@@ -42,6 +42,37 @@ const API_PORT = process.env.API_PORT || process.env.SERVER_PORT || "2138";
 /** Valid handler types that we actually support. */
 const VALID_HANDLER_TYPES = new Set(["http", "shell", "code"]);
 
+type VmRunner = {
+  runInNewContext: (
+    code: string,
+    contextObject: Record<string, unknown>,
+    options?: { filename?: string; timeout?: number },
+  ) => unknown;
+};
+
+let vmRunner: VmRunner | null = null;
+
+async function runCodeHandler(
+  code: string,
+  params: Record<string, string>,
+): Promise<unknown> {
+  if (typeof process === "undefined" || !process.versions?.node) {
+    throw new Error("Code actions are only supported in Node runtimes.");
+  }
+
+  if (!vmRunner) {
+    vmRunner = (await import("node:vm")) as VmRunner;
+  }
+
+  const script = `(async () => { ${code} })();`;
+  const context: Record<string, unknown> = { params, fetch };
+  return await vmRunner.runInNewContext(
+    `"use strict"; ${script}`,
+    context,
+    { filename: "milaidy-custom-action.js", timeout: 30_000 },
+  );
+}
+
 /**
  * Shell-escape a value so it can be safely interpolated into a shell command.
  * Wraps in single quotes and escapes any embedded single quotes.
@@ -191,12 +222,7 @@ function buildHandler(
       // desktop app — the owner wrote the code. We restrict the sandbox to
       // only expose `params` and `fetch`; no require/import/process/global.
       return async (params) => {
-        const fn = new Function(
-          "params",
-          "fetch",
-          `"use strict"; return (async () => { ${handler.code} })();`,
-        );
-        const result = await fn(params, fetch);
+        const result = await runCodeHandler(handler.code, params);
         const output = result !== undefined ? String(result) : "Done";
         return { ok: true, output: output.slice(0, 4000) };
       };

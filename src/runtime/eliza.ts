@@ -254,6 +254,25 @@ const OPTIONAL_PLUGIN_MAP: Readonly<Record<string, string>> = {
   x402: "@elizaos/plugin-x402",
 };
 
+/** Plugins that commonly hang the startup sequence in mixed user environments. */
+const STARTUP_SAFE_MODE_SKIP_PLUGINS: ReadonlySet<string> = new Set([
+  "@elizaos/plugin-agent-orchestrator",
+  "@elizaos/plugin-agent-skills",
+  "@elizaos/plugin-plugin-manager",
+  "@elizaos/plugin-trajectory-logger",
+  "@elizaos/plugin-todo",
+]);
+
+/**
+ * App packages and plugin bundles are also skipped during safe startup.
+ * They frequently add long-running init paths that block core service startup.
+ */
+function shouldSkipPluginInSafeMode(pluginName: string): boolean {
+  if (STARTUP_SAFE_MODE_SKIP_PLUGINS.has(pluginName)) return true;
+  return pluginName.startsWith("@elizaos/app-") ||
+    pluginName.startsWith("@milaidy/app-");
+}
+
 function looksLikePlugin(value: unknown): value is Plugin {
   if (!value || typeof value !== "object") return false;
   const obj = value as Record<string, unknown>;
@@ -610,9 +629,16 @@ export function ensureBrowserServerLink(): boolean {
  * Each plugin is loaded inside an error boundary so a single failing plugin
  * cannot crash the entire agent startup.
  */
+interface ResolvePluginOptions {
+  quiet?: boolean;
+  safeMode?: boolean;
+  skipInstalledPlugins?: boolean;
+  skipDropInPlugins?: boolean;
+}
+
 async function resolvePlugins(
   config: MilaidyConfig,
-  opts?: { quiet?: boolean },
+  opts?: ResolvePluginOptions,
 ): Promise<ResolvedPlugin[]> {
   const plugins: ResolvedPlugin[] = [];
   const failedPlugins: Array<{ name: string; error: string }> = [];
@@ -623,19 +649,28 @@ async function resolvePlugins(
   } satisfies ApplyPluginAutoEnableParams);
 
   const pluginsToLoad = collectPluginNames(config);
+  if (opts?.safeMode) {
+    for (const pluginName of [...pluginsToLoad]) {
+      if (shouldSkipPluginInSafeMode(pluginName)) {
+        pluginsToLoad.delete(pluginName);
+      }
+    }
+  }
   const corePluginSet = new Set<string>(CORE_PLUGINS);
 
   // Build a mutable map of install records so we can merge drop-in discoveries
   const installRecords: Record<string, PluginInstallRecord> = {
-    ...(config.plugins?.installs ?? {}),
+    ...(opts?.skipInstalledPlugins ? {} : config.plugins?.installs ?? {}),
   };
 
   // ── Auto-discover drop-in custom plugins ────────────────────────────────
   // Scan well-known dir + any extra dirs from plugins.load.paths (first wins).
-  const scanDirs = [
-    path.join(resolveStateDir(), CUSTOM_PLUGINS_DIRNAME),
-    ...(config.plugins?.load?.paths ?? []).map(resolveUserPath),
-  ];
+  const scanDirs = opts?.skipDropInPlugins
+    ? []
+    : [
+        path.join(resolveStateDir(), CUSTOM_PLUGINS_DIRNAME),
+        ...(config.plugins?.load?.paths ?? []).map(resolveUserPath),
+      ];
   const dropInRecords: Record<string, PluginInstallRecord> = {};
   for (const dir of scanDirs) {
     for (const [name, record] of Object.entries(await scanDropInPlugins(dir))) {
@@ -1801,6 +1836,19 @@ export async function bootElizaRuntime(
 export async function startEliza(
   opts?: StartElizaOptions,
 ): Promise<AgentRuntime | undefined> {
+  return startElizaInternal(opts, {
+    safeMode: false,
+    skipOnboarding: false,
+  });
+}
+
+async function startElizaInternal(
+  opts: StartElizaOptions | undefined,
+  options: {
+    safeMode: boolean;
+    skipOnboarding: boolean;
+  },
+): Promise<AgentRuntime | undefined> {
   // Start buffering logs early so startup messages appear in the UI log viewer
   const { captureEarlyLogs } = await import("../api/early-logs");
   captureEarlyLogs();
@@ -1824,7 +1872,7 @@ export async function startEliza(
   //     In headless mode (GUI) the onboarding is handled by the web UI,
   //     so we skip the interactive CLI prompt and let the runtime start
   //     with defaults.  The GUI will restart the agent after onboarding.
-  if (!opts?.headless) {
+  if (!opts?.headless && !options.skipOnboarding) {
     config = await runFirstTimeSetup(config);
   }
 
@@ -1918,6 +1966,9 @@ export async function startEliza(
   const preOnboarding = opts?.headless && !config.agents;
   const resolvedPlugins = await resolvePlugins(config, {
     quiet: preOnboarding,
+    safeMode: options.safeMode,
+    skipInstalledPlugins: options.safeMode,
+    skipDropInPlugins: options.safeMode,
   });
 
   if (resolvedPlugins.length === 0) {
@@ -2269,83 +2320,107 @@ export async function startEliza(
       `gpu=${embeddingGpuLayers})`,
   );
 
-  // 8. Initialize the runtime (registers remaining plugins, starts services)
-  await runtime.initialize();
-  ensureTrajectoryLoggerEnabled(runtime, "runtime.initialize()");
+  const initializeRuntimeServices = async (): Promise<void> => {
+    // 8. Initialize the runtime (registers remaining plugins, starts services)
+    await runtime.initialize();
+    ensureTrajectoryLoggerEnabled(runtime, "runtime.initialize()");
 
-  // 8b. Wait for AgentSkillsService to finish loading.
-  //     runtime.initialize() resolves the internal initPromise which unblocks
-  //     service registration, but services start asynchronously.  Without this
-  //     explicit await the runtime would be returned to the caller (API server,
-  //     dev-server) before skills are loaded, causing the /api/skills endpoint
-  //     to return an empty list.
-  try {
-    const skillServicePromise = runtime.getServiceLoadPromise(
-      "AGENT_SKILLS_SERVICE",
-    );
-    // Give the service up to 30 s to load (matches the core runtime timeout).
-    const timeout = new Promise<never>((_resolve, reject) => {
-      setTimeout(() => {
-        reject(
-          new Error(
-            "[milaidy] AgentSkillsService timed out waiting to initialise (30 s)",
-          ),
+    // 8b. Wait for AgentSkillsService to finish loading.
+    //     runtime.initialize() resolves the internal initPromise which unblocks
+    //     service registration, but services start asynchronously.  Without this
+    //     explicit await the runtime would be returned to the caller (API server,
+    //     dev-server) before skills are loaded, causing the /api/skills endpoint
+    //     to return an empty list.
+    try {
+      const skillServicePromise = runtime.getServiceLoadPromise(
+        "AGENT_SKILLS_SERVICE",
+      );
+      // Give the service up to 30 s to load (matches the core runtime timeout).
+      const timeout = new Promise<never>((_resolve, reject) => {
+        setTimeout(() => {
+          reject(
+            new Error(
+              "[milaidy] AgentSkillsService timed out waiting to initialise (30 s)",
+            ),
+          );
+        }, 30_000);
+      });
+      await Promise.race([skillServicePromise, timeout]);
+
+      // Log skill-loading summary now that the service is guaranteed ready.
+      const svc = runtime.getService("AGENT_SKILLS_SERVICE") as
+        | {
+            getCatalogStats?: () => {
+              loaded: number;
+              total: number;
+              storageType: string;
+            };
+          }
+        | null
+        | undefined;
+      if (svc?.getCatalogStats) {
+        const stats = svc.getCatalogStats();
+        logger.info(
+          `[milaidy] AgentSkills ready — ${stats.loaded} skills loaded, ` +
+            `${stats.total} in catalog (storage: ${stats.storageType})`,
         );
-      }, 30_000);
-    });
-    await Promise.race([skillServicePromise, timeout]);
+      }
 
-    // Log skill-loading summary now that the service is guaranteed ready.
-    const svc = runtime.getService("AGENT_SKILLS_SERVICE") as
-      | {
-          getCatalogStats?: () => {
-            loaded: number;
-            total: number;
-            storageType: string;
-          };
-        }
-      | null
-      | undefined;
-    if (svc?.getCatalogStats) {
-      const stats = svc.getCatalogStats();
-      logger.info(
-        `[milaidy] AgentSkills ready — ${stats.loaded} skills loaded, ` +
-          `${stats.total} in catalog (storage: ${stats.storageType})`,
+      // Guard against non-string skill.description values.
+      // The bundled YAML parser produces {} for multi-line descriptions, which
+      // crashes findBestLocalMatch / scoreSkillMatch (call .toLowerCase() on it).
+      // Instead of a one-shot sanitize (which misses skills loaded later by
+      // syncCatalog / autoRefresh), we monkey-patch getLoadedSkills to always
+      // return sanitized values.
+      const svcAny = svc as Record<string, unknown> | null | undefined;
+      const origGetLoaded = svcAny?.getLoadedSkills as
+        | ((...args: unknown[]) => Array<Record<string, unknown>>)
+        | undefined;
+      if (origGetLoaded && svcAny) {
+        (svcAny as Record<string, unknown>).getLoadedSkills = function (
+          ...args: unknown[]
+        ) {
+          const skills = origGetLoaded.apply(this, args);
+          for (const skill of skills) {
+            if (typeof skill.description !== "string") {
+              skill.description =
+                skill.description == null
+                  ? ""
+                  : JSON.stringify(skill.description);
+            }
+          }
+          return skills;
+        };
+        logger.debug("[milaidy] Patched getLoadedSkills to guard descriptions");
+      }
+    } catch (err) {
+      // Non-fatal — the agent can operate without skills.
+      logger.warn(
+        `[milaidy] AgentSkillsService did not initialise in time: ${formatError(err)}`,
       );
     }
+  };
 
-    // Guard against non-string skill.description values.
-    // The bundled YAML parser produces {} for multi-line descriptions, which
-    // crashes findBestLocalMatch / scoreSkillMatch (call .toLowerCase() on it).
-    // Instead of a one-shot sanitize (which misses skills loaded later by
-    // syncCatalog / autoRefresh), we monkey-patch getLoadedSkills to always
-    // return sanitized values.
-    const svcAny = svc as Record<string, unknown> | null | undefined;
-    const origGetLoaded = svcAny?.getLoadedSkills as
-      | ((...args: unknown[]) => Array<Record<string, unknown>>)
-      | undefined;
-    if (origGetLoaded && svcAny) {
-      (svcAny as Record<string, unknown>).getLoadedSkills = function (
-        ...args: unknown[]
-      ) {
-        const skills = origGetLoaded.apply(this, args);
-        for (const skill of skills) {
-          if (typeof skill.description !== "string") {
-            skill.description =
-              skill.description == null
-                ? ""
-                : JSON.stringify(skill.description);
-          }
-        }
-        return skills;
-      };
-      logger.debug("[milaidy] Patched getLoadedSkills to guard descriptions");
-    }
+  try {
+    await initializeRuntimeServices();
   } catch (err) {
-    // Non-fatal — the agent can operate without skills.
+    if (options.safeMode) {
+      throw err;
+    }
     logger.warn(
-      `[milaidy] AgentSkillsService did not initialise in time: ${formatError(err)}`,
+      `[milaidy] Runtime initialization failed in full mode: ${formatError(err)}`,
     );
+    try {
+      await runtime.stop();
+    } catch (stopErr) {
+      logger.warn(
+        `[milaidy] Could not stop partially initialized runtime: ${formatError(stopErr)}`,
+      );
+    }
+    logger.warn(
+      "[milaidy] Retrying startup in safe mode (core startup plugins disabled)",
+    );
+    return startElizaInternal(opts, { safeMode: true, skipOnboarding: true });
   }
 
   // 9. Graceful shutdown handler
