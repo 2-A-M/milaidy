@@ -177,6 +177,132 @@ async function runExecInContainer(
   });
 }
 
+function parseContainerCommand(command: string): string[] {
+  const args: string[] = [];
+  let current = "";
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let escaping = false;
+  let tokenStarted = false;
+
+  const emitCurrent = () => {
+    if (tokenStarted) {
+      args.push(current);
+      current = "";
+      tokenStarted = false;
+    }
+  };
+
+  const trimmed = command.trim();
+  if (trimmed.length === 0) {
+    throw new Error("Container exec command is required");
+  }
+
+  for (let i = 0; i < trimmed.length; i++) {
+    const char = trimmed[i];
+
+    if (escaping) {
+      current += char;
+      escaping = false;
+      continue;
+    }
+
+    if (inSingleQuote) {
+      if (char === "'") {
+        inSingleQuote = false;
+      } else {
+        current += char;
+        tokenStarted = true;
+      }
+      continue;
+    }
+
+    if (inDoubleQuote) {
+      if (char === '"') {
+        inDoubleQuote = false;
+      } else if (char === "\\") {
+        const next = trimmed[i + 1];
+        if (next === "\\" || next === '"' || next === "$" || next === "`") {
+          i += 1;
+          current += trimmed[i];
+        } else {
+          current += char;
+        }
+      } else {
+        current += char;
+      }
+      tokenStarted = true;
+      continue;
+    }
+
+    if (char === "'") {
+      inSingleQuote = true;
+      tokenStarted = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inDoubleQuote = true;
+      tokenStarted = true;
+      continue;
+    }
+
+    if (char === "\\") {
+      if (i + 1 >= trimmed.length) {
+        throw new Error(
+          "Container exec command cannot end with dangling escape",
+        );
+      }
+      escaping = true;
+      continue;
+    }
+
+    if (/\s/.test(char)) {
+      emitCurrent();
+      continue;
+    }
+
+    if (
+      char === "&" ||
+      char === "|" ||
+      char === ";" ||
+      char === "<" ||
+      char === ">" ||
+      char === "$" ||
+      char === "`" ||
+      char === "(" ||
+      char === ")" ||
+      char === "{" ||
+      char === "}" ||
+      char === "\n" ||
+      char === "\r"
+    ) {
+      throw new Error(
+        "Container exec command contains unsupported shell syntax",
+      );
+    }
+
+    current += char;
+    tokenStarted = true;
+  }
+
+  if (inSingleQuote || inDoubleQuote) {
+    throw new Error("Container exec command has unterminated quotes");
+  }
+
+  if (escaping) {
+    throw new Error("Container exec command has trailing escape");
+  }
+
+  emitCurrent();
+
+  if (args.length === 0) {
+    throw new Error("Container exec command is required");
+  }
+
+  return args;
+}
+
 export interface EngineInfo {
   type: SandboxEngineType;
   available: boolean;
@@ -280,7 +406,8 @@ export class DockerEngine implements ISandboxEngine {
     if (opts.env) {
       appendEnvArgs(args, opts.env);
     }
-    args.push(opts.containerId, "sh", "-c", opts.command);
+    const commandArgs = parseContainerCommand(opts.command);
+    args.push(opts.containerId, ...commandArgs);
     return runExecInContainer({
       binary: "docker",
       args,
@@ -464,7 +591,8 @@ export class AppleContainerEngine implements ISandboxEngine {
   ): Promise<ContainerExecResult> {
     const args = ["exec"];
     if (opts.workdir) args.push("-w", opts.workdir);
-    args.push(opts.containerId, "sh", "-c", opts.command);
+    const commandArgs = parseContainerCommand(opts.command);
+    args.push(opts.containerId, ...commandArgs);
     return runExecInContainer({
       binary: "container",
       args,
