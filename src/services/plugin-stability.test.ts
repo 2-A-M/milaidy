@@ -35,6 +35,20 @@ import {
   tryOptionalDynamicImport,
 } from "../test-support/test-helpers.js";
 
+type RootPackageJson = {
+  dependencies: Record<string, string>;
+  overrides?: Record<string, string>;
+  pnpm?: {
+    overrides?: Record<string, string>;
+  };
+};
+
+function getCoreOverride(pkg: RootPackageJson): string | undefined {
+  return (
+    pkg.overrides?.["@elizaos/core"] ?? pkg.pnpm?.overrides?.["@elizaos/core"]
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Constants — Full plugin enumeration
 // ---------------------------------------------------------------------------
@@ -855,19 +869,15 @@ describe("Version Skew Detection (issue #10)", () => {
     // Use process.cwd() for reliable root resolution in forked vitest workers
     // (import.meta.dirname may not resolve to the source tree in CI forks).
     const pkgPath = resolve(process.cwd(), "package.json");
-    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as {
-      dependencies: Record<string, string>;
-    };
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as RootPackageJson;
 
     const coreVersion = pkg.dependencies["@elizaos/core"];
     expect(coreVersion).toBeDefined();
-    // Core can use "next" dist-tag if pnpm overrides pin the actual version
-    const pnpmOverride = (
-      pkg as Record<string, Record<string, Record<string, string>>>
-    ).pnpm?.overrides?.["@elizaos/core"];
+    // Core can use "next" dist-tag if overrides pin the actual version
+    const coreOverride = getCoreOverride(pkg);
     if (coreVersion === "next") {
-      expect(pnpmOverride).toBeDefined();
-      expect(pnpmOverride).toMatch(/^\d+\.\d+\.\d+/);
+      expect(coreOverride).toBeDefined();
+      expect(coreOverride).toMatch(/^\d+\.\d+\.\d+/);
     } else {
       expect(coreVersion).toMatch(/^\d+\.\d+\.\d+/);
     }
