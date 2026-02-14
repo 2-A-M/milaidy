@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useApp } from "../AppContext";
 import { client } from "../api-client";
 import type { SkillInfo, SkillMarketplaceResult, SkillScanReportSummary } from "../api-client";
+import { ConfirmDeleteControl } from "./shared/confirm-delete-control";
 import { StatusBadge } from "./shared/ui-badges";
 import { Switch } from "./shared/ui-switch";
 
@@ -54,7 +55,6 @@ function SkillCard({
   const isQuarantined = skill.scanStatus === "warning" || skill.scanStatus === "critical";
   const isBlocked = skill.scanStatus === "blocked";
   const isReviewing = skillReviewId === skill.id;
-  const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
     <div
@@ -125,30 +125,14 @@ function SkillCard({
         <button className={btnGhost} onClick={() => onEdit(skill)}>
           Edit
         </button>
-        {confirmDelete ? (
-          <>
-            <span className="text-[11px] text-[#e74c3c] ml-1">Delete?</span>
-            <button
-              className="px-2 py-1 text-[11px] bg-[#e74c3c] text-white border border-[#e74c3c] cursor-pointer hover:opacity-90 transition-opacity"
-              onClick={() => {
-                onDelete(skill.id, skill.name);
-                setConfirmDelete(false);
-              }}
-            >
-              Yes
-            </button>
-            <button
-              className={btnGhost}
-              onClick={() => setConfirmDelete(false)}
-            >
-              No
-            </button>
-          </>
-        ) : (
-          <button className={btnDanger} onClick={() => setConfirmDelete(true)}>
-            Delete
-          </button>
-        )}
+        <ConfirmDeleteControl
+          triggerClassName={btnDanger}
+          confirmClassName="px-2 py-1 text-[11px] bg-[#e74c3c] text-white border border-[#e74c3c] cursor-pointer hover:opacity-90 transition-opacity"
+          cancelClassName={btnGhost}
+          confirmLabel="Yes"
+          cancelLabel="No"
+          onConfirm={() => onDelete(skill.id, skill.name)}
+        />
         <span className="flex-1" />
         <span className="text-[10px] text-[var(--muted)] font-mono truncate max-w-[120px]" title={skill.id}>
           {skill.id.length > 16 ? `${skill.id.slice(0, 16)}...` : skill.id}

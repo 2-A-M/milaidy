@@ -19,6 +19,7 @@ import type {
   KnowledgeSearchResult,
   KnowledgeStats,
 } from "../api-client";
+import { ConfirmDeleteControl } from "./shared/confirm-delete-control";
 import { formatByteSize, formatShortDate } from "./shared/format";
 
 /* ── Shared style constants ─────────────────────────────────────────── */
@@ -294,8 +295,6 @@ function DocumentCard({
   onDelete: (id: string) => void;
   deleting: boolean;
 }) {
-  const [confirmDelete, setConfirmDelete] = useState(false);
-
   return (
     <div className="flex items-center justify-between p-4 border border-[var(--border)] bg-[var(--card)] rounded hover:border-[var(--accent)]/50 transition-colors">
       <div
@@ -322,37 +321,14 @@ function DocumentCard({
         </div>
       </div>
       <div className="flex items-center gap-2 ml-4">
-        {confirmDelete ? (
-          <>
-            <button
-              type="button"
-              className={btnDanger}
-              onClick={() => {
-                onDelete(doc.id);
-                setConfirmDelete(false);
-              }}
-              disabled={deleting}
-            >
-              {deleting ? "..." : "Confirm"}
-            </button>
-            <button
-              type="button"
-              className={btnGhost}
-              onClick={() => setConfirmDelete(false)}
-              disabled={deleting}
-            >
-              Cancel
-            </button>
-          </>
-        ) : (
-          <button
-            type="button"
-            className={btnDanger}
-            onClick={() => setConfirmDelete(true)}
-          >
-            Delete
-          </button>
-        )}
+        <ConfirmDeleteControl
+          triggerClassName={btnDanger}
+          confirmClassName={btnDanger}
+          cancelClassName={btnGhost}
+          disabled={deleting}
+          busyLabel="..."
+          onConfirm={() => onDelete(doc.id)}
+        />
       </div>
     </div>
   );
