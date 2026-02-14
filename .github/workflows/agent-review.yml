@@ -128,7 +128,8 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          direct_prompt: |
+          claude_args: '--model claude-opus-4-6 --allowedTools "Bash,GitHub,Read,Glob,LS"'
+          prompt: |
             You are the sole code reviewer for the Milaidy project (milady-ai/milaidy).
             This is an agents-only codebase. No human code contributions are accepted — humans contribute by using the app and reporting bugs as QA testers. Your review is final.
 
@@ -221,9 +222,6 @@ jobs:
             <!-- agent-review-run:${{ github.run_id }}:${{ github.run_attempt }}:${{ github.event.pull_request.head.sha }} -->
 
             Be direct. Be opinionated. This repo's quality is your responsibility.
-          model: claude-opus-4-20250603
-          timeout_minutes: 10
-          allowed_tools: "Bash,GitHub"
 
       - name: Extract review decision from PR comments
         id: extract-verdict
