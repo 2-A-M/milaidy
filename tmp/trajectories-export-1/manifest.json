@@ -1,0 +1,33 @@
+{
+  "exportedAt": "2026-02-15T02:52:17.912Z",
+  "includePrompts": true,
+  "requestedTrajectoryCount": 2,
+  "exportedTrajectoryCount": 2,
+  "missingTrajectoryIds": [],
+  "trajectories": [
+    {
+      "trajectoryId": "3c59ce91-8651-44d2-b614-4f15ab42ae83",
+      "folder": "3c59ce91-8651-44d2-b614-4f15ab42ae83",
+      "source": "client_chat",
+      "startTime": 1771123922940,
+      "endTime": 0,
+      "llmCallCount": 0,
+      "providerAccessCount": 0,
+      "totalPromptTokens": 0,
+      "totalCompletionTokens": 0,
+      "createdAt": "2026-02-15T02:52:02.940Z"
+    },
+    {
+      "trajectoryId": "a452b850-eb05-4cdf-bf14-4fcbabd33814",
+      "folder": "a452b850-eb05-4cdf-bf14-4fcbabd33814",
+      "source": "client_chat",
+      "startTime": 1771123902763,
+      "endTime": 0,
+      "llmCallCount": 0,
+      "providerAccessCount": 0,
+      "totalPromptTokens": 0,
+      "totalCompletionTokens": 0,
+      "createdAt": "2026-02-15T02:51:42.763Z"
+    }
+  ]
+}

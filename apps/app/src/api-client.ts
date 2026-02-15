@@ -1280,7 +1280,7 @@ export interface TrajectoryConfig {
   enabled: boolean;
 }
 
-export type TrajectoryExportFormat = "json" | "csv";
+export type TrajectoryExportFormat = "json" | "csv" | "zip";
 
 export interface TrajectoryExportOptions {
   format: TrajectoryExportFormat;

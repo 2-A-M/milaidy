@@ -1,0 +1,1157 @@
+[
+  {
+    "id": "612c43ae-1593-4fab-a2e1-8bc276ecd045",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "milaidySimpleMode",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 160
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883446,
+    "createdAt": "2026-02-15T03:08:03.446Z"
+  },
+  {
+    "id": "bb0608b0-daa5-443a-ae40-90ce5b79b349",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "ACTIONS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 3483
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883446,
+    "createdAt": "2026-02-15T03:08:03.446Z"
+  },
+  {
+    "id": "c64634d9-231c-4432-a424-46d5147f11f2",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "CHARACTER",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 2386
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883446,
+    "createdAt": "2026-02-15T03:08:03.446Z"
+  },
+  {
+    "id": "2408424d-e160-4f07-9ec4-e9428dd726bc",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "ENTITIES",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 128
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883446,
+    "createdAt": "2026-02-15T03:08:03.446Z"
+  },
+  {
+    "id": "e63dbd10-505c-4d9b-81d2-54793441fe7c",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "ENTITIES",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 128
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883446,
+    "createdAt": "2026-02-15T03:08:03.446Z"
+  },
+  {
+    "id": "acecfb93-8d4c-4f65-bcd1-dbbb715868f6",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "RECENT_MESSAGES",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 592
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883446,
+    "createdAt": "2026-02-15T03:08:03.446Z"
+  },
+  {
+    "id": "7b42d4f9-3aa1-45f1-97ae-6970b677f440",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "milaidySimpleMode",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 160
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "7919e34c-d4c9-4a11-93d8-f90576aa4d99",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "agent_skills",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 1107
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "0be54f4d-66a9-4ed7-b40c-7595fffbc955",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "ACTIONS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 3551
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "842ebc0c-a5e4-4f79-a137-6642a4435487",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "CAPABILITIES",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 1965
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "be26d559-f2ba-4b0b-86e7-9327d3ae6547",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "CHARACTER",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 2032
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "621ef1e1-7328-48d6-984c-fd060f677e9f",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "PROVIDERS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 1774
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "82199f71-3b5e-4f5d-81df-ec0099f93938",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "TIME",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 151
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "b056d701-b19e-4f1e-9dd0-fe0311ba1705",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "CHOICE",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 34
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "b56bc1e8-3a02-4307-a561-fed38c921c91",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "CONTACTS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 23
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "f9aef7ad-80ad-4e9d-b10e-a067444a973f",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "FOLLOW_UPS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 33
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "2713ee8a-9019-4d7b-9b4a-f5957ce28c50",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "ROLES",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 93
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "533464ae-b97d-420e-8031-925e8aaa9447",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "SETTINGS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 927
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "afcbfc10-5093-44e1-b9ac-e795c88a4de2",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "AVAILABLE_DOCUMENTS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "9f8688d7-acdf-46be-bfb2-f44d49fa6f5f",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "uiCatalog",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 17224
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "4f4a3428-5e34-49b9-947c-1841d1a5c45d",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "emotes",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 467
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "accbcfda-c2eb-4fc9-a6b4-4aa73bd82058",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "media",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 1042
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "e3949319-1cb1-49d4-ae44-6fc1053d6c34",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "terminal",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 263
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "3efd9b02-536f-4c70-877c-50ed8b780ca0",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "customActions",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 132
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "7d730080-aa48-441b-bfdd-1ebf7e6fe905",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "pluginState",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 1398
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "70252265-8d2f-4f95-9519-a306f9d3a39a",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "pluginConfigurationStatus",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 496
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "16dadb85-5902-41c2-ac01-811095f49752",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "registryPlugins",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 89
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "f19f251d-ba82-44db-927d-bce72663fcb3",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "todos",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 606
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "821182d3-506d-40aa-ab7f-3ddbf4efb4af",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "channelState",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "f998d011-6017-4087-87db-269bc4d863e0",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "voiceState",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "3a1e3d77-4ae0-4135-86eb-aedaf416bc94",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "guildInfo",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "b8701b15-e112-4697-b1b7-5206775433ad",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "CONTEXT_BENCH",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "604a6f41-dc34-4827-97b5-1822b162aab0",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "agent_skill_instructions",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "1816cda4-0a4c-4496-b5b6-c1e4b3f58743",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "workspaceContext",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 2190
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "36aa474c-3d27-44ef-91d8-140f891b5447",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "RS_SDK_MAP_AREA",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "d0667ab1-d321-4141-8521-6b0d9ad0ce2f",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "RS_SDK_WORLD_KNOWLEDGE",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "270d4a38-d82d-49ca-8e5c-3ce28d3fae27",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "RS_SDK_GOALS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "4ebca3ff-fd58-4a69-8bb6-9bd982f4ace4",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "RS_SDK_BOT_STATE",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 91
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "8317760c-c1f1-4188-84a6-4dd0b9738bac",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "SHELL_HISTORY",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 175
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "e1cbdcd4-53df-460f-bdb5-9a9b826a26ba",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "RECENT_MESSAGES",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 592
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "b1c98033-4882-4db6-8581-f30576f24c56",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "ACTION_STATE",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 37
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124883595,
+    "createdAt": "2026-02-15T03:08:03.595Z"
+  },
+  {
+    "id": "e00f69e3-b449-425a-9d03-fc447ac743fb",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "milaidySimpleMode",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 160
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "96efd5fc-c833-4acf-a378-981d7c5d3832",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "agent_skills",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 1107
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "cc9eebe5-06ef-4f87-95a0-fcf53648fc9a",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "ACTIONS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 3662
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "bdf2e693-a9a2-46b4-95d0-20579cad3e69",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "CAPABILITIES",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 1965
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "83e2d5b9-748f-4c75-96d3-20bf3a2d8e36",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "CHARACTER",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 2361
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "aaf9b248-cb73-4838-9821-ab217816b69c",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "EVALUATORS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 344
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "b25aecf3-4130-4481-8e2f-e007d4e0e8bf",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "PROVIDERS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 1774
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "ff46f18b-0048-4794-9796-df2536f491d3",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "TIME",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 151
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "7fa193c9-7976-4e6a-816f-949d680958df",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "CHOICE",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 34
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "09c37d63-3915-4c3e-96a1-9069f2361441",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "CONTACTS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 23
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "c4ecadc4-51c4-4dbb-8e04-737cba5a2976",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "FOLLOW_UPS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 33
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "563fb417-1222-46e4-a76b-ae074a0dccc2",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "ROLES",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 93
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "ca2d6e40-a141-4a1e-949f-49ead519d708",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "SETTINGS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 927
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "a8d72b51-74fb-48e9-bc09-0dafa2969a92",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "AVAILABLE_DOCUMENTS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "bf933a30-b1a2-4f23-99c2-6325b6baddb7",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "uiCatalog",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 17224
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "05cb32f8-4980-4572-addb-e025a985af0a",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "emotes",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 467
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "4f174531-099d-453d-a8e3-2b987c91166c",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "media",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 1042
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "fb74710b-7dc7-45cd-90f3-f861412415a3",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "terminal",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 263
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "80932fec-4deb-4c02-a39b-4dda08d6cb79",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "customActions",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 132
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "5647c474-a4ce-4b37-83ab-722396653637",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "pluginState",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 1398
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "06b8ae35-16e0-4796-99aa-b27314d3f87a",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "pluginConfigurationStatus",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 496
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "8639f5a3-d0be-46bb-9d19-a534678018df",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "registryPlugins",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 89
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "81f744cf-c07c-4196-95a7-ab64d59591c6",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "todos",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 606
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "81fab405-1c72-4c81-b3f6-9d9991f6fa35",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "channelState",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "b54c8121-e0b3-481f-bf41-dcbc896306d0",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "voiceState",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "873d02aa-5a5a-40cc-8058-a35198884160",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "guildInfo",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "4b6b8ac8-2ffc-41b0-8fda-a991e7d53ff8",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "CONTEXT_BENCH",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "43d9cf74-be69-4faa-be87-0fb86f686eb1",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "agent_skill_instructions",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "8336bb9d-17d4-4829-837c-7fe3fd4722ac",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "workspaceContext",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 2190
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "32001493-8284-4c19-ba2c-c6b6fbc4d287",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "RS_SDK_MAP_AREA",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "7461499b-2c1f-4e02-8ea5-d0edcb97f5b2",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "RS_SDK_WORLD_KNOWLEDGE",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "7705cf37-ede9-4753-bc51-df9574601fc5",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "RS_SDK_GOALS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "7a6452ba-3340-441a-a5d7-ceec50ff21e4",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "RS_SDK_BOT_STATE",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 91
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "df06ec61-b013-418a-b17e-ea6dd5590664",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "SHELL_HISTORY",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 175
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "443687f6-c72c-4fbd-a906-3cdf5f32d34e",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "RECENT_MESSAGES",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 592
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  },
+  {
+    "id": "1bbe2d1b-6722-4cb3-ba91-f0c1a516d954",
+    "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+    "stepId": "1dcda416-8c55-4953-8d00-fe884033ea9e",
+    "providerName": "ACTION_STATE",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 37
+    },
+    "query": {
+      "message": "post-fix trajectory audit turn 2"
+    },
+    "timestamp": 1771124885582,
+    "createdAt": "2026-02-15T03:08:05.582Z"
+  }
+]

@@ -1,0 +1,25 @@
+{
+  "id": "3c59ce91-8651-44d2-b614-4f15ab42ae83",
+  "agentId": "31354477-abd4-0ec9-8ec5-88cc5a9e7f76",
+  "roomId": "c9682090-765a-0002-beb3-736e36e3ce31",
+  "entityId": "8c64b23a-8086-0ca8-9cc2-6af35d0aed6a",
+  "conversationId": null,
+  "source": "client_chat",
+  "startTime": 1771123922940,
+  "endTime": 0,
+  "durationMs": 0,
+  "llmCallCount": 0,
+  "providerAccessCount": 0,
+  "totalPromptTokens": 0,
+  "totalCompletionTokens": 0,
+  "metadata": {
+    "roomId": "c9682090-765a-0002-beb3-736e36e3ce31",
+    "source": "client_chat",
+    "entityId": "8c64b23a-8086-0ca8-9cc2-6af35d0aed6a",
+    "messageId": "63045374-58d4-4f44-a454-f9ca5849ff0f",
+    "channelType": "DM",
+    "conversationId": "agent:authtestagent:main"
+  },
+  "createdAt": "2026-02-15T02:52:02.940Z",
+  "updatedAt": "1970-01-01T00:00:00.000Z"
+}

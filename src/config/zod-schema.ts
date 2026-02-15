@@ -728,6 +728,7 @@ export const MilaidySchema = z
         model: z.string().optional(),
         modelRepo: z.string().optional(),
         dimensions: z.number().int().positive().optional(),
+        contextSize: z.number().int().positive().optional(),
         gpuLayers: z
           .union([z.literal("auto"), z.literal("max"), z.number().int().min(0)])
           .optional(),

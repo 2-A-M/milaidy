@@ -1,0 +1,61 @@
+{
+  "exportedAt": "2026-02-15T03:09:48.388Z",
+  "includePrompts": true,
+  "requestedTrajectoryCount": 4,
+  "exportedTrajectoryCount": 4,
+  "missingTrajectoryIds": [],
+  "trajectories": [
+    {
+      "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+      "folder": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+      "source": "client_chat",
+      "status": "completed",
+      "startTime": 1771124957547,
+      "endTime": 1771124959972,
+      "llmCallCount": 3,
+      "providerAccessCount": 77,
+      "totalPromptTokens": 0,
+      "totalCompletionTokens": 0,
+      "createdAt": "2026-02-15T03:09:17.547Z"
+    },
+    {
+      "trajectoryId": "533faee8-50a9-49a1-ad09-2a6c0c5014db",
+      "folder": "533faee8-50a9-49a1-ad09-2a6c0c5014db",
+      "source": "client_chat",
+      "status": "completed",
+      "startTime": 1771124885812,
+      "endTime": 1771124902071,
+      "llmCallCount": 3,
+      "providerAccessCount": 77,
+      "totalPromptTokens": 0,
+      "totalCompletionTokens": 0,
+      "createdAt": "2026-02-15T03:08:05.812Z"
+    },
+    {
+      "trajectoryId": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+      "folder": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+      "source": "client_chat",
+      "status": "completed",
+      "startTime": 1771124883389,
+      "endTime": 1771124885604,
+      "llmCallCount": 3,
+      "providerAccessCount": 77,
+      "totalPromptTokens": 0,
+      "totalCompletionTokens": 0,
+      "createdAt": "2026-02-15T03:08:03.389Z"
+    },
+    {
+      "trajectoryId": "c2f0d92c-c078-4e08-ab72-28522c708ad4",
+      "folder": "c2f0d92c-c078-4e08-ab72-28522c708ad4",
+      "source": "client_chat",
+      "status": "completed",
+      "startTime": 1771124880346,
+      "endTime": 1771124883260,
+      "llmCallCount": 3,
+      "providerAccessCount": 77,
+      "totalPromptTokens": 0,
+      "totalCompletionTokens": 0,
+      "createdAt": "2026-02-15T03:08:00.346Z"
+    }
+  ]
+}

@@ -25,7 +25,7 @@ import {
 } from "@elizaos/core";
 import * as piAi from "@mariozechner/pi-ai";
 import { type WebSocket, WebSocketServer } from "ws";
-import { CloudManager } from "../cloud/cloud-manager.js";
+
 import {
   configFileExists,
   loadMilaidyConfig,
@@ -74,7 +74,7 @@ import {
   taskToTriggerSummary,
 } from "../triggers/runtime.js";
 import { parseClampedInteger } from "../utils/number-parsing.js";
-import { type CloudRouteState, handleCloudRoute } from "./cloud-routes.js";
+
 import {
   extractAnthropicSystemAndLastUser,
   extractOpenAiSystemAndLastUser,
@@ -214,7 +214,7 @@ interface ServerState {
   /** Conversation metadata by conversation id. */
   conversations: Map<string, ConversationMeta>;
   /** Cloud manager for Eliza Cloud integration (null when cloud is disabled). */
-  cloudManager: CloudManager | null;
+
   sandboxManager: SandboxManager | null;
   /** App manager for launching and managing ElizaOS apps. */
   appManager: AppManager;
@@ -2293,18 +2293,65 @@ async function generateChatResponse(
         return [];
       },
     );
+
+    // Ensure MESSAGE_SENT hooks run for API chat flows. Some runtimes emit this
+    // internally, but API wrappers can bypass those hooks.
+    try {
+      const responseMessages = Array.isArray(result?.responseMessages)
+        ? (result.responseMessages as Array<{ id?: string; content?: Content }>)
+        : [];
+      if (responseMessages.length > 0 && typeof runtime.emitEvent === "function") {
+        for (const responseMessage of responseMessages) {
+          const memoryLike = {
+            id: responseMessage.id ?? crypto.randomUUID(),
+            roomId: message.roomId,
+            entityId: runtime.agentId,
+            content: responseMessage.content ?? { text: "" },
+            metadata: message.metadata,
+          } as unknown as ReturnType<typeof createMessageMemory>;
+          await runtime.emitEvent("MESSAGE_SENT", {
+            message: memoryLike,
+            source: messageSource,
+          });
+        }
+      }
+    } catch (err) {
+      runtime.logger?.warn(
+        {
+          err,
+          src: "milaidy-api",
+          messageId: message.id,
+          roomId: message.roomId,
+        },
+        "Failed to emit MESSAGE_SENT event",
+      );
+    }
   } catch (err) {
     handlerError = err;
     throw err;
   } finally {
+    const messageMeta =
+      message.metadata && typeof message.metadata === "object"
+        ? (message.metadata as Record<string, unknown>)
+        : null;
+    const metadataTrajectoryStepId =
+      typeof messageMeta?.trajectoryStepId === "string" &&
+      messageMeta.trajectoryStepId.trim().length > 0
+        ? messageMeta.trajectoryStepId
+        : null;
+    const stepIdToEnd =
+      fallbackTrajectoryStepId ??
+      metadataTrajectoryStepId ??
+      eventTrajectoryStepId;
+
     if (
-      fallbackTrajectoryStepId &&
+      stepIdToEnd &&
       trajectoryLogger &&
       typeof trajectoryLogger.endTrajectory === "function"
     ) {
       try {
         await trajectoryLogger.endTrajectory(
-          fallbackTrajectoryStepId,
+          stepIdToEnd,
           handlerError ? "error" : "completed",
         );
       } catch (err) {
@@ -2312,9 +2359,9 @@ async function generateChatResponse(
           {
             err,
             src: "milaidy-api",
-            trajectoryStepId: fallbackTrajectoryStepId,
+            trajectoryStepId: stepIdToEnd,
           },
-          "Failed to end fallback trajectory logging",
+          "Failed to end API trajectory logging",
         );
       }
     }
@@ -4932,24 +4979,16 @@ async function handleRequest(
   // ── GET /api/status ─────────────────────────────────────────────────────
   if (method === "GET" && pathname === "/api/status") {
     const uptime = state.startedAt ? Date.now() - state.startedAt : undefined;
-
-    // Cloud mode: report cloud connection status alongside local state
-    const cloudProxy = state.cloudManager?.getProxy();
-    const runMode = cloudProxy ? "cloud" : "local";
-    const cloudStatus = state.cloudManager
-      ? {
-        connectionStatus: state.cloudManager.getStatus(),
-        activeAgentId: state.cloudManager.getActiveAgentId(),
-      }
-      : undefined;
+    const cloudStatus = {
+      connectionStatus: "disconnected",
+      activeAgentId: null,
+    };
 
     json(res, {
-      state: cloudProxy ? "running" : state.agentState,
-      agentName: cloudProxy ? cloudProxy.agentName : state.agentName,
-      model: cloudProxy ? "cloud" : state.model,
+      state: state.agentState,
+      agentName: state.agentName,
+      model: state.model,
       uptime,
-      startedAt: state.startedAt,
-      runMode,
       cloud: cloudStatus,
     });
     return;
@@ -9114,23 +9153,6 @@ async function handleRequest(
     return;
   }
 
-  // ── Cloud routes (/api/cloud/*) ─────────────────────────────────────────
-  if (pathname.startsWith("/api/cloud/")) {
-    const cloudState: CloudRouteState = {
-      config: state.config,
-      cloudManager: state.cloudManager,
-      runtime: state.runtime,
-    };
-    const handled = await handleCloudRoute(
-      req,
-      res,
-      pathname,
-      method,
-      cloudState,
-    );
-    if (handled) return;
-  }
-
   // ── Sandbox routes (/api/sandbox/*) ────────────────────────────────────
   if (pathname.startsWith("/api/sandbox")) {
     const handled = await handleSandboxRoute(req, res, pathname, method, {
@@ -9416,11 +9438,9 @@ async function handleRequest(
       ? `${extracted.system}\n\n${extracted.user}`.trim()
       : extracted.user;
 
-    const proxy = state.cloudManager?.getProxy();
     const created = Math.floor(Date.now() / 1000);
     const id = `chatcmpl-${crypto.randomUUID()}`;
-    const model =
-      requestedModel ?? proxy?.agentName ?? state.agentName ?? "milaidy";
+    const model = requestedModel ?? state.agentName ?? "milaidy";
 
     if (wantsStream) {
       initSse(res);
@@ -9694,10 +9714,8 @@ async function handleRequest(
       ? `${extracted.system}\n\n${extracted.user}`.trim()
       : extracted.user;
 
-    const proxy = state.cloudManager?.getProxy();
     const id = `msg_${crypto.randomUUID().replace(/-/g, "")}`;
-    const model =
-      requestedModel ?? proxy?.agentName ?? state.agentName ?? "milaidy";
+    const model = requestedModel ?? state.agentName ?? "milaidy";
 
     if (wantsStream) {
       initSse(res);
@@ -9707,7 +9725,7 @@ async function handleRequest(
       });
 
       try {
-        if (!proxy && !state.runtime) {
+        if (!state.runtime) {
           writeSseJson(
             res,
             {
@@ -9990,27 +10008,11 @@ async function handleRequest(
     }
     const runtime = state.runtime;
     try {
-      const messagesTable = "messages";
-      const memories = await (async () => {
-        try {
-          // plugin-sql alpha.11 currently has a regression on getMemories() in some
-          // runtime paths; prefer room-ids retrieval and only fall back if needed.
-          return await runtime.getMemoriesByRoomIds({
-            roomIds: [conv.roomId],
-            tableName: messagesTable,
-            limit: 200,
-          });
-        } catch (roomFetchErr) {
-          logger.warn(
-            `[conversations] getMemoriesByRoomIds failed, retrying with getMemories: ${roomFetchErr instanceof Error ? roomFetchErr.message : String(roomFetchErr)}`,
-          );
-          return await runtime.getMemories({
-            roomId: conv.roomId,
-            tableName: messagesTable,
-            count: 200,
-          });
-        }
-      })();
+      const memories = await runtime.getMemories({
+        roomId: conv.roomId,
+        tableName: "messages",
+        count: 200,
+      });
       // Sort by createdAt ascending
       memories.sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
       const agentId = runtime.agentId;
@@ -10102,82 +10104,7 @@ async function handleRequest(
       return;
     }
 
-    // Cloud proxy path
-    const proxy = state.cloudManager?.getProxy();
-    if (proxy) {
-      initSse(res);
-      let fullText = "";
-      try {
-        await withTrajectorySpan(
-          {
-            runtime,
-            source: "client_chat",
-            roomId: conv.roomId,
-            entityId: userId,
-            conversationId: convId,
-            messageId: userMessage.id,
-          },
-          async () => {
-            for await (const chunk of proxy.handleChatMessageStream(
-              prompt,
-              conv.roomId,
-              mode,
-            )) {
-              fullText += chunk;
-              writeSse(res, { type: "token", text: chunk });
-            }
-          },
-        );
-
-        const resolvedText = normalizeChatResponseText(
-          fullText,
-          state.logBuffer,
-        );
-        await persistAssistantConversationMemory(
-          runtime,
-          conv.roomId,
-          resolvedText,
-          mode,
-        );
-        conv.updatedAt = new Date().toISOString();
-        writeSse(res, {
-          type: "done",
-          fullText: resolvedText,
-          agentName: proxy.agentName,
-        });
-      } catch (err) {
-        const creditReply = getInsufficientCreditsReplyFromError(err);
-        if (creditReply) {
-          try {
-            await persistAssistantConversationMemory(
-              runtime,
-              conv.roomId,
-              creditReply,
-              mode,
-            );
-            conv.updatedAt = new Date().toISOString();
-            writeSse(res, {
-              type: "done",
-              fullText: creditReply,
-              agentName: proxy.agentName,
-            });
-          } catch (persistErr) {
-            writeSse(res, {
-              type: "error",
-              message: getErrorMessage(persistErr),
-            });
-          }
-        } else {
-          writeSse(res, {
-            type: "error",
-            message: getErrorMessage(err),
-          });
-        }
-      } finally {
-        res.end();
-      }
-      return;
-    }
+    // ── Local runtime path (existing code below) ───────────────────────
 
     initSse(res);
     let aborted = false;
@@ -10310,55 +10237,6 @@ async function handleRequest(
       await persistConversationMemory(runtime, userMessage);
     } catch (err) {
       error(res, `Failed to store user message: ${getErrorMessage(err)}`, 500);
-      return;
-    }
-
-    // Cloud proxy path
-    const proxy = state.cloudManager?.getProxy();
-    if (proxy) {
-      try {
-        const responseText = await withTrajectorySpan(
-          {
-            runtime,
-            source: "client_chat",
-            roomId: conv.roomId,
-            entityId: userId,
-            conversationId: convId,
-            messageId: userMessage.id,
-          },
-          () => proxy.handleChatMessage(prompt, conv.roomId, mode),
-        );
-        const resolvedText = normalizeChatResponseText(
-          responseText,
-          state.logBuffer,
-        );
-        await persistAssistantConversationMemory(
-          runtime,
-          conv.roomId,
-          resolvedText,
-          mode,
-        );
-        conv.updatedAt = new Date().toISOString();
-        json(res, { text: resolvedText, agentName: proxy.agentName });
-      } catch (err) {
-        const creditReply = getInsufficientCreditsReplyFromError(err);
-        if (creditReply) {
-          try {
-            await persistAssistantConversationMemory(
-              runtime,
-              conv.roomId,
-              creditReply,
-              mode,
-            );
-            conv.updatedAt = new Date().toISOString();
-            json(res, { text: creditReply, agentName: proxy.agentName });
-          } catch (persistErr) {
-            error(res, getErrorMessage(persistErr), 500);
-          }
-        } else {
-          error(res, getErrorMessage(err), 500);
-        }
-      }
       return;
     }
 
@@ -10543,57 +10421,6 @@ async function handleRequest(
     const prompt = body.text.trim();
 
     // Cloud proxy path
-    const proxy = state.cloudManager?.getProxy();
-    if (proxy) {
-      initSse(res);
-      let fullText = "";
-      try {
-        await withTrajectorySpan(
-          {
-            runtime: state.runtime,
-            source: "client_chat",
-            roomId: "web-chat",
-          },
-          async () => {
-            for await (const chunk of proxy.handleChatMessageStream(
-              prompt,
-              "web-chat",
-              mode,
-            )) {
-              fullText += chunk;
-              writeSse(res, { type: "token", text: chunk });
-            }
-          },
-        );
-
-        const resolvedText = normalizeChatResponseText(
-          fullText,
-          state.logBuffer,
-        );
-        writeSse(res, {
-          type: "done",
-          fullText: resolvedText,
-          agentName: proxy.agentName,
-        });
-      } catch (err) {
-        const creditReply = getInsufficientCreditsReplyFromError(err);
-        if (creditReply) {
-          writeSse(res, {
-            type: "done",
-            fullText: creditReply,
-            agentName: proxy.agentName,
-          });
-        } else {
-          writeSse(res, {
-            type: "error",
-            message: getErrorMessage(err),
-          });
-        }
-      } finally {
-        res.end();
-      }
-      return;
-    }
 
     if (!state.runtime) {
       error(res, "Agent is not running", 503);
@@ -10681,103 +10508,6 @@ async function handleRequest(
   // remote sandbox instead of the local runtime.  Supports SSE streaming
   // when the client sends Accept: text/event-stream.
   if (method === "POST" && pathname === "/api/chat") {
-    // ── Cloud proxy path ───────────────────────────────────────────────
-    const proxy = state.cloudManager?.getProxy();
-    if (proxy) {
-      const body = await readJsonBody<{ text?: string; mode?: string }>(
-        req,
-        res,
-      );
-      if (!body) return;
-      if (!body.text?.trim()) {
-        error(res, "text is required");
-        return;
-      }
-      if (body.mode && body.mode !== "simple" && body.mode !== "power") {
-        error(res, "mode must be 'simple' or 'power'", 400);
-        return;
-      }
-      const mode: ChatMode = body.mode === "simple" ? "simple" : "power";
-
-      const wantsStream = (req.headers.accept ?? "").includes(
-        "text/event-stream",
-      );
-
-      if (wantsStream) {
-        initSse(res);
-        let fullText = "";
-
-        try {
-          await withTrajectorySpan(
-            {
-              runtime: state.runtime,
-              source: "client_chat",
-              roomId: "web-chat",
-            },
-            async () => {
-              for await (const chunk of proxy.handleChatMessageStream(
-                body.text?.trim() || "",
-                "web-chat",
-                mode,
-              )) {
-                fullText += chunk;
-                writeSse(res, { type: "token", text: chunk });
-              }
-            },
-          );
-          const resolvedText = normalizeChatResponseText(
-            fullText,
-            state.logBuffer,
-          );
-          writeSse(res, {
-            type: "done",
-            fullText: resolvedText,
-            agentName: proxy.agentName,
-          });
-        } catch (err) {
-          const creditReply = getInsufficientCreditsReplyFromError(err);
-          if (creditReply) {
-            writeSse(res, {
-              type: "done",
-              fullText: creditReply,
-              agentName: proxy.agentName,
-            });
-          } else {
-            writeSse(res, {
-              type: "error",
-              message: getErrorMessage(err),
-            });
-          }
-        }
-        res.end();
-      } else {
-        try {
-          const responseText = await withTrajectorySpan(
-            {
-              runtime: state.runtime,
-              source: "client_chat",
-              roomId: "web-chat",
-            },
-            () => proxy.handleChatMessage(body.text?.trim() || "", "web-chat", mode),
-          );
-          const resolvedText = normalizeChatResponseText(
-            responseText,
-            state.logBuffer,
-          );
-          json(res, { text: resolvedText, agentName: proxy.agentName });
-        } catch (err) {
-          const creditReply = getInsufficientCreditsReplyFromError(err);
-          if (creditReply) {
-            json(res, { text: creditReply, agentName: proxy.agentName });
-          } else {
-            error(res, getErrorMessage(err), 500);
-          }
-        }
-      }
-      return;
-    }
-
-    // ── Local runtime path (existing code below) ───────────────────────
     const body = await readJsonBody<{ text?: string; mode?: string }>(req, res);
     if (!body) return;
     if (!body.text?.trim()) {
@@ -10789,6 +10519,7 @@ async function handleRequest(
       return;
     }
     const mode: ChatMode = body.mode === "simple" ? "simple" : "power";
+    const prompt = body.text.trim();
 
     if (!state.runtime) {
       error(res, "Agent is not running", 503);
@@ -10810,7 +10541,7 @@ async function handleRequest(
         entityId: chatUserId,
         roomId: chatRoomId,
         content: {
-          text: body.text.trim(),
+          text: prompt,
           mode,
           simple: mode === "simple",
           source: "client_chat",
@@ -12540,8 +12271,8 @@ async function handleRequest(
 // the entire server dependency graph into lightweight consumers (e.g. the
 // headless `startEliza()` path).
 // ---------------------------------------------------------------------------
-import { captureEarlyLogs, flushEarlyLogs } from "./early-logs";
-export { captureEarlyLogs };
+import { type captureEarlyLogs, flushEarlyLogs } from "./early-logs";
+export type { captureEarlyLogs };
 
 // ---------------------------------------------------------------------------
 // Server start
@@ -12632,7 +12363,7 @@ export async function startApiServer(opts?: {
     chatConnectionPromise: null,
     adminEntityId: null,
     conversations: new Map(),
-    cloudManager: null,
+
     sandboxManager: null,
     appManager: new AppManager(),
     trainingService: null,
@@ -12883,7 +12614,7 @@ export async function startApiServer(opts?: {
 
     const unsubAgentEvents = svc.subscribe((event) => {
       // Filter out messages from Discord so they don't appear in the UI chat
-      const payload = event.data as any;
+      const payload = event.data as Record<string, unknown>;
       if (
         (payload.type === "received" || payload.type === "sent") &&
         (payload.channel === "discord" || payload.source === "discord")
@@ -12968,36 +12699,6 @@ export async function startApiServer(opts?: {
       } catch (err) {
         logger.error(
           `[milaidy-api] Training service init failed: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-    })();
-
-    void (async () => {
-      if (!state.config.cloud?.enabled || !state.config.cloud.apiKey) return;
-      const mgr = new CloudManager(state.config.cloud, {
-        onStatusChange: (s) => {
-          addLog("info", `Cloud connection status: ${s}`, "cloud", [
-            "server",
-            "cloud",
-          ]);
-        },
-      });
-
-      try {
-        await mgr.init();
-        state.cloudManager = mgr;
-        addLog(
-          "info",
-          "Cloud manager initialised (Eliza Cloud enabled)",
-          "cloud",
-          ["server", "cloud"],
-        );
-      } catch (err) {
-        addLog(
-          "warn",
-          `Cloud manager init failed: ${err instanceof Error ? err.message : String(err)}`,
-          "cloud",
-          ["server", "cloud"],
         );
       }
     })();

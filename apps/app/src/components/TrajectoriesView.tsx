@@ -96,7 +96,10 @@ export function TrajectoriesView({ onSelectTrajectory }: TrajectoriesViewProps) 
     }
   };
 
-  const handleExport = async (format: "json" | "csv", includePrompts: boolean) => {
+  const handleExport = async (
+    format: "json" | "csv" | "zip",
+    includePrompts: boolean,
+  ) => {
     setExporting(true);
     try {
       const blob = await client.exportTrajectories({ format, includePrompts });
@@ -277,6 +280,12 @@ export function TrajectoriesView({ onSelectTrajectory }: TrajectoriesViewProps) 
                 onClick={() => handleExport("csv", false)}
               >
                 CSV (summary only)
+              </button>
+              <button
+                className="block w-full text-left text-xs px-3 py-1.5 hover:bg-muted/20"
+                onClick={() => handleExport("zip", true)}
+              >
+                ZIP (folders)
               </button>
             </div>
           </div>

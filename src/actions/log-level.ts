@@ -25,7 +25,7 @@ export const logLevelAction: Action = {
     runtime: IAgentRuntime,
     message: Memory,
     _state: State | undefined,
-    _options: any,
+    _options: Record<string, unknown>,
     callback?: HandlerCallback,
   ): Promise<import("@elizaos/core").ActionResult> => {
     const text = (message.content.text || "").toLowerCase();

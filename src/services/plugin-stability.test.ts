@@ -43,7 +43,7 @@ type RootPackageJson = {
   };
 };
 
-function getCoreOverride(pkg: RootPackageJson): string | undefined {
+function _getCoreOverride(pkg: RootPackageJson): string | undefined {
   return (
     pkg.overrides?.["@elizaos/core"] ?? pkg.pnpm?.overrides?.["@elizaos/core"]
   );
@@ -886,25 +886,12 @@ describe("Version Skew Detection (issue #10)", () => {
     // which was missing in older core versions.
     // Fix: core is pinned to >= alpha.4 (where the export was introduced),
     // so plugins at "next" dist-tag resolve safely.
-<<<<<<< HEAD
-    const { readFileSync } = await import("node:fs");
-    const { resolve } = await import("node:path");
-    // Use process.cwd() for reliable root resolution in forked vitest workers
-    // (import.meta.dirname may not resolve to the source tree in CI forks).
-    const pkgPath = resolve(process.cwd(), "package.json");
-    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as RootPackageJson;
-=======
     const pkg = await readPackageManifest();
->>>>>>> f818a0560b085d28dfe6f022f633c08d915427cd
 
     const coreVersion = pkg.dependencies["@elizaos/core"];
     expect(coreVersion).toBeDefined();
     // Core can use "next" dist-tag if overrides pin the actual version
-<<<<<<< HEAD
-    const coreOverride = getCoreOverride(pkg);
-=======
-    const pnpmOverride = getDependencyOverride(pkg);
->>>>>>> f818a0560b085d28dfe6f022f633c08d915427cd
+    const coreOverride = getDependencyOverride(pkg);
     if (coreVersion === "next") {
       expect(coreOverride).toBeDefined();
       expect(coreOverride).toMatch(/^\d+\.\d+\.\d+/);

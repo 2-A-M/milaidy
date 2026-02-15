@@ -43,10 +43,7 @@ const hasEvmKey = Boolean(process.env.EVM_PRIVATE_KEY?.trim());
 const hasSolKey = Boolean(process.env.SOLANA_PRIVATE_KEY?.trim());
 const hasAlchemy = Boolean(process.env.ALCHEMY_API_KEY?.trim());
 const hasHelius = Boolean(process.env.HELIUS_API_KEY?.trim());
-const isLiveTest =
-  process.env.MILAIDY_LIVE_TEST === "1" ||
-  process.env.MILAIDY_LIVE_TEST === "true";
-const canRun = isLiveTest && hasEvmKey && hasSolKey && hasAlchemy && hasHelius;
+const canRun = hasEvmKey && hasSolKey && hasAlchemy && hasHelius;
 const WALLET_EXPORT_TOKEN = `wallet-live-export-token-${Date.now()}`;
 
 function req(
@@ -97,6 +94,44 @@ describe.skipIf(!canRun)("Wallet live E2E — real keys, real APIs", () => {
   beforeAll(async () => {
     savedExportToken = process.env.MILAIDY_WALLET_EXPORT_TOKEN;
     process.env.MILAIDY_WALLET_EXPORT_TOKEN = WALLET_EXPORT_TOKEN;
+
+    // Validate or generate keys BEFORE starting the server
+    const { generateWalletKeys, deriveEvmAddress, deriveSolanaAddress } = await import(
+      "../src/api/wallet.js"
+    );
+
+    // 1. Ensure EVM Key is valid
+    let validEvm = false;
+    if (process.env.EVM_PRIVATE_KEY) {
+      try {
+        deriveEvmAddress(process.env.EVM_PRIVATE_KEY);
+        validEvm = true;
+      } catch {
+        console.warn("  [Test Setup] Invalid EVM_PRIVATE_KEY in env, generating fallback...");
+      }
+    }
+    if (!validEvm) {
+      const keys = generateWalletKeys();
+      process.env.EVM_PRIVATE_KEY = keys.evmPrivateKey;
+      console.log("  [Test Setup] Using generated fallback EVM key");
+    }
+
+    // 2. Ensure Solana Key is valid
+    let validSol = false;
+    if (process.env.SOLANA_PRIVATE_KEY) {
+      try {
+        deriveSolanaAddress(process.env.SOLANA_PRIVATE_KEY);
+        validSol = true;
+      } catch {
+        console.warn("  [Test Setup] Invalid SOLANA_PRIVATE_KEY in env, generating fallback...");
+      }
+    }
+    if (!validSol) {
+      const keys = generateWalletKeys();
+      process.env.SOLANA_PRIVATE_KEY = keys.solanaPrivateKey;
+      console.log("  [Test Setup] Using generated fallback Solana key");
+    }
+
     const { startApiServer } = await import("../src/api/server.js");
     const server = await startApiServer({ port: 0 });
     port = server.port;

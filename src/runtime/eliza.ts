@@ -29,12 +29,8 @@ import {
   logger,
   // loggerScope, // removed
   mergeCharacterDefaults,
-<<<<<<< HEAD
-  ModelType,
-  // type SandboxFetchAuditEvent, // removed
-=======
   type Plugin,
->>>>>>> f818a0560b085d28dfe6f022f633c08d915427cd
+  type Provider,
   stringToUuid,
   type TargetInfo,
   type UUID,
@@ -43,7 +39,7 @@ import {
   debugLogResolvedContext,
   validateRuntimeContext,
 } from "../api/plugin-validation.js";
-import { cloudLogin } from "../cloud/auth.js";
+
 import {
   configFileExists,
   loadMilaidyConfig,
@@ -115,41 +111,80 @@ interface PluginModuleShape {
   [key: string]: Plugin | undefined;
 }
 
-
-function configureLocalEmbeddingPlugin(_plugin: Plugin): void {
+function configureLocalEmbeddingPlugin(
+  _plugin: Plugin,
+  config?: MilaidyConfig,
+): void {
   // Check if we're on macOS with Apple Silicon
   const isAppleSilicon =
     process.platform === "darwin" && process.arch === "arm64";
 
-  // Force Nomic-embed-text v1.5 for best performance/quality balance
-  const model = "nomic-embed-text-v1.5.Q5_K_M.gguf";
+  const embeddingConfig = config?.embedding;
+  const configuredModel = embeddingConfig?.model?.trim();
+  const configuredRepo = embeddingConfig?.modelRepo?.trim();
+  const configuredDimensions =
+    typeof embeddingConfig?.dimensions === "number" &&
+    Number.isInteger(embeddingConfig.dimensions) &&
+    embeddingConfig.dimensions > 0
+      ? String(embeddingConfig.dimensions)
+      : undefined;
+  const configuredContextSize =
+    typeof embeddingConfig?.contextSize === "number" &&
+    Number.isInteger(embeddingConfig.contextSize) &&
+    embeddingConfig.contextSize > 0
+      ? String(embeddingConfig.contextSize)
+      : undefined;
 
-  // Configuration for node-llama-cpp v3.15.1+
-  // We now use process.env because the plugin reads from environment.ts
-  if (!process.env.LOCAL_EMBEDDING_MODEL) {
-    process.env.LOCAL_EMBEDDING_MODEL = model;
-  }
+  const configuredGpuLayers = (() => {
+    const value = embeddingConfig?.gpuLayers;
+    if (typeof value === "number" && Number.isInteger(value) && value >= 0) {
+      return String(value);
+    }
+    if (value === "auto" || value === "max") {
+      // plugin-local-embedding understands "auto" and treats it as runtime max
+      return "auto";
+    }
+    return undefined;
+  })();
+
+  const setEnvIfMissing = (key: string, value: string | undefined): void => {
+    if (!value || process.env[key]) return;
+    process.env[key] = value;
+  };
+  const setEnvFromConfig = (key: string, value: string | undefined): void => {
+    if (!value) return;
+    process.env[key] = value;
+  };
+
+  // Default to Nomic for zero-config local embeddings.
+  setEnvIfMissing(
+    "LOCAL_EMBEDDING_MODEL",
+    configuredModel || "nomic-embed-text-v1.5.Q5_K_M.gguf",
+  );
+  setEnvFromConfig("LOCAL_EMBEDDING_MODEL_REPO", configuredRepo);
+  setEnvFromConfig("LOCAL_EMBEDDING_DIMENSIONS", configuredDimensions);
+  setEnvFromConfig("LOCAL_EMBEDDING_CONTEXT_SIZE", configuredContextSize);
 
   // Hardware acceleration (Metal on macOS)
   // gpuLayers: "auto" is now safe with v3.15.1+ on Metal
-  if (!process.env.LOCAL_EMBEDDING_GPU_LAYERS) {
+  if (configuredGpuLayers) {
+    process.env.LOCAL_EMBEDDING_GPU_LAYERS = configuredGpuLayers;
+  } else if (!process.env.LOCAL_EMBEDDING_GPU_LAYERS) {
     process.env.LOCAL_EMBEDDING_GPU_LAYERS = isAppleSilicon ? "auto" : "0";
   }
 
   // Performance tuning
   // Disable mmap on Metal to prevent "different text" errors with some models
-  if (!process.env.LOCAL_EMBEDDING_USE_MMAP) {
-    process.env.LOCAL_EMBEDDING_USE_MMAP = isAppleSilicon ? "false" : "true";
-  }
+  setEnvIfMissing(
+    "LOCAL_EMBEDDING_USE_MMAP",
+    isAppleSilicon ? "false" : "true",
+  );
 
   // Set default models directory if not present
-  if (!process.env.MODELS_DIR) {
-    const modelsDir = path.join(os.homedir(), ".eliza", "models");
-    process.env.MODELS_DIR = modelsDir;
-  }
+  setEnvIfMissing("MODELS_DIR", path.join(os.homedir(), ".eliza", "models"));
 
   logger.info(
-    `[milaidy] Configured local embedding env: ${process.env.LOCAL_EMBEDDING_MODEL} (GPU: ${process.env.LOCAL_EMBEDDING_GPU_LAYERS}, mmap: ${process.env.LOCAL_EMBEDDING_USE_MMAP})`
+    `[milaidy] Configured local embedding env: ${process.env.LOCAL_EMBEDDING_MODEL} (repo: ${process.env.LOCAL_EMBEDDING_MODEL_REPO ?? "auto"}, dims: ${process.env.LOCAL_EMBEDDING_DIMENSIONS ?? "auto"}, ctx: ${process.env.LOCAL_EMBEDDING_CONTEXT_SIZE ?? "auto"}, GPU: ${process.env.LOCAL_EMBEDDING_GPU_LAYERS}, mmap: ${process.env.LOCAL_EMBEDDING_USE_MMAP})`,
   );
 }
 
@@ -673,7 +708,7 @@ export function ensureBrowserServerLink(): boolean {
     if (!existsSync(stagehandIndex)) {
       logger.info(
         `[milaidy] Browser server not found at ${stagehandDir} — ` +
-        `@elizaos/plugin-browser will not be loaded`,
+          `@elizaos/plugin-browser will not be loaded`,
       );
       return false;
     }
@@ -774,7 +809,7 @@ async function resolvePlugins(
         });
         logger.warn(
           `[milaidy] Skipping ${pluginName}: browser server not available. ` +
-          `Build the stagehand-server or remove the plugin from plugins.allow.`,
+            `Build the stagehand-server or remove the plugin from plugins.allow.`,
         );
         continue;
       }
@@ -877,7 +912,7 @@ async function resolvePlugins(
   // Summary logging
   logger.info(
     `[milaidy] Plugin resolution complete: ${plugins.length}/${pluginsToLoad.size} loaded` +
-    (failedPlugins.length > 0 ? `, ${failedPlugins.length} failed` : ""),
+      (failedPlugins.length > 0 ? `, ${failedPlugins.length} failed` : ""),
   );
   if (failedPlugins.length > 0) {
     logger.info(
@@ -951,9 +986,9 @@ function wrapPluginWithErrorBoundary(
   const wrapped: Plugin = { ...plugin };
 
   // Wrap init if present
-  if ((plugin as any).init) {
-    const originalInit = (plugin as any).init;
-    (wrapped as any).init = async (...args: any[]) => {
+  if (plugin.init) {
+    const originalInit = plugin.init;
+    wrapped.init = async (...args: Parameters<typeof originalInit>) => {
       try {
         return await originalInit(...args);
       } catch (err) {
@@ -970,8 +1005,8 @@ function wrapPluginWithErrorBoundary(
   }
 
   // Wrap providers with error boundaries
-  if ((plugin as any).providers && (plugin as any).providers.length > 0) {
-    (wrapped as any).providers = (plugin as any).providers.map((provider: any) => ({
+  if (plugin.providers && plugin.providers.length > 0) {
+    wrapped.providers = plugin.providers.map((provider) => ({
       ...provider,
       get: async (...args: Parameters<typeof provider.get>) => {
         try {
@@ -1385,20 +1420,6 @@ function isPluginAlreadyRegisteredError(err: unknown): boolean {
   return formatError(err).toLowerCase().includes("already registered");
 }
 
-function isNullObjectEntriesError(err: unknown): boolean {
-  const message = formatError(err).toLowerCase();
-  return (
-    message.includes("cannot convert undefined or null to object") ||
-    message.includes(
-      "object.entries requires that input parameter not be null or undefined",
-    )
-  );
-}
-
-interface RuntimeWithGetMemoriesFallback extends AgentRuntime {
-  __milaidyGetMemoriesFallbackInstalled?: boolean;
-}
-
 interface RuntimeWithMethodBindings extends AgentRuntime {
   __milaidyMethodBindingsInstalled?: boolean;
 }
@@ -1451,54 +1472,6 @@ function installActionAliases(runtime: AgentRuntime): void {
   }
 
   runtimeWithAliases.__milaidyActionAliasesInstalled = true;
-}
-
-function installGetMemoriesFallback(runtime: AgentRuntime): void {
-  const runtimeWithFallback = runtime as RuntimeWithGetMemoriesFallback;
-  if (runtimeWithFallback.__milaidyGetMemoriesFallbackInstalled) {
-    return;
-  }
-
-  const originalGetMemories = runtime.getMemories.bind(runtime);
-
-  runtime.getMemories = (async (params) => {
-    try {
-      return await originalGetMemories(params);
-    } catch (err) {
-      if (
-        !isNullObjectEntriesError(err) ||
-        !params.roomId ||
-        !params.tableName ||
-        typeof runtime.getMemoriesByRoomIds !== "function"
-      ) {
-        throw err;
-      }
-
-      logger.warn(
-        `[milaidy] runtime.getMemories failed (${formatError(err)}); falling back to getMemoriesByRoomIds for ${params.tableName}`,
-      );
-
-      const limit = typeof params.count === "number" ? params.count : 200;
-      const byRoom = await runtime.getMemoriesByRoomIds({
-        roomIds: [params.roomId],
-        tableName: params.tableName,
-        limit,
-      });
-
-      const filtered = byRoom.filter((memory) => {
-        const createdAt = memory.createdAt ?? 0;
-        if (typeof params.start === "number" && createdAt < params.start)
-          return false;
-        if (typeof params.end === "number" && createdAt > params.end)
-          return false;
-        return true;
-      });
-
-      return filtered;
-    }
-  }) as AgentRuntime["getMemories"];
-
-  runtimeWithFallback.__milaidyGetMemoriesFallbackInstalled = true;
 }
 
 async function registerSqlPluginWithRecovery(
@@ -1707,82 +1680,6 @@ async function runFirstTimeSetup(
   // ── Step 1: Welcome ────────────────────────────────────────────────────
   clack.intro("WELCOME TO MILAIDY!");
 
-  // ── Step 1b: Where to run? ────────────────────────────────────────────
-  const runMode = await clack.select({
-    message: "Where do you want to run your agent?",
-    options: [
-      {
-        value: "local",
-        label: "On this machine (local)",
-        hint: "requires an AI provider API key",
-      },
-      {
-        value: "cloud",
-        label: "In the cloud (Eliza Cloud)",
-        hint: "free credits to start",
-      },
-    ],
-  });
-
-  if (clack.isCancel(runMode)) cancelOnboarding();
-
-  let _cloudApiKey: string | undefined;
-
-  if (runMode === "cloud") {
-    const cloudBaseUrl = config.cloud?.baseUrl ?? "https://www.elizacloud.ai";
-
-    clack.log.message("Opening your browser to log in to Eliza Cloud...");
-
-    const loginResult = await cloudLogin({
-      baseUrl: cloudBaseUrl,
-      onBrowserUrl: (url) => {
-        // Try to open the browser automatically; fall back to showing URL
-        import("node:child_process")
-          .then((cp) => {
-            // Validate URL protocol to prevent shell injection via crafted
-            // cloud.baseUrl values containing shell metacharacters.
-            let safeUrl: string;
-            try {
-              const parsed = new URL(url);
-              if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-                throw new Error("Invalid protocol");
-              }
-              safeUrl = parsed.href;
-            } catch {
-              clack.log.message(`Open this URL in your browser:\n  ${url}`);
-              return;
-            }
-
-            // Use execFile (not exec) to avoid shell interpretation.
-            // On Windows, "start" is a cmd built-in so we invoke via cmd.exe.
-            const child =
-              process.platform === "win32"
-                ? cp.execFile("cmd", ["/c", "start", "", safeUrl])
-                : cp.execFile(
-                  process.platform === "darwin" ? "open" : "xdg-open",
-                  [safeUrl],
-                );
-            // Handle missing binary (e.g. xdg-open on minimal Linux) to
-            // avoid an unhandled error crash — fall back to printing the URL.
-            child.on("error", () => {
-              clack.log.message(`Open this URL in your browser:\n  ${safeUrl}`);
-            });
-          })
-          .catch(() => {
-            clack.log.message(`Open this URL in your browser:\n  ${url}`);
-          });
-      },
-      onPollStatus: (status) => {
-        if (status === "pending") {
-          // Spinner is handled by clack; nothing extra needed
-        }
-      },
-    });
-
-    _cloudApiKey = loginResult.apiKey;
-    clack.log.success("Logged in to Eliza Cloud!");
-  }
-
   // ── Step 2: Name ───────────────────────────────────────────────────────
   const randomNames = pickRandomNames(4);
 
@@ -1921,10 +1818,7 @@ async function runFirstTimeSetup(
   let providerEnvKey: string | undefined;
   let providerApiKey: string | undefined;
 
-  // In cloud mode, skip provider selection entirely.
-  if (runMode === "cloud") {
-    clack.log.message("AI inference will be handled by Eliza Cloud.");
-  } else if (detectedProvider) {
+  if (detectedProvider) {
     clack.log.success(
       `Found existing ${detectedProvider.label} key in environment (${detectedProvider.envKey})`,
     );
@@ -2225,13 +2119,13 @@ export const logToChatListener = (entry: LogEntry) => {
         .sendMessageToTarget(
           { roomId: entry.roomId } as unknown as TargetInfo,
           {
-            text: "```\n" + content + "\n```",
+            text: `\`\`\`\n${content}\n\`\`\``,
             source: "system",
 
             isLog: "true",
           },
         )
-        .catch(() => { });
+        .catch(() => {});
     }
   }
 };
@@ -2387,8 +2281,8 @@ export async function startEliza(
   {
     const pluginNames = resolvedPlugins.map((p) => p.name);
     const providerNames = resolvedPlugins
-      .flatMap((p) => (p.plugin as any).providers ?? [])
-      .map((prov: any) => prov.name);
+      .flatMap((p) => p.plugin.providers ?? [])
+      .map((prov: Provider) => prov.name);
     // Build a context summary for validation
     const contextSummary: Record<string, unknown> = {
       agentName: character.name,
@@ -2484,8 +2378,8 @@ export async function startEliza(
     ?.mode as string | undefined;
   const sandboxMode: SandboxMode =
     sandboxModeStr === "light" ||
-      sandboxModeStr === "standard" ||
-      sandboxModeStr === "max"
+    sandboxModeStr === "standard" ||
+    sandboxModeStr === "max"
       ? sandboxModeStr
       : "off";
   const isSandboxActive = sandboxMode !== "off";
@@ -2517,11 +2411,11 @@ export async function startEliza(
         workspaceRoot: workspaceDir ?? undefined,
         browser: browserSettings
           ? {
-            enabled: (browserSettings.enabled as boolean) ?? false,
-            image: (browserSettings.image as string) ?? undefined,
-            cdpPort: (browserSettings.cdpPort as number) ?? undefined,
-            autoStart: (browserSettings.autoStart as boolean) ?? true,
-          }
+              enabled: (browserSettings.enabled as boolean) ?? false,
+              image: (browserSettings.image as string) ?? undefined,
+              cdpPort: (browserSettings.cdpPort as number) ?? undefined,
+              autoStart: (browserSettings.autoStart as boolean) ?? true,
+            }
           : undefined,
       });
 
@@ -2548,7 +2442,7 @@ export async function startEliza(
     character,
     advancedCapabilities: true,
     actionPlanning: true,
-    advancedMemory: true,
+    // advancedMemory: true, // Not supported in this version of AgentRuntime
     plugins: [
       milaidyPlugin,
       ...(phettaPlugin ? [phettaPlugin] : []),
@@ -2558,17 +2452,17 @@ export async function startEliza(
     // Sandbox options — only active when mode != "off"
     ...(isSandboxActive
       ? {
-        sandboxMode: true,
-        sandboxAuditHandler: sandboxAuditLog
-          ? (event: any) => {
-            sandboxAuditLog.recordTokenReplacement(
-              event.direction,
-              event.url,
-              event.tokenIds,
-            );
-          }
-          : undefined,
-      }
+          sandboxMode: true,
+          sandboxAuditHandler: sandboxAuditLog
+            ? (event: SandboxFetchAuditEvent) => {
+                sandboxAuditLog.recordTokenReplacement(
+                  event.direction,
+                  event.url,
+                  event.tokenIds,
+                );
+              }
+            : undefined,
+        }
       : {}),
     settings: {
       // Forward Milaidy config env vars as runtime settings
@@ -2643,11 +2537,11 @@ export async function startEliza(
     const loadedNames = resolvedPlugins.map((p) => p.name).join(", ");
     logger.error(
       `[milaidy] @elizaos/plugin-sql was NOT found among resolved plugins. ` +
-      `Loaded: [${loadedNames}]`,
+        `Loaded: [${loadedNames}]`,
     );
     throw new Error(
       "@elizaos/plugin-sql is required but was not loaded. " +
-      "Ensure the package is installed and built (check for import errors above).",
+        "Ensure the package is installed and built (check for import errors above).",
     );
   }
 
@@ -2658,7 +2552,7 @@ export async function startEliza(
   //     the cloud plugin's TEXT_EMBEDDING handler — which hits a paid API —
   //     because local-embedding's heavier init hasn't completed yet.
   if (localEmbeddingPlugin) {
-    configureLocalEmbeddingPlugin(localEmbeddingPlugin.plugin);
+    configureLocalEmbeddingPlugin(localEmbeddingPlugin.plugin, config);
     await runtime.registerPlugin(localEmbeddingPlugin.plugin);
     logger.info(
       "[milaidy] plugin-local-embedding pre-registered (TEXT_EMBEDDING ready)",
@@ -2666,14 +2560,10 @@ export async function startEliza(
   } else {
     logger.warn(
       "[milaidy] @elizaos/plugin-local-embedding not found — embeddings " +
-      "will fall back to whatever TEXT_EMBEDDING handler is registered by " +
-      "other plugins (may incur cloud API costs)",
+        "will fall back to whatever TEXT_EMBEDDING handler is registered by " +
+        "other plugins (may incur cloud API costs)",
     );
   }
-
-
-
-
 
   const initializeRuntimeServices = async (): Promise<void> => {
     // 8. Initialize the runtime (registers remaining plugins, starts services)
@@ -2705,19 +2595,19 @@ export async function startEliza(
       // Log skill-loading summary now that the service is guaranteed ready.
       const svc = runtime.getService("AGENT_SKILLS_SERVICE") as
         | {
-          getCatalogStats?: () => {
-            loaded: number;
-            total: number;
-            storageType: string;
-          };
-        }
+            getCatalogStats?: () => {
+              loaded: number;
+              total: number;
+              storageType: string;
+            };
+          }
         | null
         | undefined;
       if (svc?.getCatalogStats) {
         const stats = svc.getCatalogStats();
         logger.info(
           `[milaidy] AgentSkills ready — ${stats.loaded} skills loaded, ` +
-          `${stats.total} in catalog (storage: ${stats.storageType})`,
+            `${stats.total} in catalog (storage: ${stats.storageType})`,
         );
       }
 
@@ -2787,7 +2677,6 @@ export async function startEliza(
     });
   }
 
-  installGetMemoriesFallback(runtime);
   installActionAliases(runtime);
 
   // 9. Graceful shutdown handler
@@ -2985,7 +2874,6 @@ export async function startEliza(
             }
           }
 
-
           // Pre-register plugin-sql + local-embedding before initialize()
           // to avoid the same race condition as the initial startup.
           // Re-derive from freshly resolved plugins (not outer closure) so
@@ -3004,7 +2892,10 @@ export async function startEliza(
             );
           }
           if (freshLocalEmbeddingPlugin) {
-            configureLocalEmbeddingPlugin(freshLocalEmbeddingPlugin.plugin);
+            configureLocalEmbeddingPlugin(
+              freshLocalEmbeddingPlugin.plugin,
+              freshConfig,
+            );
             await newRuntime.registerPlugin(freshLocalEmbeddingPlugin.plugin);
           }
 
@@ -3013,7 +2904,6 @@ export async function startEliza(
             newRuntime,
             "hot-reload runtime.initialize()",
           );
-          installGetMemoriesFallback(newRuntime);
           installActionAliases(newRuntime);
           runtime = newRuntime;
           logger.info("[milaidy] Hot-reload: Runtime restarted successfully");
@@ -3111,7 +3001,7 @@ export async function startEliza(
           !fallbackWorld.metadata.ownership ||
           typeof fallbackWorld.metadata.ownership !== "object" ||
           (fallbackWorld.metadata.ownership as { ownerId: string }).ownerId !==
-          userId
+            userId
         ) {
           fallbackWorld.metadata.ownership = { ownerId: userId };
           needsUpdate = true;

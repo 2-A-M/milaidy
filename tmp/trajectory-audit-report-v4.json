@@ -1,0 +1,53 @@
+{
+  "generatedAt": "2026-02-15T03:09:48.490Z",
+  "root": "/Users/shawwalters/eliza-workspace/milaidy/tmp/trajectories-export-v4",
+  "trajectoryCount": 4,
+  "findingsCount": 0,
+  "findings": [],
+  "trajectories": [
+    {
+      "id": "0d43bb77-957d-45af-bf3a-f8293ee55073",
+      "status": "completed",
+      "source": "client_chat",
+      "stepCount": 1,
+      "llmCallCount": 3,
+      "providerAccessCount": 77,
+      "hasMetricsFinalStatus": true,
+      "hasConversationId": true,
+      "issues": []
+    },
+    {
+      "id": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+      "status": "completed",
+      "source": "client_chat",
+      "stepCount": 1,
+      "llmCallCount": 3,
+      "providerAccessCount": 77,
+      "hasMetricsFinalStatus": true,
+      "hasConversationId": true,
+      "issues": []
+    },
+    {
+      "id": "533faee8-50a9-49a1-ad09-2a6c0c5014db",
+      "status": "completed",
+      "source": "client_chat",
+      "stepCount": 1,
+      "llmCallCount": 3,
+      "providerAccessCount": 77,
+      "hasMetricsFinalStatus": true,
+      "hasConversationId": true,
+      "issues": []
+    },
+    {
+      "id": "c2f0d92c-c078-4e08-ab72-28522c708ad4",
+      "status": "completed",
+      "source": "client_chat",
+      "stepCount": 1,
+      "llmCallCount": 3,
+      "providerAccessCount": 77,
+      "hasMetricsFinalStatus": true,
+      "hasConversationId": true,
+      "issues": []
+    }
+  ]
+}

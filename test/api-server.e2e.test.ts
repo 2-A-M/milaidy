@@ -73,6 +73,47 @@ function req(
   });
 }
 
+function reqRaw(
+  port: number,
+  method: string,
+  p: string,
+  body?: Record<string, unknown>,
+): Promise<{
+  status: number;
+  headers: http.IncomingHttpHeaders;
+  data: Buffer;
+}> {
+  return new Promise((resolve, reject) => {
+    const b = body ? JSON.stringify(body) : undefined;
+    const r = http.request(
+      {
+        hostname: "127.0.0.1",
+        port,
+        path: p,
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          ...(b ? { "Content-Length": Buffer.byteLength(b) } : {}),
+        },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("end", () => {
+          resolve({
+            status: res.statusCode ?? 0,
+            headers: res.headers,
+            data: Buffer.concat(chunks),
+          });
+        });
+      },
+    );
+    r.on("error", reject);
+    if (b) r.write(b);
+    r.end();
+  });
+}
+
 type SseEventPayload = {
   type?: string;
   text?: string;
@@ -1100,6 +1141,56 @@ describe("API Server E2E (no runtime)", () => {
       }
     });
 
+    it("POST /api/chat ends trajectories started by MESSAGE_RECEIVED hooks", async () => {
+      const starts: Array<{ stepId: string }> = [];
+      const ends: Array<{ stepId: string; status?: string }> = [];
+      const trajectoryLogger = {
+        isEnabled: () => true,
+        startTrajectory: async (stepId: string) => {
+          starts.push({ stepId });
+          return stepId;
+        },
+        endTrajectory: async (stepId: string, status?: string) => {
+          ends.push({ stepId, status });
+        },
+      };
+
+      const runtime = createRuntimeForChatSseTests({
+        getService: (serviceType) =>
+          serviceType === "trajectory_logger" ? trajectoryLogger : null,
+        onEmitEvent: (_event, payload) => {
+          if (
+            payload &&
+            typeof payload === "object" &&
+            "message" in payload &&
+            payload.message &&
+            typeof payload.message === "object"
+          ) {
+            const msg = payload.message as { metadata?: Record<string, unknown> };
+            if (!msg.metadata) msg.metadata = {};
+            msg.metadata.trajectoryStepId = "hook-step-id";
+          }
+        },
+      });
+
+      const streamServer = await startApiServer({ port: 0, runtime });
+      try {
+        const { status, data } = await req(streamServer.port, "POST", "/api/chat", {
+          text: "trajectory end by hook",
+          mode: "simple",
+        });
+
+        expect(status).toBe(200);
+        expect(String(data.text ?? "")).toBe("Hello world");
+        expect(starts).toHaveLength(0);
+        expect(ends).toHaveLength(1);
+        expect(ends[0]?.stepId).toBe("hook-step-id");
+        expect(ends[0]?.status).toBe("completed");
+      } finally {
+        await streamServer.close();
+      }
+    });
+
     it("POST /api/chat routes model trajectory logs to persisted logger", async () => {
       const starts: Array<{ stepId: string }> = [];
       const ends: Array<{ stepId: string; status?: string }> = [];
@@ -1453,6 +1544,130 @@ describe("API Server E2E (no runtime)", () => {
         expect(llmCalls[0]?.response).toBe("fallback response");
         expect(llmCalls[0]?.promptTokens).toBe(12);
         expect(llmCalls[0]?.completionTokens).toBe(18);
+      } finally {
+        await streamServer.close();
+      }
+    });
+
+    it("POST /api/trajectories/export returns a zip with trajectory folders", async () => {
+      const trajectoryId = "trajectory-zip-export";
+      const startTime = Date.now() - 2_000;
+      const endTime = startTime + 1_100;
+
+      const trajectoryLogger = {
+        isEnabled: () => true,
+        setEnabled: () => {},
+        listTrajectories: async () => ({
+          trajectories: [
+            {
+              id: trajectoryId,
+              agentId: "chat-stream-agent",
+              source: "client_chat",
+              status: "completed",
+              startTime,
+              endTime,
+              durationMs: endTime - startTime,
+              stepCount: 1,
+              llmCallCount: 1,
+              totalPromptTokens: 10,
+              totalCompletionTokens: 20,
+              totalReward: 0,
+              scenarioId: null,
+              batchId: null,
+              createdAt: new Date(startTime).toISOString(),
+            },
+          ],
+          total: 1,
+          offset: 0,
+          limit: 50,
+        }),
+        getTrajectoryDetail: async () => ({
+          trajectoryId,
+          agentId: "chat-stream-agent",
+          startTime,
+          endTime,
+          durationMs: endTime - startTime,
+          steps: [
+            {
+              stepId: "step-1",
+              stepNumber: 1,
+              timestamp: startTime + 100,
+              llmCalls: [
+                {
+                  callId: "call-1",
+                  timestamp: startTime + 200,
+                  model: "test-model",
+                  systemPrompt: "system",
+                  userPrompt: "hello",
+                  response: "world",
+                  temperature: 0.1,
+                  maxTokens: 200,
+                  purpose: "response",
+                  promptTokens: 10,
+                  completionTokens: 20,
+                  latencyMs: 12,
+                },
+              ],
+              providerAccesses: [],
+            },
+          ],
+          totalReward: 0,
+          metrics: {
+            episodeLength: 1,
+            finalStatus: "completed",
+          },
+          metadata: {
+            source: "client_chat",
+          },
+        }),
+        getStats: async () => ({
+          totalTrajectories: 1,
+          totalSteps: 1,
+          totalLlmCalls: 1,
+          totalPromptTokens: 10,
+          totalCompletionTokens: 20,
+          averageDurationMs: endTime - startTime,
+          averageReward: 0,
+          bySource: { client_chat: 1 },
+          byStatus: { completed: 1 },
+          byScenario: {},
+        }),
+        deleteTrajectories: async () => 0,
+        clearAllTrajectories: async () => 0,
+        exportTrajectories: async () => ({
+          data: "[]",
+          filename: "trajectories.json",
+          mimeType: "application/json",
+        }),
+      };
+
+      const runtime = createRuntimeForChatSseTests({
+        getService: (serviceType) =>
+          serviceType === "trajectory_logger" ? trajectoryLogger : null,
+        getServicesByType: (serviceType) =>
+          serviceType === "trajectory_logger" ? [trajectoryLogger] : [],
+      }) as AgentRuntime & { adapter?: unknown };
+      runtime.adapter = {};
+
+      const streamServer = await startApiServer({ port: 0, runtime });
+      try {
+        const zipRes = await reqRaw(
+          streamServer.port,
+          "POST",
+          "/api/trajectories/export",
+          { format: "zip" },
+        );
+        expect(zipRes.status).toBe(200);
+        expect(String(zipRes.headers["content-type"] ?? "")).toContain(
+          "application/zip",
+        );
+        expect(String(zipRes.headers["content-disposition"] ?? "")).toContain(
+          ".zip",
+        );
+        expect(zipRes.data.subarray(0, 2).toString("utf-8")).toBe("PK");
+        const zipText = zipRes.data.toString("utf-8");
+        expect(zipText).toContain("manifest.json");
+        expect(zipText).toContain(`${trajectoryId}/summary.json`);
       } finally {
         await streamServer.close();
       }

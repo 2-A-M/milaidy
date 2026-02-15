@@ -547,6 +547,8 @@ export type EmbeddingConfig = {
   modelRepo?: string;
   /** Embedding vector dimension (default: 768). */
   dimensions?: number;
+  /** Embedding context window size (must match the model; default: model hint). */
+  contextSize?: number;
   /** GPU layers for model loading: "auto", "max", or a number. */
   gpuLayers?: number | "auto" | "max";
   /** Minutes of inactivity before unloading model from memory (default: 30, 0 = never). */

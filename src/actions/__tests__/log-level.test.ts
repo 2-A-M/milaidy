@@ -17,9 +17,9 @@ vi.mock("@elizaos/core", () => {
 });
 
 describe("logLevelAction", () => {
-  let mockRuntime;
-  let mockMessage;
-  let mockCallback;
+  let mockRuntime: { logLevelOverrides: Map<string, string> };
+  let mockMessage: { roomId: string; content: { text: string } };
+  let mockCallback: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     mockRuntime = {

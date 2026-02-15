@@ -356,6 +356,7 @@ const FIELD_LABELS: Record<string, string> = {
   "embedding.model": "Embedding Model",
   "embedding.modelRepo": "Embedding Model Repo",
   "embedding.dimensions": "Embedding Dimensions",
+  "embedding.contextSize": "Embedding Context Size",
   "embedding.gpuLayers": "Embedding GPU Layers",
   "embedding.idleTimeoutMinutes": "Embedding Idle Timeout (min)",
   memory: "Memory",
@@ -719,6 +720,8 @@ const FIELD_HELP: Record<string, string> = {
     "HuggingFace repo for auto-downloading the embedding model (default: nomic-ai/nomic-embed-text-v1.5-GGUF).",
   "embedding.dimensions":
     "Embedding vector dimensions (must match the model; default: 768).",
+  "embedding.contextSize":
+    "Embedding context window size (must match the model; default inferred from selected model).",
   "embedding.gpuLayers":
     'GPU layers for embedding model loading: "auto" (Metal on macOS), "max", or a number (default: "auto" on macOS, 0 elsewhere).',
   "embedding.idleTimeoutMinutes":

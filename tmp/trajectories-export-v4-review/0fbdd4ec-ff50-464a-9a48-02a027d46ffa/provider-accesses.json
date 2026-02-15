@@ -1,0 +1,1157 @@
+[
+  {
+    "id": "74d113a8-c998-4b02-8223-3f6b18999db4",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "milaidySimpleMode",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 160
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957579,
+    "createdAt": "2026-02-15T03:09:17.579Z"
+  },
+  {
+    "id": "6da110d1-bf07-4144-a4e3-4405418f2401",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "ACTIONS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 3286
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957579,
+    "createdAt": "2026-02-15T03:09:17.579Z"
+  },
+  {
+    "id": "76720b2a-b124-48a3-acd0-f4d915b0b567",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "CHARACTER",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 2414
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957579,
+    "createdAt": "2026-02-15T03:09:17.579Z"
+  },
+  {
+    "id": "09485f68-fff4-44f3-8d36-c8cf6ef3151b",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "ENTITIES",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 128
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957579,
+    "createdAt": "2026-02-15T03:09:17.579Z"
+  },
+  {
+    "id": "f28edbc2-6344-49da-8803-333b5327d3d3",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "ENTITIES",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 128
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957579,
+    "createdAt": "2026-02-15T03:09:17.579Z"
+  },
+  {
+    "id": "37d44eac-1db4-4ec1-9a6f-51f5e6fde079",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "RECENT_MESSAGES",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 333
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957579,
+    "createdAt": "2026-02-15T03:09:17.579Z"
+  },
+  {
+    "id": "909d577d-9c33-43aa-a565-210116527ad0",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "milaidySimpleMode",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 160
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "154c2a77-61ca-4a8a-8760-a490a5de9e92",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "agent_skills",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 1107
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "b34df4e6-8ecd-405a-9504-b14f5818e44a",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "ACTIONS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 3314
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "883bd3cf-e38f-4611-b653-e579713ad4a0",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "CAPABILITIES",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 1965
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "2600794b-14ae-4924-a44d-0ee5d9623bc4",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "CHARACTER",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 2292
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "1e24cbd8-5308-4cb1-a823-2b41bb22d334",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "PROVIDERS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 1774
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "f77bb6d2-19e4-4abb-9b64-f22df15b076e",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "TIME",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 151
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "5bc274c2-f7bd-4614-9341-ac38eb7d94fb",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "CHOICE",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 34
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "8168b783-f986-45fa-ac7d-a22cc816c3bb",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "CONTACTS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 23
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "c209e6d6-81de-4e03-bde6-b131f30ee75a",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "FOLLOW_UPS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 33
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "687567ea-f127-4356-86d3-96361b35ba5e",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "ROLES",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 93
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "1b62d6fe-a41c-4986-969a-5b26fb03a68c",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "SETTINGS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 927
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "55ab7991-6c14-4d84-8fc0-a7abaf2132dd",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "AVAILABLE_DOCUMENTS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "4e019b63-aec0-4d7f-ae64-ffe519841a3e",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "uiCatalog",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 17224
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "b25c1994-3482-4696-b454-af8f1f10fd81",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "emotes",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 467
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "db0ca132-0c92-488b-a694-b8d9798ada1c",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "media",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 1042
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "58993be0-a054-4f58-8c43-89ff1972151f",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "terminal",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 263
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "ef3e7987-da2b-4dda-88ff-27b28d6355b2",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "customActions",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 132
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "5ca83f84-bafc-45d1-8ca0-3962b9c36982",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "pluginState",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 1398
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "579cf356-dc05-4eab-8296-89fe8d5f8558",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "pluginConfigurationStatus",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 496
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "e1da04c5-ec8c-4c49-b61b-8172e736dab2",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "registryPlugins",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 89
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "1f6cd307-8019-4cd2-9c07-5f80dba06fec",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "todos",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 606
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "96576195-2d0b-444c-9102-dc5a68063bf8",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "channelState",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "601e2b28-c62e-43c4-8962-79e0cb2959d5",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "voiceState",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "7adb8f18-b2ce-46b6-acaa-881525779144",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "guildInfo",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "c310576b-e3b8-475c-b618-2bd334b50237",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "CONTEXT_BENCH",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "67e34b28-8426-4652-85b2-c090b36ddd28",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "agent_skill_instructions",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "d2ff6130-717f-4784-91c3-7391d5e4b692",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "workspaceContext",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 2190
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "7345dc0a-d9f3-437b-8a1e-ee1a8a6812ef",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "RS_SDK_MAP_AREA",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "56c44b22-e6b7-451d-800b-c731aeb8b3ac",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "RS_SDK_WORLD_KNOWLEDGE",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "01847068-6316-4bf0-aa71-a9a35264151f",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "RS_SDK_GOALS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "8702c34c-20f9-4a5e-910f-ee72885187bb",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "RS_SDK_BOT_STATE",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 91
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "27b92365-1033-4e58-a98f-aa0cd1b643cc",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "SHELL_HISTORY",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 175
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "02497c0f-b91a-47d0-b029-f786f177eef0",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "RECENT_MESSAGES",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 333
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "9202fc9b-7b85-49aa-8536-d08eeed001b0",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "ACTION_STATE",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 37
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124957730,
+    "createdAt": "2026-02-15T03:09:17.730Z"
+  },
+  {
+    "id": "40728dfd-4317-4a20-b24c-964ffe4a8195",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "milaidySimpleMode",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 160
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "a20a1925-1386-4127-b756-ce952c614792",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "agent_skills",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 1107
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "f5e8e00b-1b95-4a86-bed1-3566b38095c1",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "ACTIONS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 3593
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "fa476443-213d-4c92-9469-3bef06d5903f",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "CAPABILITIES",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 1965
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "7b062fd6-e745-4d68-b20b-8eb2150258c2",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "CHARACTER",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 2446
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "acc952d8-7a33-4e18-aec7-9907c81bf583",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "EVALUATORS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 348
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "5df1f5f3-2f8f-4460-b1ab-7ff7e0388d84",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "PROVIDERS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 1774
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "2e9a82eb-40d0-48be-be4d-3be06ecf1f44",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "TIME",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 151
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "559d443f-ccd7-4735-9a77-20c86f8a4bf9",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "CHOICE",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 34
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "26d2e9d4-edb1-43fc-a754-78c3b086f2c0",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "CONTACTS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 23
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "d836e899-62e6-4820-833f-7c9119b27680",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "FOLLOW_UPS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 33
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "566de608-0641-4d44-a7ac-177748511d5b",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "ROLES",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 93
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "766c7fb8-b9fb-47ce-b159-407377a454c0",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "SETTINGS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 927
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "f9b08b78-9d5d-4505-996c-7f3b796aefc7",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "AVAILABLE_DOCUMENTS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "09285e8c-aa60-427d-b6e1-731c890efccf",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "uiCatalog",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 17224
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "14d155d4-b260-4d0a-a07f-3191841823a7",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "emotes",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 467
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "90b88060-cc21-4ef9-84a3-e326362e17e0",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "media",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 1042
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "94ac0fa0-ee20-49d7-8a1f-2393c260f6e0",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "terminal",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 263
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "25c3bebe-232d-4390-a16f-e5bb2eeb1e3b",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "customActions",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 132
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "871f3848-6ee4-46af-b561-48787c4dcfac",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "pluginState",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 1398
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "fa6d94ff-10ab-4eb8-b03e-9e1c54138fde",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "pluginConfigurationStatus",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 496
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "ff7e9226-74b7-4e47-b455-f9b610a61cdf",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "registryPlugins",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 89
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "a72afd38-bab8-4633-bfa7-05711439d136",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "todos",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 606
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "9314d86d-6c19-426a-b884-4c184e80b2bb",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "channelState",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "ca1f8c43-818a-4a7c-86b8-a27c0f312db5",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "voiceState",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "12292fdb-5670-4746-9c66-d369ee368842",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "guildInfo",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "45ce98c4-adc6-4218-af92-26aeb9e6c240",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "CONTEXT_BENCH",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "b70be255-ce74-4e17-b5c4-76594314a7b0",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "agent_skill_instructions",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "80faee68-e066-4abd-8ed9-e7e3ab808842",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "workspaceContext",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 2190
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "ea8440cb-f902-4858-9730-c60114590c45",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "RS_SDK_MAP_AREA",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "cd2b57b7-0452-4306-9798-1f46519cc6c9",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "RS_SDK_WORLD_KNOWLEDGE",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "03e1b4cc-6fec-4dd2-865c-e5ff003cdbd1",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "RS_SDK_GOALS",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 0
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "a9f4d5bb-80ff-4702-926a-5a11f49d646e",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "RS_SDK_BOT_STATE",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 91
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "2ae1602f-17a5-461e-8cb6-8381bd47d13c",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "SHELL_HISTORY",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 175
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "6b9d8714-71ea-48ef-9f14-f21936fa021f",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "RECENT_MESSAGES",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 333
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  },
+  {
+    "id": "ed3b7863-982a-46a9-9bb2-8d8eae37c838",
+    "trajectoryId": "0fbdd4ec-ff50-464a-9a48-02a027d46ffa",
+    "stepId": "70e0ec1a-4ea2-4984-8409-80a1b2d445d4",
+    "providerName": "ACTION_STATE",
+    "purpose": "compose_state",
+    "data": {
+      "textLength": 37
+    },
+    "query": {
+      "message": "post-fix live check"
+    },
+    "timestamp": 1771124959960,
+    "createdAt": "2026-02-15T03:09:19.960Z"
+  }
+]

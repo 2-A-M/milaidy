@@ -1,0 +1,70 @@
+{
+  "generatedAt": "2026-02-15T02:54:43.788Z",
+  "root": "/Users/shawwalters/eliza-workspace/milaidy/tmp/trajectories-export-v2",
+  "trajectoryCount": 2,
+  "findingsCount": 4,
+  "findings": [
+    {
+      "severity": "high",
+      "id": "3c59ce91-8651-44d2-b614-4f15ab42ae83",
+      "issue": "trajectory.metrics is empty object; finalStatus missing"
+    },
+    {
+      "severity": "medium",
+      "id": "3c59ce91-8651-44d2-b614-4f15ab42ae83",
+      "issue": "no context captured (steps/llm/provider all empty)"
+    },
+    {
+      "severity": "high",
+      "id": "a452b850-eb05-4cdf-bf14-4fcbabd33814",
+      "issue": "trajectory.metrics is empty object; finalStatus missing"
+    },
+    {
+      "severity": "medium",
+      "id": "a452b850-eb05-4cdf-bf14-4fcbabd33814",
+      "issue": "no context captured (steps/llm/provider all empty)"
+    }
+  ],
+  "trajectories": [
+    {
+      "id": "3c59ce91-8651-44d2-b614-4f15ab42ae83",
+      "status": "active",
+      "source": "client_chat",
+      "stepCount": 0,
+      "llmCallCount": 0,
+      "providerAccessCount": 0,
+      "hasMetricsFinalStatus": false,
+      "hasConversationId": true,
+      "issues": [
+        {
+          "severity": "high",
+          "issue": "trajectory.metrics is empty object; finalStatus missing"
+        },
+        {
+          "severity": "medium",
+          "issue": "no context captured (steps/llm/provider all empty)"
+        }
+      ]
+    },
+    {
+      "id": "a452b850-eb05-4cdf-bf14-4fcbabd33814",
+      "status": "active",
+      "source": "client_chat",
+      "stepCount": 0,
+      "llmCallCount": 0,
+      "providerAccessCount": 0,
+      "hasMetricsFinalStatus": false,
+      "hasConversationId": true,
+      "issues": [
+        {
+          "severity": "high",
+          "issue": "trajectory.metrics is empty object; finalStatus missing"
+        },
+        {
+          "severity": "medium",
+          "issue": "no context captured (steps/llm/provider all empty)"
+        }
+      ]
+    }
+  ]
+}

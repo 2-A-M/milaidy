@@ -19,6 +19,7 @@ import {
   sendJson,
   sendJsonError,
 } from "./http-helpers.js";
+import { createZipArchive } from "./zip-utils.js";
 
 // Interface for the plugin's TrajectoryLoggerService
 interface TrajectoryLoggerService {
@@ -104,6 +105,13 @@ interface TrajectoryStats {
 interface TrajectoryExportOptions {
   format: "json" | "art" | "csv";
   includePrompts?: boolean;
+  trajectoryIds?: string[];
+  startDate?: string;
+  endDate?: string;
+}
+
+interface TrajectoryZipExportRequest {
+  includePrompts: boolean;
   trajectoryIds?: string[];
   startDate?: string;
   endDate?: string;
@@ -273,6 +281,50 @@ function toObject(value: unknown): Record<string, unknown> | undefined {
   return record ?? undefined;
 }
 
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const value of values) {
+    if (!seen.has(value)) {
+      seen.add(value);
+      unique.push(value);
+    }
+  }
+  return unique;
+}
+
+function sanitizeFolderName(value: string): string {
+  const sanitized = value
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return sanitized || "trajectory";
+}
+
+function redactTrajectoryPrompts(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactTrajectoryPrompts(item));
+  }
+  const record = asRecord(value);
+  if (!record) return value;
+
+  const redacted: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(record)) {
+    if (
+      key === "systemPrompt" ||
+      key === "system_prompt" ||
+      key === "userPrompt" ||
+      key === "user_prompt" ||
+      key === "response"
+    ) {
+      redacted[key] = "[redacted]";
+      continue;
+    }
+    redacted[key] = redactTrajectoryPrompts(val);
+  }
+  return redacted;
+}
+
 function parseJsonValue(value: unknown): unknown {
   if (typeof value !== "string") return value;
   try {
@@ -382,6 +434,134 @@ async function getTrajectoryDetailWithFallback(
   }
 
   return trajectory;
+}
+
+async function resolveTrajectoryIdsForZipExport(
+  logger: TrajectoryLoggerService,
+  request: TrajectoryZipExportRequest,
+): Promise<string[]> {
+  const requestedIds = uniqueStrings(
+    (request.trajectoryIds ?? [])
+      .map((id) => id.trim())
+      .filter((id) => id.length > 0),
+  );
+  if (requestedIds.length > 0) {
+    return requestedIds;
+  }
+
+  const limit = 500;
+  let offset = 0;
+  let total = Number.POSITIVE_INFINITY;
+  const ids: string[] = [];
+
+  while (offset < total) {
+    const page = await logger.listTrajectories({
+      limit,
+      offset,
+      startDate: request.startDate,
+      endDate: request.endDate,
+    });
+    total = Math.max(0, page.total);
+    for (const row of page.trajectories) {
+      if (typeof row.id === "string" && row.id.length > 0) {
+        ids.push(row.id);
+      }
+    }
+    if (page.trajectories.length === 0) break;
+    offset += page.trajectories.length;
+  }
+
+  return uniqueStrings(ids);
+}
+
+async function buildZipExport(
+  logger: TrajectoryLoggerService,
+  request: TrajectoryZipExportRequest,
+): Promise<{ data: Buffer; filename: string; mimeType: string }> {
+  const trajectoryIds = await resolveTrajectoryIdsForZipExport(logger, request);
+  const includePrompts = request.includePrompts;
+
+  const entries: Array<{ name: string; data: string }> = [];
+  const manifestRows: Array<Record<string, unknown>> = [];
+  const missingTrajectoryIds: string[] = [];
+  const folderNameCounts = new Map<string, number>();
+
+  for (const trajectoryId of trajectoryIds) {
+    const detail = await getTrajectoryDetailWithFallback(logger, trajectoryId);
+    if (!detail) {
+      missingTrajectoryIds.push(trajectoryId);
+      continue;
+    }
+
+    const normalizedDetail = includePrompts
+      ? detail
+      : (redactTrajectoryPrompts(detail) as Trajectory);
+    const uiDetail = trajectoryToUIDetail(normalizedDetail);
+
+    const baseFolder = sanitizeFolderName(trajectoryId);
+    const seenCount = folderNameCounts.get(baseFolder) ?? 0;
+    folderNameCounts.set(baseFolder, seenCount + 1);
+    const folderName =
+      seenCount === 0 ? baseFolder : `${baseFolder}-${seenCount + 1}`;
+
+    entries.push({
+      name: `${folderName}/trajectory.json`,
+      data: JSON.stringify(normalizedDetail, null, 2),
+    });
+    entries.push({
+      name: `${folderName}/summary.json`,
+      data: JSON.stringify(uiDetail.trajectory, null, 2),
+    });
+    entries.push({
+      name: `${folderName}/llm-calls.json`,
+      data: JSON.stringify(uiDetail.llmCalls, null, 2),
+    });
+    entries.push({
+      name: `${folderName}/provider-accesses.json`,
+      data: JSON.stringify(uiDetail.providerAccesses, null, 2),
+    });
+
+    manifestRows.push({
+      trajectoryId: trajectoryId,
+      folder: folderName,
+      source: uiDetail.trajectory.source,
+      status: uiDetail.trajectory.status,
+      startTime: uiDetail.trajectory.startTime,
+      endTime: uiDetail.trajectory.endTime,
+      llmCallCount: uiDetail.llmCalls.length,
+      providerAccessCount: uiDetail.providerAccesses.length,
+      totalPromptTokens: uiDetail.trajectory.totalPromptTokens,
+      totalCompletionTokens: uiDetail.trajectory.totalCompletionTokens,
+      createdAt: uiDetail.trajectory.createdAt,
+    });
+  }
+
+  const manifest = {
+    exportedAt: new Date().toISOString(),
+    includePrompts,
+    requestedTrajectoryCount: trajectoryIds.length,
+    exportedTrajectoryCount: manifestRows.length,
+    missingTrajectoryIds,
+    trajectories: manifestRows,
+  };
+
+  entries.unshift({
+    name: "manifest.json",
+    data: JSON.stringify(manifest, null, 2),
+  });
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const archive = createZipArchive(
+    entries.map((entry) => ({
+      name: entry.name,
+      data: entry.data,
+    })),
+  );
+  return {
+    data: archive,
+    filename: `trajectories-${timestamp}.zip`,
+    mimeType: "application/zip",
+  };
 }
 
 function scoreTrajectoryLoggerServiceCandidate(
@@ -501,11 +681,19 @@ function listItemToUIRecord(item: TrajectoryListItem): UITrajectoryRecord {
  * Transform plugin's Trajectory to UI-compatible TrajectoryDetailResult
  */
 function trajectoryToUIDetail(traj: Trajectory): UITrajectoryDetailResult {
-  const status =
-    traj.metrics.finalStatus === "timeout" ||
-    traj.metrics.finalStatus === "terminated"
+  const finalStatus = toText(traj.metrics?.finalStatus, "");
+  const normalizedEndTime =
+    typeof traj.endTime === "number" && traj.endTime > 0 ? traj.endTime : null;
+  const status: "active" | "completed" | "error" =
+    finalStatus === "timeout" ||
+    finalStatus === "terminated" ||
+    finalStatus === "error"
       ? "error"
-      : traj.metrics.finalStatus;
+      : finalStatus === "completed"
+        ? "completed"
+        : normalizedEndTime
+          ? "completed"
+          : "active";
 
   // Flatten all LLM calls from all steps
   const llmCalls: UILlmCall[] = [];
@@ -614,24 +802,31 @@ function trajectoryToUIDetail(traj: Trajectory): UITrajectoryDetailResult {
   }
 
   const metadata = asRecord(traj.metadata) ?? {};
+  const normalizedDurationMs =
+    status === "active"
+      ? null
+      : typeof traj.durationMs === "number"
+        ? traj.durationMs
+        : null;
+  const updatedAtMs = normalizedEndTime ?? traj.startTime;
   const trajectory: UITrajectoryRecord = {
     id: traj.trajectoryId,
     agentId: traj.agentId,
     roomId: toNullableString(metadata.roomId),
     entityId: toNullableString(metadata.entityId),
-    conversationId: null,
+    conversationId: toNullableString(metadata.conversationId),
     source: toText(metadata.source, "chat"),
-    status: status as "active" | "completed" | "error",
+    status,
     startTime: traj.startTime,
-    endTime: traj.endTime,
-    durationMs: traj.durationMs,
+    endTime: normalizedEndTime,
+    durationMs: normalizedDurationMs,
     llmCallCount: llmCalls.length,
     providerAccessCount: providerAccesses.length,
     totalPromptTokens,
     totalCompletionTokens,
     metadata: traj.metadata,
     createdAt: new Date(traj.startTime).toISOString(),
-    updatedAt: new Date(traj.endTime).toISOString(),
+    updatedAt: new Date(updatedAtMs).toISOString(),
   };
 
   return { trajectory, llmCalls, providerAccesses };
@@ -796,9 +991,30 @@ async function handleExportTrajectories(
 
   if (
     !body.format ||
-    (body.format !== "json" && body.format !== "csv" && body.format !== "art")
+    (body.format !== "json" &&
+      body.format !== "csv" &&
+      body.format !== "art" &&
+      body.format !== "zip")
   ) {
-    sendJsonError(res, "Format must be 'json', 'csv', or 'art'", 400);
+    sendJsonError(res, "Format must be 'json', 'csv', 'art', or 'zip'", 400);
+    return;
+  }
+
+  if (body.format === "zip") {
+    const zipResult = await buildZipExport(logger, {
+      includePrompts: body.includePrompts !== false,
+      trajectoryIds: body.trajectoryIds,
+      startDate: body.startDate,
+      endDate: body.endDate,
+    });
+
+    res.statusCode = 200;
+    res.setHeader("Content-Type", zipResult.mimeType);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${zipResult.filename}"`,
+    );
+    res.end(zipResult.data);
     return;
   }
 

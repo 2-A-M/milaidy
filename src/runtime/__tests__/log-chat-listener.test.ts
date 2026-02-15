@@ -6,14 +6,14 @@ import { logToChatListener } from "../eliza";
 vi.mock("@elizaos/core", () => {
   return {
     loggerScope: {
-      run: vi.fn((ctx, fn) => fn()),
+      run: vi.fn((_ctx, fn) => fn()),
     },
   };
 });
 
 describe("logToChatListener", () => {
-  let mockRuntime;
-  let mockEntry;
+  let mockRuntime: Record<string, unknown>;
+  let mockEntry: Record<string, unknown>;
 
   beforeEach(() => {
     mockRuntime = {

@@ -23,7 +23,7 @@ type RootPackageJson = {
   };
 };
 
-function getCorePin(pkg: RootPackageJson): string | undefined {
+function _getCorePin(pkg: RootPackageJson): string | undefined {
   return (
     pkg.overrides?.["@elizaos/core"] ?? pkg.pnpm?.overrides?.["@elizaos/core"]
   );
@@ -385,34 +385,18 @@ describe("Package.json version pinning (issue #10)", () => {
    * This test reads the actual package.json to ensure the fix stays in place.
    */
   it("core is pinned to a version that includes MAX_EMBEDDING_TOKENS", async () => {
-<<<<<<< HEAD
-    const { readFileSync } = await import("node:fs");
-    const { resolve } = await import("node:path");
-    // Use process.cwd() for reliable root resolution in forked vitest workers
-    // (import.meta.dirname may not resolve to the source tree in CI forks).
-    const pkgPath = resolve(process.cwd(), "package.json");
-    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as RootPackageJson;
-=======
     const pkg = await readPackageManifest();
->>>>>>> f818a0560b085d28dfe6f022f633c08d915427cd
 
     const coreVersion = pkg.dependencies["@elizaos/core"];
     expect(coreVersion).toBeDefined();
     // Core can use "next" dist-tag if pnpm overrides pin the actual version
     if (coreVersion === "next") {
-<<<<<<< HEAD
-      const corePin = getCorePin(pkg);
-      expect(corePin).toBeDefined();
-      expect(corePin).toMatch(/^\d+\.\d+\.\d+/);
-      expect(versionSatisfies(corePin ?? "", "2.0.0-alpha.3")).toBe(true);
-=======
       const pinnedCoreVersion = getDependencyOverride(pkg);
       expect(pinnedCoreVersion).toBeDefined();
       expect(pinnedCoreVersion).toMatch(/^\d+\.\d+\.\d+/);
       expect(versionSatisfies(pinnedCoreVersion ?? "", "2.0.0-alpha.3")).toBe(
         true,
       );
->>>>>>> f818a0560b085d28dfe6f022f633c08d915427cd
     } else {
       expect(coreVersion).toMatch(/^\d+\.\d+\.\d+/);
       expect(versionSatisfies(coreVersion, "2.0.0-alpha.3")).toBe(true);
@@ -420,15 +404,7 @@ describe("Package.json version pinning (issue #10)", () => {
   });
 
   it("affected plugins are present in dependencies (core pin makes next safe)", async () => {
-<<<<<<< HEAD
-    const { readFileSync } = await import("node:fs");
-    const { resolve } = await import("node:path");
-    // Use process.cwd() for reliable root resolution in forked vitest workers.
-    const pkgPath = resolve(process.cwd(), "package.json");
-    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as RootPackageJson;
-=======
     const pkg = await readPackageManifest();
->>>>>>> f818a0560b085d28dfe6f022f633c08d915427cd
 
     // With core pinned via pnpm overrides, plugins at "next" are safe
     const affectedPlugins = [
@@ -442,15 +418,9 @@ describe("Package.json version pinning (issue #10)", () => {
     // If core is "next", ensure pnpm overrides pin the actual version
     const coreVersion = pkg.dependencies["@elizaos/core"];
     if (coreVersion === "next") {
-<<<<<<< HEAD
-      const corePin = getCorePin(pkg);
-      expect(corePin).toBeDefined();
-      expect(corePin).toMatch(/^\d+\.\d+\.\d+/);
-=======
       const pinnedCoreVersion = getDependencyOverride(pkg);
       expect(pinnedCoreVersion).toBeDefined();
       expect(pinnedCoreVersion).toMatch(/^\d+\.\d+\.\d+/);
->>>>>>> f818a0560b085d28dfe6f022f633c08d915427cd
     }
 
     for (const plugin of affectedPlugins) {
@@ -465,29 +435,16 @@ describe("Package.json version pinning (issue #10)", () => {
   });
 
   it("core is pinned to specific alpha version", async () => {
-<<<<<<< HEAD
-    const { readFileSync } = await import("node:fs");
-    const { resolve } = await import("node:path");
-    const pkgPath = resolve(import.meta.dirname, "../../package.json");
-    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as RootPackageJson;
-=======
     const pkg = await readPackageManifest();
->>>>>>> f818a0560b085d28dfe6f022f633c08d915427cd
 
     // Core can use "next" dist-tag if dependency overrides pin the actual version.
     // See docs/ELIZAOS_VERSIONING.md for explanation.
     const coreVersion = pkg.dependencies["@elizaos/core"];
     expect(coreVersion).toBeDefined();
     if (coreVersion === "next") {
-<<<<<<< HEAD
-      const corePin = getCorePin(pkg);
-      expect(corePin).toBeDefined();
-      expect(corePin).toMatch(/^\d+\.\d+\.\d+/);
-=======
       const pinnedCoreVersion = getDependencyOverride(pkg);
       expect(pinnedCoreVersion).toBeDefined();
       expect(pinnedCoreVersion).toMatch(/^\d+\.\d+\.\d+/);
->>>>>>> f818a0560b085d28dfe6f022f633c08d915427cd
     } else {
       expect(coreVersion).toMatch(/^\d+\.\d+\.\d+-alpha\.\d+$/);
     }

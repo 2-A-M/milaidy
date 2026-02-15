@@ -33,6 +33,7 @@ type ElizaCoreSessionHelpers = {
 };
 
 const coreSessionHelpers = elizaCore as ElizaCoreSessionHelpers;
+// Fallback for when ChannelType is not exported by @elizaos/core (e.g. in tests)
 const channelType = coreSessionHelpers.ChannelType ?? {
   DM: "DM",
   SELF: "SELF",
