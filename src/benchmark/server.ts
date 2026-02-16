@@ -97,18 +97,14 @@ export async function startBenchmarkServer() {
     );
   }
 
-  // 4. Mock Plugin
+  // 4. Optional inline mock plugin
   if (process.env.MILAIDY_BENCH_MOCK === "true") {
-    try {
-      // Updated import path if needed, assuming relative to this file
-      const { mockPlugin } = await import("./mock-plugin.ts");
-      plugins.push(toPlugin(mockPlugin, "./mock-plugin.ts"));
-      elizaLogger.info("[bench] Loaded mock plugin");
-    } catch (error: unknown) {
-      elizaLogger.error(
-        `[bench] Failed to load mock plugin: ${formatUnknownError(error)}`,
-      );
-    }
+    const mockPlugin: Plugin = {
+      name: "milaidy-benchmark-mock",
+      description: "Lightweight mock plugin used by the benchmark server",
+    };
+    plugins.push(mockPlugin);
+    elizaLogger.info("[bench] Loaded inline mock plugin");
   }
 
   // Runtime Configuration
