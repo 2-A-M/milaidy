@@ -34,10 +34,13 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Run repository postinstall patches
+        run: bun run postinstall
 
       - name: Install app dependencies for workspace tests
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
         working-directory: apps/app
 
       - name: Run unit tests
@@ -71,7 +74,10 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Run repository postinstall patches
+        run: bun run postinstall
 
       - name: Build
         run: bun run build
@@ -100,10 +106,13 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Run repository postinstall patches
+        run: bun run postinstall
 
       - name: Install app dependencies for workspace tests
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
         working-directory: apps/app
 
       - name: Run app startup/onboarding tests
@@ -137,7 +146,10 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Run repository postinstall patches
+        run: bun run postinstall
 
       - name: Install Electron dependencies
         run: npm install --no-audit --no-fund
@@ -167,7 +179,10 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Run repository postinstall patches
+        run: bun run postinstall
 
       - name: Build web assets
         run: bun run --cwd apps/app build
@@ -217,7 +232,11 @@ jobs:
 
       - name: Install dependencies
         if: steps.cloud.outputs.enabled == 'true'
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Run repository postinstall patches
+        if: steps.cloud.outputs.enabled == 'true'
+        run: bun run postinstall
 
       - name: Run cloud live test
         if: steps.cloud.outputs.enabled == 'true'
@@ -247,7 +266,10 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Run repository postinstall patches
+        run: bun run postinstall
 
       - name: Build
         run: bun run build
