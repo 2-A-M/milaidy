@@ -97,6 +97,7 @@ export async function startBenchmarkServer() {
     );
   }
 
+<<<<<<< HEAD
   // 4. Mock Plugin
   if (process.env.MILADY_BENCH_MOCK === "true") {
     try {
@@ -109,6 +110,16 @@ export async function startBenchmarkServer() {
         `[bench] Failed to load mock plugin: ${formatUnknownError(error)}`,
       );
     }
+=======
+  // 4. Optional inline mock plugin
+  if (process.env.MILAIDY_BENCH_MOCK === "true") {
+    const mockPlugin: Plugin = {
+      name: "milaidy-benchmark-mock",
+      description: "Lightweight mock plugin used by the benchmark server",
+    };
+    plugins.push(mockPlugin);
+    elizaLogger.info("[bench] Loaded inline mock plugin");
+>>>>>>> a2624fc66c45fa15678d572c28444ed1e923f6c9
   }
 
   // Runtime Configuration

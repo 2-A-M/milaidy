@@ -152,7 +152,7 @@ jobs:
         run: bun run postinstall
 
       - name: Install Electron dependencies
-        run: npm install --no-audit --no-fund
+        run: bun install --frozen-lockfile --ignore-scripts
         working-directory: apps/app/electron
 
       - name: Build web assets
@@ -191,7 +191,7 @@ jobs:
         run: bun run --cwd apps/app cap:sync:electron
 
       - name: Install Electron dependencies
-        run: npm install --no-audit --no-fund
+        run: bun install --frozen-lockfile --ignore-scripts
         working-directory: apps/app/electron
 
       - name: Build standalone DMG
