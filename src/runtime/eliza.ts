@@ -45,6 +45,7 @@ import {
   type MiladyConfig,
   saveMiladyConfig,
 } from "../config/config";
+import { collectConfigEnvVars } from "../config/env-vars";
 import { resolveStateDir, resolveUserPath } from "../config/paths";
 import {
   type ApplyPluginAutoEnableParams,
@@ -2754,6 +2755,28 @@ export async function startEliza(
       : {}),
     settings: {
       VALIDATION_LEVEL: "fast",
+      // Forward non-sensitive Milady config.env vars as runtime settings so
+      // plugins can access them via runtime.getSetting(). This fixes a bug where
+      // plugins (e.g. @elizaos/plugin-google-genai) call runtime.getSetting()
+      // which returns null for keys not in settings, but the plugin checks
+      // !== undefined causing it to use "null" as the model name.
+      //
+      // Security: Filter out blockchain private keys and secrets. API keys are
+      // allowed since plugins need them via runtime.getSetting(). Private keys
+      // should only be accessed via process.env by signing services.
+      ...Object.fromEntries(
+        Object.entries(collectConfigEnvVars(config)).filter(([key]) => {
+          const upper = key.toUpperCase();
+          // Block blockchain private keys
+          if (upper.includes("PRIVATE_KEY")) return false;
+          if (upper.startsWith("EVM_") || upper.startsWith("SOLANA_"))
+            return false;
+          // Block secrets, passwords, auth tokens (but not API_KEY which plugins need)
+          if (/(SECRET|PASSWORD|AUTH_TOKEN|CREDENTIAL)$/i.test(key))
+            return false;
+          return true;
+        }),
+      ),
       // Forward Milady config env vars as runtime settings
       ...(primaryModel ? { MODEL_PROVIDER: primaryModel } : {}),
       // Forward skills config so plugin-agent-skills can apply allow/deny filtering
