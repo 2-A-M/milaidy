@@ -10697,7 +10697,9 @@ export async function startApiServer(opts?: {
   }
 
   const plugins = discoverPluginsFromManifest();
-  console.log(`[milady-api] Plugins discovered (${Date.now() - apiStartTime}ms)`);
+  console.log(
+    `[milady-api] Plugins discovered (${Date.now() - apiStartTime}ms)`,
+  );
   const workspaceDir =
     config.agents?.defaults?.workspace ?? resolveDefaultAgentWorkspaceDir();
 
@@ -10937,7 +10939,9 @@ export async function startApiServer(opts?: {
   // Store the restart callback on the state so the route handler can access it.
   const onRestart = opts?.onRestart ?? null;
 
-  console.log(`[milady-api] Creating http server (${Date.now() - apiStartTime}ms)`);
+  console.log(
+    `[milady-api] Creating http server (${Date.now() - apiStartTime}ms)`,
+  );
   const server = http.createServer(async (req, res) => {
     try {
       await handleRequest(req, res, state, { onRestart });
@@ -11346,10 +11350,14 @@ export async function startApiServer(opts?: {
     broadcastStatus();
   };
 
-  console.log(`[milady-api] Calling server.listen (${Date.now() - apiStartTime}ms)`);
+  console.log(
+    `[milady-api] Calling server.listen (${Date.now() - apiStartTime}ms)`,
+  );
   return new Promise((resolve) => {
     server.listen(port, host, () => {
-      console.log(`[milady-api] server.listen callback fired (${Date.now() - apiStartTime}ms)`);
+      console.log(
+        `[milady-api] server.listen callback fired (${Date.now() - apiStartTime}ms)`,
+      );
       const addr = server.address();
       const actualPort = typeof addr === "object" && addr ? addr.port : port;
       const displayHost =
