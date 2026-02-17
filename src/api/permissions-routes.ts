@@ -1,6 +1,6 @@
-import type http from "node:http";
 import type { AgentRuntime } from "@elizaos/core";
 import type { MiladyConfig } from "../config/config";
+import type { RouteRequestContext } from "./route-helpers";
 
 export interface PermissionState {
   id: string;
@@ -16,18 +16,8 @@ export interface PermissionRouteState {
   shellEnabled?: boolean;
 }
 
-export interface PermissionRouteContext {
-  req: http.IncomingMessage;
-  res: http.ServerResponse;
-  method: string;
-  pathname: string;
+export interface PermissionRouteContext extends RouteRequestContext {
   state: PermissionRouteState;
-  readJsonBody: <T extends object>(
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-  ) => Promise<T | null>;
-  json: (res: http.ServerResponse, data: object, status?: number) => void;
-  error: (res: http.ServerResponse, message: string, status?: number) => void;
   saveConfig: (config: MiladyConfig) => void;
   scheduleRuntimeRestart: (reason: string, delayMs?: number) => void;
 }

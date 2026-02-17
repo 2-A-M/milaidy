@@ -1,7 +1,7 @@
-import type http from "node:http";
 import type { AgentRuntime } from "@elizaos/core";
 import { logger, ModelType } from "@elizaos/core";
 import { CharacterSchema } from "../config/zod-schema";
+import type { RouteRequestContext } from "./route-helpers";
 
 interface CharacterGenerateContext {
   name?: string;
@@ -19,18 +19,8 @@ export interface CharacterRouteState {
   agentName: string;
 }
 
-export interface CharacterRouteContext {
-  req: http.IncomingMessage;
-  res: http.ServerResponse;
-  method: string;
-  pathname: string;
+export interface CharacterRouteContext extends RouteRequestContext {
   state: CharacterRouteState;
-  readJsonBody: <T extends object>(
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-  ) => Promise<T | null>;
-  json: (res: http.ServerResponse, data: object, status?: number) => void;
-  error: (res: http.ServerResponse, message: string, status?: number) => void;
   pickRandomNames: (count: number) => string[];
 }
 

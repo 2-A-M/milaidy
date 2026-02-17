@@ -7,6 +7,7 @@ import {
   importAgent,
 } from "../services/agent-export";
 import { readRequestBodyBuffer } from "./http-helpers";
+import type { RouteRequestContext } from "./route-helpers";
 
 const MAX_IMPORT_BYTES = 512 * 1_048_576; // 512 MB for agent imports
 const AGENT_TRANSFER_MIN_PASSWORD_LENGTH = 4;
@@ -32,18 +33,8 @@ export interface AgentTransferRouteState {
   runtime: AgentRuntime | null;
 }
 
-export interface AgentTransferRouteContext {
-  req: http.IncomingMessage;
-  res: http.ServerResponse;
-  method: string;
-  pathname: string;
+export interface AgentTransferRouteContext extends RouteRequestContext {
   state: AgentTransferRouteState;
-  readJsonBody: <T extends object>(
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-  ) => Promise<T | null>;
-  json: (res: http.ServerResponse, data: object, status?: number) => void;
-  error: (res: http.ServerResponse, message: string, status?: number) => void;
 }
 
 export async function handleAgentTransferRoutes(

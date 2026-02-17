@@ -1,17 +1,7 @@
 import crypto from "node:crypto";
-import type http from "node:http";
+import type { RouteRequestContext } from "./route-helpers";
 
-export interface AuthRouteContext {
-  req: http.IncomingMessage;
-  res: http.ServerResponse;
-  method: string;
-  pathname: string;
-  readJsonBody: <T extends object>(
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-  ) => Promise<T | null>;
-  json: (res: http.ServerResponse, data: object, status?: number) => void;
-  error: (res: http.ServerResponse, message: string, status?: number) => void;
+export interface AuthRouteContext extends RouteRequestContext {
   pairingEnabled: () => boolean;
   ensurePairingCode: () => string | null;
   normalizePairingCode: (code: string) => string;

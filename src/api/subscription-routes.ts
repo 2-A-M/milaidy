@@ -1,6 +1,6 @@
-import type http from "node:http";
 import { logger } from "@elizaos/core";
 import type { MiladyConfig } from "../config/config";
+import type { RouteRequestContext } from "./route-helpers";
 
 export interface SubscriptionRouteState {
   config: MiladyConfig;
@@ -9,18 +9,8 @@ export interface SubscriptionRouteState {
   _codexFlowTimer?: ReturnType<typeof setTimeout>;
 }
 
-export interface SubscriptionRouteContext {
-  req: http.IncomingMessage;
-  res: http.ServerResponse;
-  method: string;
-  pathname: string;
+export interface SubscriptionRouteContext extends RouteRequestContext {
   state: SubscriptionRouteState;
-  readJsonBody: <T extends object>(
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-  ) => Promise<T | null>;
-  json: (res: http.ServerResponse, data: object, status?: number) => void;
-  error: (res: http.ServerResponse, message: string, status?: number) => void;
   saveConfig: (config: MiladyConfig) => void;
 }
 
