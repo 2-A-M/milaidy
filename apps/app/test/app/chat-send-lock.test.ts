@@ -133,7 +133,7 @@ function Probe(props: { onReady: (api: ProbeApi) => void }) {
 
 describe("chat send locking", () => {
   beforeEach(() => {
-    Object.assign(window.location, { protocol: "file:", pathname: "/chat" });
+    window.history.replaceState({}, "", "/chat");
     Object.assign(window, {
       setTimeout: globalThis.setTimeout,
       clearTimeout: globalThis.clearTimeout,
