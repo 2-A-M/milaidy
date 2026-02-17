@@ -576,10 +576,10 @@ export async function startBenchmarkServer() {
           plugins: plugins.length,
           active_session: activeSession
             ? {
-              benchmark: activeSession.benchmark,
-              task_id: activeSession.taskId,
-              room_id: activeSession.roomId,
-            }
+                benchmark: activeSession.benchmark,
+                task_id: activeSession.taskId,
+                room_id: activeSession.roomId,
+              }
             : null,
         }),
       );
@@ -593,18 +593,18 @@ export async function startBenchmarkServer() {
         try {
           const parsed = body.trim()
             ? (JSON.parse(body) as {
-              task_id?: unknown;
-              benchmark?: unknown;
-            })
+                task_id?: unknown;
+                benchmark?: unknown;
+              })
             : {};
           const taskId =
             typeof parsed.task_id === "string" &&
-              parsed.task_id.trim().length > 0
+            parsed.task_id.trim().length > 0
               ? parsed.task_id
               : "default-task";
           const benchmark =
             typeof parsed.benchmark === "string" &&
-              parsed.benchmark.trim().length > 0
+            parsed.benchmark.trim().length > 0
               ? parsed.benchmark
               : "unknown";
 
