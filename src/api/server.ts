@@ -3003,7 +3003,7 @@ function getProviderOptions(): Array<{
     {
       id: "gemini",
       name: "Gemini",
-      envKey: "GOOGLE_API_KEY",
+      envKey: "GOOGLE_GENERATIVE_AI_API_KEY",
       pluginName: "@elizaos/plugin-google-genai",
       keyPrefix: null,
       description: "Google's Gemini models.",
