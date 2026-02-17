@@ -75,7 +75,7 @@ export const listAgentsAction: Action = {
       return { success: false, error: "SERVICE_UNAVAILABLE" };
     }
 
-    const sessions = ptyService.listSessions();
+    const sessions = await ptyService.listSessions();
 
     if (sessions.length === 0) {
       if (callback) {

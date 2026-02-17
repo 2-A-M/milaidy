@@ -76,13 +76,26 @@ export const provisionWorkspaceAction: Action = {
     }
 
     const content = message.content as {
+      text?: string;
       repo?: string;
       baseBranch?: string;
       useWorktree?: boolean;
       parentWorkspaceId?: string;
     };
 
-    if (!content.repo && !content.useWorktree) {
+    // Try to extract repo URL from text if not provided explicitly
+    let repo = content.repo;
+    if (!repo && content.text) {
+      // Match GitHub/GitLab/Bitbucket URLs
+      const urlMatch = content.text.match(
+        /https?:\/\/(?:github\.com|gitlab\.com|bitbucket\.org)\/[\w.-]+\/[\w.-]+(?:\.git)?/i
+      );
+      if (urlMatch) {
+        repo = urlMatch[0];
+      }
+    }
+
+    if (!repo && !content.useWorktree) {
       if (callback) {
         await callback({
           text: "Please specify a repository URL or use worktree mode with a parent workspace.",
@@ -109,7 +122,7 @@ export const provisionWorkspaceAction: Action = {
 
     try {
       const workspace: WorkspaceResult = await workspaceService.provisionWorkspace({
-        repo: content.repo ?? "",
+        repo: repo ?? "",
         baseBranch: content.baseBranch,
         useWorktree: content.useWorktree,
         parentWorkspaceId,

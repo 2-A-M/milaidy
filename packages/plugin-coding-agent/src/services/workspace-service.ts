@@ -111,8 +111,8 @@ export class CodingWorkspaceService {
   }
 
   static async start(runtime: IAgentRuntime): Promise<CodingWorkspaceService> {
-    const config = runtime.getSetting("CODING_WORKSPACE_CONFIG") as CodingWorkspaceConfig | undefined;
-    const service = new CodingWorkspaceService(runtime, config);
+    const config = runtime.getSetting("CODING_WORKSPACE_CONFIG") as CodingWorkspaceConfig | null | undefined;
+    const service = new CodingWorkspaceService(runtime, config ?? {});
     await service.initialize();
     return service;
   }

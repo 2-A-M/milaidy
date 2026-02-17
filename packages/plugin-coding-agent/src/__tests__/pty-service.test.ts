@@ -167,7 +167,7 @@ describe("PTYService", () => {
       await service.spawnSession({ name: "a", agentType: "shell", workdir: "/a" });
       await service.spawnSession({ name: "b", agentType: "shell", workdir: "/b" });
 
-      const sessions = service.listSessions();
+      const sessions = await service.listSessions();
       expect(sessions.length).toBe(2);
     });
 

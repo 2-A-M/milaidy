@@ -59,7 +59,7 @@ export const sendToAgentAction: Action = {
       return false;
     }
     // Check if there are any active sessions
-    const sessions = ptyService.listSessions();
+    const sessions = await ptyService.listSessions();
     return sessions.length > 0;
   },
 
@@ -94,7 +94,7 @@ export const sendToAgentAction: Action = {
 
     if (!sessionId) {
       // Try to find the most recent session
-      const sessions = ptyService.listSessions();
+      const sessions = await ptyService.listSessions();
       if (sessions.length === 0) {
         if (callback) {
           await callback({

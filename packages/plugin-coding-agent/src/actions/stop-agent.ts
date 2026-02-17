@@ -58,7 +58,7 @@ export const stopAgentAction: Action = {
     if (!ptyService) {
       return false;
     }
-    const sessions = ptyService.listSessions();
+    const sessions = await ptyService.listSessions();
     return sessions.length > 0;
   },
 
@@ -86,7 +86,7 @@ export const stopAgentAction: Action = {
 
     // Stop all sessions if requested
     if (content.all) {
-      const sessions = ptyService.listSessions();
+      const sessions = await ptyService.listSessions();
       if (sessions.length === 0) {
         if (callback) {
           await callback({
@@ -124,7 +124,7 @@ export const stopAgentAction: Action = {
     }
 
     if (!sessionId) {
-      const sessions = ptyService.listSessions();
+      const sessions = await ptyService.listSessions();
       if (sessions.length === 0) {
         if (callback) {
           await callback({

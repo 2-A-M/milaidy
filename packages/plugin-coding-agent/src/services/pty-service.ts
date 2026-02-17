@@ -6,17 +6,23 @@
  * - Adapter registration for different agent types
  * - Event forwarding to ElizaOS runtime
  *
+ * Uses BunCompatiblePTYManager when running in Bun (spawns Node worker),
+ * or PTYManager directly when running in Node.
+ *
  * @module services/pty-service
  */
 
 import {
   PTYManager,
+  BunCompatiblePTYManager,
   ShellAdapter,
+  isBun,
   type SpawnConfig,
   type SessionHandle,
   type SessionMessage,
   type SessionFilter,
   type PTYManagerConfig,
+  type WorkerSessionHandle,
 } from "pty-manager";
 import type { IAgentRuntime } from "@elizaos/core";
 
@@ -60,10 +66,13 @@ export class PTYService {
   capabilityDescription = "Manages PTY sessions for CLI coding agents";
 
   private runtime: IAgentRuntime;
-  private manager: PTYManager | null = null;
+  private manager: PTYManager | BunCompatiblePTYManager | null = null;
+  private usingBunWorker: boolean = false;
   private serviceConfig: PTYServiceConfig;
   private sessionMetadata: Map<string, Record<string, unknown>> = new Map();
+  private sessionWorkdirs: Map<string, string> = new Map();
   private eventCallbacks: SessionEventCallback[] = [];
+  private outputUnsubscribers: Map<string, () => void> = new Map();
 
   constructor(runtime: IAgentRuntime, config: PTYServiceConfig = {}) {
     this.runtime = runtime;
@@ -74,8 +83,8 @@ export class PTYService {
   }
 
   static async start(runtime: IAgentRuntime): Promise<PTYService> {
-    const config = runtime.getSetting("PTY_SERVICE_CONFIG") as PTYServiceConfig | undefined;
-    const service = new PTYService(runtime, config);
+    const config = runtime.getSetting("PTY_SERVICE_CONFIG") as PTYServiceConfig | null | undefined;
+    const service = new PTYService(runtime, config ?? {});
     await service.initialize();
     return service;
   }
@@ -88,46 +97,88 @@ export class PTYService {
   }
 
   private async initialize(): Promise<void> {
-    const managerConfig: PTYManagerConfig = {
-      maxLogLines: this.serviceConfig.maxLogLines,
-    };
+    this.usingBunWorker = isBun();
 
-    this.manager = new PTYManager(managerConfig);
+    if (this.usingBunWorker) {
+      // Use Bun-compatible manager that spawns a Node worker
+      this.log("Detected Bun runtime, using BunCompatiblePTYManager");
+      const bunManager = new BunCompatiblePTYManager();
 
-    // Register built-in adapters
-    this.manager.registerAdapter(new ShellAdapter());
+      // Set up event forwarding for worker-based manager
+      bunManager.on("session_ready", (session: WorkerSessionHandle) => {
+        this.emitEvent(session.id, "ready", { session });
+      });
 
-    // Set up event forwarding
-    this.manager.on("session_ready", (session: SessionHandle) => {
-      this.emitEvent(session.id, "ready", { session });
-    });
+      bunManager.on("session_exit", (id: string, code: number) => {
+        this.emitEvent(id, "stopped", { reason: `exit code ${code}` });
+      });
 
-    this.manager.on("blocking_prompt", (session: SessionHandle, promptInfo: unknown, autoResponded: boolean) => {
-      this.emitEvent(session.id, "blocked", { promptInfo, autoResponded });
-    });
+      bunManager.on("session_error", (id: string, error: string) => {
+        this.emitEvent(id, "error", { message: error });
+      });
 
-    this.manager.on("session_stopped", (session: SessionHandle, reason: string) => {
-      this.emitEvent(session.id, "stopped", { reason });
-    });
+      await bunManager.waitForReady();
+      this.manager = bunManager;
+    } else {
+      // Use native PTYManager directly in Node
+      this.log("Using native PTYManager");
+      const managerConfig: PTYManagerConfig = {
+        maxLogLines: this.serviceConfig.maxLogLines,
+      };
 
-    this.manager.on("session_error", (session: SessionHandle, error: string) => {
-      this.emitEvent(session.id, "error", { message: error });
-    });
+      const nodeManager = new PTYManager(managerConfig);
 
-    this.manager.on("message", (message: SessionMessage) => {
-      this.emitEvent(message.sessionId, "message", message);
-    });
+      // Register built-in adapters
+      nodeManager.registerAdapter(new ShellAdapter());
+
+      // Set up event forwarding
+      nodeManager.on("session_ready", (session: SessionHandle) => {
+        this.emitEvent(session.id, "ready", { session });
+      });
+
+      nodeManager.on("blocking_prompt", (session: SessionHandle, promptInfo: unknown, autoResponded: boolean) => {
+        this.emitEvent(session.id, "blocked", { promptInfo, autoResponded });
+      });
+
+      nodeManager.on("session_stopped", (session: SessionHandle, reason: string) => {
+        this.emitEvent(session.id, "stopped", { reason });
+      });
+
+      nodeManager.on("session_error", (session: SessionHandle, error: string) => {
+        this.emitEvent(session.id, "error", { message: error });
+      });
+
+      nodeManager.on("message", (message: SessionMessage) => {
+        this.emitEvent(message.sessionId, "message", message);
+      });
+
+      this.manager = nodeManager;
+    }
 
     this.log("PTYService initialized");
   }
 
   async stop(): Promise<void> {
+    // Clean up output subscribers
+    for (const unsubscribe of this.outputUnsubscribers.values()) {
+      unsubscribe();
+    }
+    this.outputUnsubscribers.clear();
+
     if (this.manager) {
       await this.manager.shutdown();
       this.manager = null;
     }
     this.sessionMetadata.clear();
+    this.sessionWorkdirs.clear();
     this.log("PTYService shutdown complete");
+  }
+
+  /**
+   * Generate a unique session ID
+   */
+  private generateSessionId(): string {
+    return `pty-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
   }
 
   /**
@@ -138,10 +189,17 @@ export class PTYService {
       throw new Error("PTYService not initialized");
     }
 
-    const spawnConfig: SpawnConfig = {
+    const sessionId = this.generateSessionId();
+    const workdir = options.workdir ?? process.cwd();
+
+    // Store workdir for later retrieval
+    this.sessionWorkdirs.set(sessionId, workdir);
+
+    const spawnConfig: SpawnConfig & { id: string } = {
+      id: sessionId,
       name: options.name,
       type: options.agentType,
-      workdir: options.workdir,
+      workdir,
       env: options.env,
     };
 
@@ -152,7 +210,7 @@ export class PTYService {
       this.sessionMetadata.set(session.id, options.metadata);
     }
 
-    const sessionInfo = this.toSessionInfo(session, options.workdir);
+    const sessionInfo = this.toSessionInfo(session, workdir);
 
     // Send initial task if provided
     if (options.initialTask) {
@@ -166,7 +224,7 @@ export class PTYService {
   /**
    * Send input to a session
    */
-  async sendToSession(sessionId: string, input: string): Promise<SessionMessage> {
+  async sendToSession(sessionId: string, input: string): Promise<SessionMessage | void> {
     if (!this.manager) {
       throw new Error("PTYService not initialized");
     }
@@ -176,7 +234,14 @@ export class PTYService {
       throw new Error(`Session ${sessionId} not found`);
     }
 
-    return this.manager.send(sessionId, input);
+    if (this.usingBunWorker) {
+      // BunCompatiblePTYManager.send returns void
+      await (this.manager as BunCompatiblePTYManager).send(sessionId, input);
+      return;
+    } else {
+      // PTYManager.send returns SessionMessage
+      return (this.manager as PTYManager).send(sessionId, input);
+    }
   }
 
   /**
@@ -187,12 +252,15 @@ export class PTYService {
       throw new Error("PTYService not initialized");
     }
 
-    const ptySession = this.manager.getSession(sessionId);
-    if (!ptySession) {
-      throw new Error(`Session ${sessionId} not found`);
+    if (this.usingBunWorker) {
+      await (this.manager as BunCompatiblePTYManager).sendKeys(sessionId, keys);
+    } else {
+      const ptySession = (this.manager as PTYManager).getSession(sessionId);
+      if (!ptySession) {
+        throw new Error(`Session ${sessionId} not found`);
+      }
+      ptySession.sendKeys(keys);
     }
-
-    ptySession.sendKeys(keys);
   }
 
   /**
@@ -208,8 +276,21 @@ export class PTYService {
       throw new Error(`Session ${sessionId} not found`);
     }
 
-    await this.manager.stop(sessionId);
+    if (this.usingBunWorker) {
+      await (this.manager as BunCompatiblePTYManager).kill(sessionId);
+    } else {
+      await (this.manager as PTYManager).stop(sessionId);
+    }
+
+    // Clean up output subscriber
+    const unsubscribe = this.outputUnsubscribers.get(sessionId);
+    if (unsubscribe) {
+      unsubscribe();
+      this.outputUnsubscribers.delete(sessionId);
+    }
+
     this.sessionMetadata.delete(sessionId);
+    this.sessionWorkdirs.delete(sessionId);
     this.log(`Stopped session ${sessionId}`);
   }
 
@@ -226,30 +307,68 @@ export class PTYService {
       return undefined;
     }
 
-    return this.toSessionInfo(session);
+    return this.toSessionInfo(session, this.sessionWorkdirs.get(sessionId));
   }
 
   /**
    * List all active sessions
    */
-  listSessions(filter?: SessionFilter): SessionInfo[] {
+  async listSessions(filter?: SessionFilter): Promise<SessionInfo[]> {
     if (!this.manager) {
       return [];
     }
 
-    return this.manager.list(filter).map((s) => this.toSessionInfo(s));
+    if (this.usingBunWorker) {
+      const sessions = await (this.manager as BunCompatiblePTYManager).list();
+      return sessions.map((s) => this.toSessionInfo(s, this.sessionWorkdirs.get(s.id)));
+    } else {
+      const sessions = (this.manager as PTYManager).list(filter);
+      return sessions.map((s) => this.toSessionInfo(s, this.sessionWorkdirs.get(s.id)));
+    }
   }
 
   /**
-   * Get recent output from a session
+   * Subscribe to session output (streaming)
+   */
+  subscribeToOutput(sessionId: string, callback: (data: string) => void): () => void {
+    if (!this.manager) {
+      throw new Error("PTYService not initialized");
+    }
+
+    if (this.usingBunWorker) {
+      const unsubscribe = (this.manager as BunCompatiblePTYManager).onSessionData(sessionId, callback);
+      this.outputUnsubscribers.set(sessionId, unsubscribe);
+      return unsubscribe;
+    } else {
+      // For native PTYManager, subscribe to the session's output event
+      const ptySession = (this.manager as PTYManager).getSession(sessionId);
+      if (!ptySession) {
+        throw new Error(`Session ${sessionId} not found`);
+      }
+      ptySession.on("output", callback);
+      const unsubscribe = () => ptySession.off("output", callback);
+      this.outputUnsubscribers.set(sessionId, unsubscribe);
+      return unsubscribe;
+    }
+  }
+
+  /**
+   * Get recent output from a session (Node PTYManager only)
+   * For Bun, use subscribeToOutput instead
    */
   async getSessionOutput(sessionId: string, lines?: number): Promise<string> {
     if (!this.manager) {
       throw new Error("PTYService not initialized");
     }
 
+    if (this.usingBunWorker) {
+      // BunCompatiblePTYManager doesn't have logs() - output must be subscribed to
+      this.log("getSessionOutput not available with Bun worker - use subscribeToOutput");
+      return "";
+    }
+
     const output: string[] = [];
-    for await (const line of this.manager.logs(sessionId, { tail: lines })) {
+    for await (const line of (this.manager as PTYManager).logs(sessionId, { tail: lines })) {
       output.push(line);
     }
     return output.join("\n");
@@ -271,25 +390,32 @@ export class PTYService {
   }
 
   /**
-   * Register a custom adapter for new agent types
+   * Register a custom adapter for new agent types (Node PTYManager only)
+   * Adapters in the Bun worker are pre-registered
    */
   registerAdapter(adapter: unknown): void {
     if (!this.manager) {
       throw new Error("PTYService not initialized");
     }
-    this.manager.registerAdapter(adapter as Parameters<PTYManager["registerAdapter"]>[0]);
+
+    if (this.usingBunWorker) {
+      this.log("registerAdapter not available with Bun worker - adapters must be in the worker");
+      return;
+    }
+
+    (this.manager as PTYManager).registerAdapter(adapter as Parameters<PTYManager["registerAdapter"]>[0]);
     this.log(`Registered adapter`);
   }
 
-  private toSessionInfo(session: SessionHandle, workdir?: string): SessionInfo {
+  private toSessionInfo(session: SessionHandle | WorkerSessionHandle, workdir?: string): SessionInfo {
     return {
       id: session.id,
       name: session.name,
       agentType: session.type,
       workdir: workdir ?? process.cwd(),
       status: session.status,
-      createdAt: session.startedAt ?? new Date(),
-      lastActivityAt: session.lastActivityAt ?? new Date(),
+      createdAt: session.startedAt ? new Date(session.startedAt) : new Date(),
+      lastActivityAt: session.lastActivityAt ? new Date(session.lastActivityAt) : new Date(),
       metadata: this.sessionMetadata.get(session.id),
     };
   }
