@@ -2,7 +2,9 @@ import { describe, expect, test, vi } from "vitest";
 import type { MiladyConfig } from "../config/config";
 
 // Skip this test when the plugin-training submodule isn't available (CI)
-let TrainingService: new (ctx: unknown) => {
+let TrainingService: new (
+  ctx: unknown,
+) => {
   importModelToOllama: (id: string, opts: unknown) => Promise<void>;
   models: Map<string, TrainingModelRecord>;
 };

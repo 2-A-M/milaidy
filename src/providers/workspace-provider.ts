@@ -16,15 +16,13 @@ import {
   type ProviderResult,
   type State,
 } from "@elizaos/core";
-
+import type { CodingAgentContext } from "../services/coding-agent-context";
 import {
   DEFAULT_AGENT_WORKSPACE_DIR,
   filterBootstrapFilesForSession,
   loadWorkspaceBootstrapFiles,
   type WorkspaceBootstrapFile,
 } from "./workspace";
-
-import type { CodingAgentContext } from "../services/coding-agent-context";
 
 const DEFAULT_MAX_CHARS = 20_000;
 /** Hard cap on total workspace context to prevent prompt explosion. */
@@ -126,7 +124,7 @@ export function buildCodingAgentSummary(ctx: CodingAgentContext): string {
 
   // Human feedback
   const pendingFeedback = ctx.allFeedback.filter(
-    (fb) => !fb.iterationRef || fb.iterationRef >= (ctx.iterations.length - 1),
+    (fb) => !fb.iterationRef || fb.iterationRef >= ctx.iterations.length - 1,
   );
   if (pendingFeedback.length > 0) {
     lines.push("");

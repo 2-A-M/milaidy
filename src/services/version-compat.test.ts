@@ -64,7 +64,7 @@ describe("parseSemver", () => {
     const newer = parseSemver("2.0.0-nightly.20260208");
     expect(older).not.toBeNull();
     expect(newer).not.toBeNull();
-    expect(older?.[3]).toBeLessThan(newer?.[3]);
+    expect(older![3]).toBeLessThan(newer![3]);
   });
 
   it("returns null for invalid version strings", () => {
@@ -80,7 +80,7 @@ describe("parseSemver", () => {
     expect(release).not.toBeNull();
     expect(alpha).not.toBeNull();
     // release[3] is Infinity, alpha[3] is 99 → release > alpha
-    expect(release?.[3]).toBeGreaterThan(alpha?.[3]);
+    expect(release![3]).toBeGreaterThan(alpha![3]);
   });
 });
 
