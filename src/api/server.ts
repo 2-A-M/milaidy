@@ -98,6 +98,7 @@ import {
   type PluginParamInfo,
   validatePluginConfig,
 } from "./plugin-validation";
+import { handleRegistryRoutes } from "./registry-routes";
 import { RegistryService } from "./registry-service";
 import { handleSandboxRoute } from "./sandbox-routes";
 import { handleSubscriptionRoutes } from "./subscription-routes";
@@ -5097,6 +5098,25 @@ async function handleRequest(
     return;
   }
 
+  if (
+    await handleRegistryRoutes({
+      req,
+      res,
+      method,
+      pathname,
+      url,
+      json,
+      error,
+      getPluginManager: () => requirePluginManager(state.runtime),
+      getLoadedPluginNames: () =>
+        state.runtime?.plugins.map((plugin) => plugin.name) ?? [],
+      getBundledPluginIds: () =>
+        new Set(state.plugins.map((plugin) => plugin.id)),
+    })
+  ) {
+    return;
+  }
+
   // ── GET /api/plugins ────────────────────────────────────────────────────
   if (method === "GET" && pathname === "/api/plugins") {
     // Re-read config from disk so we pick up plugins installed since server start.
@@ -5456,119 +5476,6 @@ async function handleRequest(
     }
 
     json(res, { ok: true, updated });
-    return;
-  }
-
-  // ── GET /api/registry/plugins ──────────────────────────────────────────
-  if (method === "GET" && pathname === "/api/registry/plugins") {
-    try {
-      const pluginManager = requirePluginManager(state.runtime);
-      const registry = await pluginManager.refreshRegistry();
-      const installed = await pluginManager.listInstalledPlugins();
-      const installedNames = new Set(installed.map((p) => p.name));
-
-      // Also check which plugins are loaded in the runtime
-      const loadedNames = state.runtime
-        ? new Set(state.runtime.plugins.map((p) => p.name))
-        : new Set<string>();
-
-      // Cross-reference with bundled manifest so the Store can hide them
-      const bundledIds = new Set(state.plugins.map((p) => p.id));
-
-      const plugins = Array.from(registry.values()).map((p) => {
-        const shortId = p.name
-          .replace(/^@[^/]+\/plugin-/, "")
-          .replace(/^@[^/]+\//, "")
-          .replace(/^plugin-/, "");
-        return {
-          ...p,
-          installed: installedNames.has(p.name),
-          installedVersion:
-            installed.find((i) => i.name === p.name)?.version ?? null,
-          loaded:
-            loadedNames.has(p.name) ||
-            loadedNames.has(p.name.replace("@elizaos/", "")),
-          bundled: bundledIds.has(shortId),
-        };
-      });
-      json(res, { count: plugins.length, plugins });
-    } catch (err) {
-      error(
-        res,
-        `Failed to fetch registry: ${err instanceof Error ? err.message : String(err)}`,
-        502,
-      );
-    }
-    return;
-  }
-
-  // ── GET /api/registry/plugins/:name ─────────────────────────────────────
-  if (
-    method === "GET" &&
-    pathname.startsWith("/api/registry/plugins/") &&
-    pathname.length > "/api/registry/plugins/".length
-  ) {
-    const name = decodeURIComponent(
-      pathname.slice("/api/registry/plugins/".length),
-    );
-    try {
-      const pluginManager = requirePluginManager(state.runtime);
-      const info = await pluginManager.getRegistryPlugin(name);
-      if (!info) {
-        error(res, `Plugin "${name}" not found in registry`, 404);
-        return;
-      }
-      json(res, { plugin: info });
-    } catch (err) {
-      error(
-        res,
-        `Failed to look up plugin: ${err instanceof Error ? err.message : String(err)}`,
-        502,
-      );
-    }
-    return;
-  }
-
-  // ── GET /api/registry/search?q=... ──────────────────────────────────────
-  if (method === "GET" && pathname === "/api/registry/search") {
-    const query = url.searchParams.get("q") || "";
-    if (!query.trim()) {
-      error(res, "Query parameter 'q' is required", 400);
-      return;
-    }
-
-    try {
-      const limitParam = url.searchParams.get("limit");
-      const limit = limitParam
-        ? parseClampedInteger(limitParam, { min: 1, max: 50, fallback: 15 })
-        : 15;
-
-      const pluginManager = requirePluginManager(state.runtime);
-      const results = await pluginManager.searchRegistry(query, limit);
-      json(res, { query, count: results.length, results });
-    } catch (err) {
-      error(
-        res,
-        `Search failed: ${err instanceof Error ? err.message : String(err)}`,
-        502,
-      );
-    }
-    return;
-  }
-
-  // ── POST /api/registry/refresh ──────────────────────────────────────────
-  if (method === "POST" && pathname === "/api/registry/refresh") {
-    try {
-      const pluginManager = requirePluginManager(state.runtime);
-      const registry = await pluginManager.refreshRegistry();
-      json(res, { ok: true, count: registry.size });
-    } catch (err) {
-      error(
-        res,
-        `Refresh failed: ${err instanceof Error ? err.message : String(err)}`,
-        502,
-      );
-    }
     return;
   }
 
