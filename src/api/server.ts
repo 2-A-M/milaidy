@@ -1592,6 +1592,13 @@ function scanSkillsDir(
 const MAX_BODY_BYTES = 1_048_576;
 
 /**
+ * Raised body limit for chat endpoints that accept base64-encoded image
+ * attachments. A single smartphone JPEG is typically 2–5 MB binary
+ * (~3–7 MB base64); 20 MB accommodates up to 4 images with room to spare.
+ */
+const CHAT_MAX_BODY_BYTES = 20 * 1_048_576;
+
+/**
  * Read and parse a JSON request body with size limits and error handling.
  * Returns null (and sends a 4xx response) if reading or parsing fails.
  */
@@ -2233,6 +2240,9 @@ interface ChatImageAttachment {
 
 const MAX_CHAT_IMAGES = 4;
 
+/** Maximum base64 data length for a single image (~3.75 MB binary). */
+const MAX_IMAGE_DATA_BYTES = 5 * 1_048_576;
+
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -2252,6 +2262,8 @@ export function validateChatImages(images: unknown): string | null {
       return "Each image must have a non-empty data string";
     if (data.startsWith("data:"))
       return "Image data must be raw base64, not a data URL";
+    if (data.length > MAX_IMAGE_DATA_BYTES)
+      return `Image too large (max ${MAX_IMAGE_DATA_BYTES / 1_048_576} MB per image)`;
     if (typeof mimeType !== "string" || !mimeType)
       return "Each image must have a mimeType string";
     if (!ALLOWED_IMAGE_MIME_TYPES.has(mimeType.toLowerCase()))
@@ -2321,7 +2333,7 @@ async function readChatRequestPayload(
     text?: string;
     channelType?: string;
     images?: ChatImageAttachment[];
-  }>(req, res);
+  }>(req, res, { maxBytes: CHAT_MAX_BODY_BYTES });
   if (!body) return null;
   if (!body.text?.trim()) {
     helpers.error(res, "text is required");
