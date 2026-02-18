@@ -121,6 +121,7 @@
     "@elizaos/plugin-pdf": "next",
     "@elizaos/plugin-personality": "next",
     "@elizaos/plugin-plugin-manager": "next",
+    "@mariozechner/pi-ai": "0.52.12",
     "@elizaos/plugin-rolodex": "next",
     "@elizaos/plugin-secrets-manager": "next",
     "@elizaos/plugin-shell": "next",

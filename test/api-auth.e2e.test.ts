@@ -317,6 +317,18 @@ describe("Token auth gate (MILADY_API_TOKEN set)", () => {
     }
   });
 
+  it("accepts WebSocket upgrade with query token when enabled", async () => {
+    process.env.MILADY_ALLOW_WS_QUERY_TOKEN = "1";
+    try {
+      const result = await connectWs(
+        `ws://127.0.0.1:${port}/ws?token=${encodeURIComponent(TEST_TOKEN)}`,
+      );
+      expect(result.kind).toBe("open");
+    } finally {
+      delete process.env.MILADY_ALLOW_WS_QUERY_TOKEN;
+    }
+  });
+
   // ── Auth endpoints exempt from token ───────────────────────────────────
 
   it("/api/auth/status is accessible without token", async () => {

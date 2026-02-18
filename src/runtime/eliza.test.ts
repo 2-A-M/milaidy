@@ -117,13 +117,12 @@ describe("collectPluginNames", () => {
 
   it("includes all core plugins for an empty config", () => {
     // Guard against accidental removal from CORE_PLUGINS array
-    expect(CORE_PLUGINS).toHaveLength(14);
+    expect(CORE_PLUGINS).toHaveLength(13);
 
     const expectedCorePlugins = [
       "@elizaos/plugin-sql",
       "@elizaos/plugin-local-embedding",
       "@elizaos/plugin-form",
-      "@elizaos/plugin-elizacloud",
       "@elizaos/plugin-knowledge",
       "@elizaos/plugin-rolodex",
       "@elizaos/plugin-trajectory-logger",

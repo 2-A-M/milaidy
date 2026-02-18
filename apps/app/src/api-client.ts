@@ -1804,6 +1804,31 @@ export class MiladyClient {
     });
   }
 
+  async getSubscriptionStatus(): Promise<{
+    providers: Array<{
+      provider: string;
+      configured: boolean;
+      valid: boolean;
+      expiresAt: number | null;
+    }>;
+  }> {
+    return this.fetch("/api/subscription/status");
+  }
+
+  async deleteSubscription(provider: string): Promise<{ success: boolean }> {
+    return this.fetch(`/api/subscription/${encodeURIComponent(provider)}`, {
+      method: "DELETE",
+    });
+  }
+
+  async switchProvider(provider: string, apiKey?: string): Promise<{ success: boolean; provider: string; restarting: boolean }> {
+    return this.fetch("/api/provider/switch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, ...(apiKey ? { apiKey } : {}) }),
+    });
+  }
+
   async startOpenAILogin(): Promise<{
     authUrl: string;
     state: string;

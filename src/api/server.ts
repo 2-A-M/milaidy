@@ -3758,6 +3758,8 @@ const PAIRING_MAX_ATTEMPTS = 5;
 const PAIRING_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 let pairingCode: string | null = null;
+/** Guard against concurrent provider switch requests (P0 §3). */
+let providerSwitchInProgress = false;
 let pairingExpiresAt = 0;
 const pairingAttempts = new Map<string, { count: number; resetAt: number }>();
 
@@ -4909,6 +4911,241 @@ async function handleRequest(
   if (method === "OPTIONS") {
     res.statusCode = 204;
     res.end();
+    return;
+  }
+
+  // ── POST /api/provider/switch ─────────────────────────────────────────
+  // Atomically switch the active AI provider.  Clears competing credentials
+  // and env vars so the runtime loads the correct plugin on restart.
+  if (method === "POST" && pathname === "/api/provider/switch") {
+    const body = await readJsonBody<{ provider: string; apiKey?: string }>(
+      req,
+      res,
+    );
+    if (!body) return;
+    const provider = body.provider;
+    if (!provider || typeof provider !== "string") {
+      error(res, "Missing provider", 400);
+      return;
+    }
+
+    // P1 §7 — explicit provider allowlist
+    const VALID_PROVIDERS = new Set([
+      "elizacloud",
+      "openai-codex",
+      "openai-subscription",
+      "anthropic-subscription",
+      "openai",
+      "anthropic",
+      "deepseek",
+      "google",
+      "groq",
+      "xai",
+      "openrouter",
+    ]);
+    if (!VALID_PROVIDERS.has(provider)) {
+      error(res, "Invalid provider", 400);
+      return;
+    }
+
+    // P0 §3 — race guard: reject concurrent provider switch requests
+    if (providerSwitchInProgress) {
+      error(res, "Provider switch already in progress", 409);
+      return;
+    }
+    providerSwitchInProgress = true;
+
+    const config = state.config;
+    if (!config.cloud) config.cloud = {} as NonNullable<typeof config.cloud>;
+    if (!config.env) config.env = {};
+    const envCfg = config.env as Record<string, string>;
+
+    // Helper: clear cloud config & env vars
+    const clearCloud = () => {
+      (config.cloud as Record<string, unknown>).enabled = false;
+      delete (config.cloud as Record<string, unknown>).apiKey;
+      delete process.env.ELIZAOS_CLOUD_API_KEY;
+      delete process.env.ELIZAOS_CLOUD_ENABLED;
+      delete envCfg.ELIZAOS_CLOUD_API_KEY;
+      delete envCfg.ELIZAOS_CLOUD_ENABLED;
+      // Also clear from runtime character secrets if available
+      if (state.runtime?.character?.secrets) {
+        const secrets = state.runtime.character.secrets as Record<
+          string,
+          unknown
+        >;
+        delete secrets.ELIZAOS_CLOUD_API_KEY;
+        delete secrets.ELIZAOS_CLOUD_ENABLED;
+      }
+    };
+
+    // Helper: clear subscription credentials
+    const clearSubscriptions = async () => {
+      try {
+        const { deleteCredentials } = await import("../auth/index");
+        deleteCredentials("anthropic-subscription");
+        deleteCredentials("openai-codex");
+      } catch (err) {
+        logger.warn(
+          `[api] Failed to clear subscriptions: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+      // Don't clear the env keys here — applySubscriptionCredentials on
+      // restart will simply not set them if creds are gone.
+    };
+
+    // Provider-specific env key map
+    const PROVIDER_ENV_KEYS: Record<string, string> = {
+      openai: "OPENAI_API_KEY",
+      anthropic: "ANTHROPIC_API_KEY",
+      deepseek: "DEEPSEEK_API_KEY",
+      google: "GOOGLE_API_KEY",
+      groq: "GROQ_API_KEY",
+      xai: "XAI_API_KEY",
+      openrouter: "OPENROUTER_API_KEY",
+    };
+
+    // Helper: clear all direct API keys from env (except the one we're switching to)
+    const clearOtherApiKeys = (keepKey?: string) => {
+      for (const [, envKey] of Object.entries(PROVIDER_ENV_KEYS)) {
+        if (envKey === keepKey) continue;
+        delete process.env[envKey];
+        delete envCfg[envKey];
+        // P1 §6 — also clear from runtime character secrets
+        if (state.runtime?.character?.secrets) {
+          const secrets = state.runtime.character.secrets as Record<
+            string,
+            unknown
+          >;
+          delete secrets[envKey];
+        }
+      }
+    };
+
+    try {
+      // P0 §4 — input validation for direct API key providers
+      if (PROVIDER_ENV_KEYS[provider]) {
+        const trimmedKey =
+          typeof body.apiKey === "string" ? body.apiKey.trim() : "";
+        if (!trimmedKey) {
+          providerSwitchInProgress = false;
+          error(res, "API key is required for this provider", 400);
+          return;
+        }
+        if (trimmedKey.length > 512) {
+          providerSwitchInProgress = false;
+          error(res, "API key is too long", 400);
+          return;
+        }
+        // Store trimmed key back for use below
+        body.apiKey = trimmedKey;
+      }
+
+      if (provider === "elizacloud") {
+        // Switching TO elizacloud
+        await clearSubscriptions();
+        clearOtherApiKeys();
+        // Restore cloud config — the actual API key should already be in
+        // config.cloud.apiKey from the original cloud login.  If it was
+        // wiped, the user will need to re-login via cloud.
+        (config.cloud as Record<string, unknown>).enabled = true;
+        if (config.cloud.apiKey) {
+          process.env.ELIZAOS_CLOUD_API_KEY = config.cloud.apiKey;
+          process.env.ELIZAOS_CLOUD_ENABLED = "true";
+        }
+      } else if (
+        provider === "openai-codex" ||
+        provider === "openai-subscription"
+      ) {
+        // Switching TO OpenAI subscription
+        clearCloud();
+        clearOtherApiKeys("OPENAI_API_KEY");
+        // Delete Anthropic subscription but keep OpenAI
+        try {
+          const { deleteCredentials } = await import("../auth/index");
+          deleteCredentials("anthropic-subscription");
+        } catch (err) {
+          logger.warn(
+            `[api] Failed to clear Anthropic subscription: ${err instanceof Error ? err.message : err}`,
+          );
+        }
+        // Apply the OpenAI subscription credentials to env
+        try {
+          const { applySubscriptionCredentials } = await import(
+            "../auth/index"
+          );
+          await applySubscriptionCredentials();
+        } catch (err) {
+          logger.warn(
+            `[api] Failed to apply OpenAI subscription creds: ${err instanceof Error ? err.message : err}`,
+          );
+        }
+      } else if (provider === "anthropic-subscription") {
+        // Switching TO Anthropic subscription
+        clearCloud();
+        clearOtherApiKeys("ANTHROPIC_API_KEY");
+        // Delete OpenAI subscription but keep Anthropic
+        try {
+          const { deleteCredentials } = await import("../auth/index");
+          deleteCredentials("openai-codex");
+        } catch (err) {
+          logger.warn(
+            `[api] Failed to clear OpenAI subscription: ${err instanceof Error ? err.message : err}`,
+          );
+        }
+        try {
+          const { applySubscriptionCredentials } = await import(
+            "../auth/index"
+          );
+          await applySubscriptionCredentials();
+        } catch (err) {
+          logger.warn(
+            `[api] Failed to apply Anthropic subscription creds: ${err instanceof Error ? err.message : err}`,
+          );
+        }
+      } else if (PROVIDER_ENV_KEYS[provider]) {
+        // Switching TO a direct API key provider
+        clearCloud();
+        await clearSubscriptions();
+        const envKey = PROVIDER_ENV_KEYS[provider];
+        clearOtherApiKeys(envKey);
+        const apiKey = body.apiKey;
+        if (!apiKey) {
+          providerSwitchInProgress = false;
+          error(res, "API key is required for this provider", 400);
+          return;
+        }
+        process.env[envKey] = apiKey;
+        envCfg[envKey] = apiKey;
+      }
+
+      saveMiladyConfig(config);
+
+      // Schedule runtime restart so the new provider takes effect.
+      scheduleRuntimeRestart(`provider switch to ${provider}`);
+      // Keep the lock briefly in restart-capable environments to prevent
+      // double-submits from racing with restart-required propagation.
+      if (ctx?.onRestart) {
+        setTimeout(() => {
+          providerSwitchInProgress = false;
+        }, 250);
+      } else {
+        providerSwitchInProgress = false;
+      }
+
+      json(res, {
+        success: true,
+        provider,
+        restarting: true,
+      });
+    } catch (err) {
+      providerSwitchInProgress = false;
+      // P1 §8 — don't leak internal error details to client
+      logger.error(
+        `[api] Provider switch failed: ${err instanceof Error ? err.stack : err}`,
+      );
+      error(res, "Provider switch failed", 500);
+    }
     return;
   }
 
