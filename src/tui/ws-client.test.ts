@@ -76,20 +76,23 @@ class ControlledWsSocket implements WsSocketLike {
 describe("ApiModeWsClient", () => {
   let sockets: ControlledWsSocket[];
   let socketUrls: string[];
+  let socketOptions: WsSocketFactoryOptions[];
 
   const socketFactory = (
     url: string,
-    _options: WsSocketFactoryOptions,
+    options: WsSocketFactoryOptions,
   ): WsSocketLike => {
     const socket = new ControlledWsSocket();
     sockets.push(socket);
     socketUrls.push(url);
+    socketOptions.push(options);
     return socket;
   };
 
   beforeEach(() => {
     sockets = [];
     socketUrls = [];
+    socketOptions = [];
   });
 
   afterEach(() => {
@@ -160,6 +163,32 @@ describe("ApiModeWsClient", () => {
     expect(socketUrls[0]).toBe("wss://example.test/milady/runtime/ws");
 
     client.close();
+  });
+
+  it("does not fall back to env token when auth callback explicitly returns null", () => {
+    const previousToken = process.env.MILADY_API_TOKEN;
+    process.env.MILADY_API_TOKEN = "env-token";
+
+    try {
+      const client = new ApiModeWsClient({
+        apiBaseUrl: "http://localhost:3137",
+        onMessage: vi.fn(),
+        getAuthToken: () => null,
+        socketFactory,
+      });
+
+      client.connect();
+
+      expect(socketOptions[0]?.headers.Authorization).toBeUndefined();
+
+      client.close();
+    } finally {
+      if (previousToken === undefined) {
+        delete process.env.MILADY_API_TOKEN;
+      } else {
+        process.env.MILADY_API_TOKEN = previousToken;
+      }
+    }
   });
 
   it("forwards parsed inbound websocket events", () => {

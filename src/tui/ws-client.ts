@@ -239,8 +239,15 @@ export class ApiModeWsClient {
   }
 
   private getAuthToken(): string | null {
-    const explicit = this.options.getAuthToken?.()?.trim();
-    if (explicit) return explicit;
+    if (this.options.getAuthToken) {
+      const explicit = this.options.getAuthToken();
+      if (typeof explicit !== "string") {
+        return null;
+      }
+
+      const normalized = explicit.trim();
+      return normalized || null;
+    }
 
     const envToken = process.env.MILADY_API_TOKEN?.trim();
     return envToken || null;

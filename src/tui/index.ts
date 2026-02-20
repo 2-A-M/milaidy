@@ -31,6 +31,12 @@ export interface LaunchTUIOptions {
   modelOverride?: string;
   /** API base URL for chat transport (e.g. http://127.0.0.1:2138). */
   apiBaseUrl?: string;
+  /**
+   * Optional API auth token override for API mode.
+   * - undefined: use MILADY_API_TOKEN from environment
+   * - null/empty: suppress auth header forwarding
+   */
+  apiToken?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -223,6 +229,7 @@ export async function launchTUI(
   });
   const bridge = new ElizaTUIBridge(runtimeRef, tui, {
     apiBaseUrl: options.apiBaseUrl,
+    apiToken: options.apiToken,
   });
 
   const controller = apiMode

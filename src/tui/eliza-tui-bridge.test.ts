@@ -8,6 +8,9 @@ interface BridgeTestAccess {
   streamedText: string;
   apiWsClient: { close(): void } | null;
   pendingRender: NodeJS.Timeout | null;
+  ensureAssistantComponent(): void;
+  finalizeAssistantForTurn(): void;
+  updateAssistantFromText(): void;
   handleApiWsMessage(data: Record<string, unknown>): void;
   dispose(): void;
 }
@@ -84,6 +87,36 @@ describe("ElizaTUIBridge proactive websocket routing", () => {
 
     expect(addedComponents).toHaveLength(1);
     expect(requestRender).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears pending render timer when finalizing an assistant turn", () => {
+    vi.useFakeTimers();
+
+    const { bridge } = createBridgeHarness();
+    const access = bridge as unknown as BridgeTestAccess;
+
+    access.streamedText = "final reply";
+    access.ensureAssistantComponent();
+    access.pendingRender = setTimeout(() => {}, 10_000);
+
+    access.finalizeAssistantForTurn();
+
+    expect(access.pendingRender).toBeNull();
+  });
+
+  it("allows final text updates after assistant finalize", () => {
+    const { bridge, addedComponents } = createBridgeHarness();
+    const access = bridge as unknown as BridgeTestAccess;
+
+    access.streamedText = "stream chunk";
+    access.ensureAssistantComponent();
+    access.finalizeAssistantForTurn();
+
+    access.streamedText = "final parsed text";
+    access.updateAssistantFromText();
+
+    const rendered = addedComponents[0]?.render(80).join("\n") ?? "";
+    expect(rendered).toContain("final parsed text");
   });
 
   it("disposes websocket client and pending render timers idempotently", () => {

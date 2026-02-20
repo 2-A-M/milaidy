@@ -39,6 +39,12 @@ const TUI_USER_ID = stringToUuid("milady-tui-user") as UUID;
 interface ElizaTUIBridgeOptions {
   /** API base URL (enables API transport mode for chat). */
   apiBaseUrl?: string;
+  /**
+   * Optional API auth token override.
+   * - undefined: use MILADY_API_TOKEN from environment
+   * - null/empty: suppress auth header forwarding
+   */
+  apiToken?: string | null;
   /** Title used when creating a new conversation for TUI. */
   conversationTitle?: string;
 }
@@ -98,6 +104,7 @@ export class ElizaTUIBridge {
   private readonly channelId: string;
 
   private readonly apiBaseUrl: string | null;
+  private readonly apiTokenOverride: string | null | undefined;
   private readonly conversationTitle: string;
   private conversationId: string | null = null;
   private conversationRoomId: string | null = null;
@@ -125,6 +132,7 @@ export class ElizaTUIBridge {
     this.channelId = `milady-tui:${agentScope}`;
 
     this.apiBaseUrl = opts.apiBaseUrl?.trim().replace(/\/+$/, "") || null;
+    this.apiTokenOverride = opts.apiToken;
     this.conversationTitle = opts.conversationTitle?.trim() || "TUI Chat";
   }
 
@@ -760,6 +768,11 @@ export class ElizaTUIBridge {
   }
 
   private getApiToken(): string | null {
+    if (this.apiTokenOverride !== undefined) {
+      const override = this.apiTokenOverride?.trim();
+      return override || null;
+    }
+
     const token = process.env.MILADY_API_TOKEN?.trim();
     return token || null;
   }
@@ -953,6 +966,11 @@ export class ElizaTUIBridge {
 
     const component = this.currentAssistant ?? this.lastAssistantForTurn;
     if (!component) return;
+
+    if (this.pendingRender) {
+      clearTimeout(this.pendingRender);
+      this.pendingRender = null;
+    }
 
     component.finalize();
 

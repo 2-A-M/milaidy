@@ -259,9 +259,14 @@ async function tuiAction(options: {
     }
 
     const apiBaseUrl = resolvedApi.baseUrl;
+    const hasToken = Boolean(process.env.MILADY_API_TOKEN?.trim());
     const includeAuthProbe =
       resolvedApi.source !== "auto" ||
       resolvedApi.reachableCandidateCount === 1;
+    const suppressApiTokenForwarding =
+      hasToken &&
+      resolvedApi.source === "auto" &&
+      resolvedApi.reachableCandidateCount > 1;
 
     const probe = await probeMiladyApi(apiBaseUrl, includeAuthProbe);
     if (!probe.reachable) {
@@ -271,14 +276,13 @@ async function tuiAction(options: {
     }
 
     if (probe.authDenied) {
-      const hasToken = Boolean(process.env.MILADY_API_TOKEN?.trim());
       if (!hasToken) {
         throw new Error(
           `Milady API runtime at ${apiBaseUrl} requires authentication. Set MILADY_API_TOKEN and retry.`,
         );
       }
 
-      if (!includeAuthProbe) {
+      if (suppressApiTokenForwarding) {
         throw new Error(
           `Milady API runtime at ${apiBaseUrl} requires authentication, but multiple local API candidates were detected. For token safety, auto-discovery does not send MILADY_API_TOKEN to all ports. Re-run with --api-base-url ${apiBaseUrl} to opt in explicitly.`,
         );
@@ -310,6 +314,7 @@ async function tuiAction(options: {
     await launchTUI(null, {
       modelOverride: options.model,
       apiBaseUrl,
+      apiToken: suppressApiTokenForwarding ? null : undefined,
     });
   });
 }
