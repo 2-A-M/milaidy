@@ -346,6 +346,13 @@ export interface OpenRouterModelOption {
   description: string;
 }
 
+export interface PiAiModelOption {
+  id: string;
+  name: string;
+  provider: string;
+  isDefault: boolean;
+}
+
 export interface OnboardingOptions {
   names: string[];
   styles: StylePreset[];
@@ -356,6 +363,8 @@ export interface OnboardingOptions {
     large: ModelOption[];
   };
   openrouterModels?: OpenRouterModelOption[];
+  piAiModels?: PiAiModelOption[];
+  piAiDefaultModel?: string | null;
   inventoryProviders: InventoryProviderOption[];
   sharedStyleRules: string;
 }

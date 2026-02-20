@@ -45,6 +45,7 @@ import {
   buildTestHandler,
   registerCustomActionLive,
 } from "../runtime/custom-actions";
+import { listPiAiModelOptions } from "../runtime/pi-credentials";
 import {
   isBlockedPrivateOrLinkLocalIp,
   normalizeHostLike,
@@ -5516,12 +5517,32 @@ async function handleRequest(
 
   // ── GET /api/onboarding/options ─────────────────────────────────────────
   if (method === "GET" && pathname === "/api/onboarding/options") {
+    let piAiModels: Array<{
+      id: string;
+      name: string;
+      provider: string;
+      isDefault: boolean;
+    }> = [];
+    let piAiDefaultModel: string | null = null;
+
+    try {
+      const piAi = await listPiAiModelOptions();
+      piAiModels = piAi.models;
+      piAiDefaultModel = piAi.defaultModelSpec ?? null;
+    } catch (err) {
+      logger.warn(
+        `[api] Failed to load pi-ai model options: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
     json(res, {
       names: pickRandomNames(5),
       styles: STYLE_PRESETS,
       providers: getProviderOptions(),
       cloudProviders: getCloudProviderOptions(),
       models: getModelOptions(),
+      piAiModels,
+      piAiDefaultModel,
       inventoryProviders: getInventoryProviderOptions(),
       sharedStyleRules: "Keep responses brief. Be helpful and concise.",
     });
