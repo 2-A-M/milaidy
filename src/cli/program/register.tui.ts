@@ -15,11 +15,13 @@ interface MiladyApiProbe {
   runtimeState: string | null;
   onboardingComplete: boolean | null;
   pluginCount: number | null;
+  authDenied: boolean;
 }
 
 async function fetchJsonWithTimeout(
   url: string,
   timeoutMs = 1200,
+  headers?: Record<string, string>,
 ): Promise<{ ok: boolean; status: number; body: unknown | null }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -28,6 +30,7 @@ async function fetchJsonWithTimeout(
     const res = await fetch(url, {
       method: "GET",
       signal: controller.signal,
+      headers,
     });
 
     let body: unknown | null = null;
@@ -45,8 +48,20 @@ async function fetchJsonWithTimeout(
   }
 }
 
+function getMiladyApiProbeHeaders(): Record<string, string> | undefined {
+  const token = process.env.MILADY_API_TOKEN?.trim();
+  if (!token) return undefined;
+
+  return { Authorization: `Bearer ${token}` };
+}
+
 async function probeMiladyApi(baseUrl: string): Promise<MiladyApiProbe> {
-  const statusRes = await fetchJsonWithTimeout(`${baseUrl}/api/status`);
+  const headers = getMiladyApiProbeHeaders();
+  const statusRes = await fetchJsonWithTimeout(
+    `${baseUrl}/api/status`,
+    1200,
+    headers,
+  );
   const reachable = statusRes.status !== 0 && statusRes.status !== 404;
 
   if (!reachable) {
@@ -56,6 +71,7 @@ async function probeMiladyApi(baseUrl: string): Promise<MiladyApiProbe> {
       runtimeState: null,
       onboardingComplete: null,
       pluginCount: null,
+      authDenied: false,
     };
   }
 
@@ -68,6 +84,8 @@ async function probeMiladyApi(baseUrl: string): Promise<MiladyApiProbe> {
 
   const onboardingRes = await fetchJsonWithTimeout(
     `${baseUrl}/api/onboarding/status`,
+    1200,
+    headers,
   );
   const onboardingBody =
     onboardingRes.body && typeof onboardingRes.body === "object"
@@ -78,7 +96,11 @@ async function probeMiladyApi(baseUrl: string): Promise<MiladyApiProbe> {
       ? onboardingBody.complete
       : null;
 
-  const pluginsRes = await fetchJsonWithTimeout(`${baseUrl}/api/plugins`);
+  const pluginsRes = await fetchJsonWithTimeout(
+    `${baseUrl}/api/plugins`,
+    1200,
+    headers,
+  );
   const pluginsBody =
     pluginsRes.body && typeof pluginsRes.body === "object"
       ? (pluginsRes.body as Record<string, unknown>)
@@ -87,12 +109,17 @@ async function probeMiladyApi(baseUrl: string): Promise<MiladyApiProbe> {
     ? pluginsBody.plugins.length
     : null;
 
+  const authDenied = [statusRes.status, onboardingRes.status, pluginsRes.status]
+    .filter((status): status is number => Number.isFinite(status))
+    .some((status) => status === 401 || status === 403);
+
   return {
     baseUrl,
     reachable,
     runtimeState,
     onboardingComplete,
     pluginCount,
+    authDenied,
   };
 }
 
@@ -130,6 +157,7 @@ async function resolveTuiApiBaseUrl(cliValue?: string): Promise<string | null> {
   const ready = probes.find(
     (probe) =>
       probe.reachable &&
+      !probe.authDenied &&
       probe.runtimeState === "running" &&
       probe.onboardingComplete === true &&
       (probe.pluginCount ?? 0) > 0,
@@ -139,6 +167,7 @@ async function resolveTuiApiBaseUrl(cliValue?: string): Promise<string | null> {
   const onboarded = probes.find(
     (probe) =>
       probe.reachable &&
+      !probe.authDenied &&
       probe.runtimeState === "running" &&
       probe.onboardingComplete === true,
   );
@@ -178,6 +207,19 @@ async function tuiAction(options: {
     if (!probe.reachable) {
       throw new Error(
         `Could not reach Milady API runtime at ${apiBaseUrl}. Check port and network connectivity.`,
+      );
+    }
+
+    if (probe.authDenied) {
+      const hasToken = Boolean(process.env.MILADY_API_TOKEN?.trim());
+      if (!hasToken) {
+        throw new Error(
+          `Milady API runtime at ${apiBaseUrl} requires authentication. Set MILADY_API_TOKEN and retry.`,
+        );
+      }
+
+      throw new Error(
+        `Milady API runtime at ${apiBaseUrl} rejected MILADY_API_TOKEN (401/403). Verify token scope/value and retry.`,
       );
     }
 

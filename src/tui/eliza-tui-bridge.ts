@@ -112,6 +112,8 @@ export class ElizaTUIBridge {
   private seenProactiveMessageOrder: string[] = [];
   private readonly proactiveMessageIdLimit = 128;
 
+  private disposed = false;
+
   constructor(
     private runtime: AgentRuntime,
     private tui: MiladyTUI,
@@ -202,6 +204,8 @@ export class ElizaTUIBridge {
   }
 
   async initialize(): Promise<void> {
+    if (this.disposed) return;
+
     // Runtime-direct mode keeps a dedicated TUI room. In API mode chat
     // identity/rooms are managed by /api/conversations.
     if (!this.apiBaseUrl) {
@@ -366,6 +370,19 @@ export class ElizaTUIBridge {
 
       this.tui.requestRender();
     });
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+
+    if (this.pendingRender) {
+      clearTimeout(this.pendingRender);
+      this.pendingRender = null;
+    }
+
+    this.apiWsClient?.close();
+    this.apiWsClient = null;
   }
 
   abortInFlight(): void {
@@ -824,7 +841,7 @@ export class ElizaTUIBridge {
     const normalized = text.trim();
     if (!normalized) return true;
 
-    if (this.streamedText.trim() === normalized) {
+    if (this.isProcessing && this.streamedText.trim() === normalized) {
       return true;
     }
 
@@ -946,6 +963,7 @@ export class ElizaTUIBridge {
       this.lastCompletedAssistantAt = Date.now();
     }
 
+    this.streamedText = "";
     this.currentAssistant = null;
     this.assistantFinalizedForTurn = true;
   }

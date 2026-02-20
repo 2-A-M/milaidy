@@ -1,35 +1,49 @@
 import type { AgentRuntime } from "@elizaos/core";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ElizaTUIBridge } from "./eliza-tui-bridge";
 import type { MiladyTUI } from "./tui-app";
 
 interface BridgeTestAccess {
   conversationId: string | null;
+  streamedText: string;
+  apiWsClient: { close(): void } | null;
+  pendingRender: NodeJS.Timeout | null;
   handleApiWsMessage(data: Record<string, unknown>): void;
+  dispose(): void;
 }
+
+function createBridgeHarness() {
+  const addedComponents: Array<{ render: (width: number) => string[] }> = [];
+  const requestRender = vi.fn();
+
+  const runtime = {
+    agentId: "agent-1",
+    character: { name: "Milady" },
+  } as unknown as AgentRuntime;
+
+  const tui = {
+    addToChatContainer: (component: {
+      render: (width: number) => string[];
+    }) => {
+      addedComponents.push(component);
+    },
+    requestRender,
+  } as unknown as MiladyTUI;
+
+  const bridge = new ElizaTUIBridge(runtime, tui, {
+    apiBaseUrl: "http://localhost:3137",
+  });
+
+  return { bridge, addedComponents, requestRender };
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("ElizaTUIBridge proactive websocket routing", () => {
   it("renders proactive messages only for the active conversation", () => {
-    const addedComponents: Array<{ render: (width: number) => string[] }> = [];
-    const requestRender = vi.fn();
-
-    const runtime = {
-      agentId: "agent-1",
-      character: { name: "Milady" },
-    } as unknown as AgentRuntime;
-
-    const tui = {
-      addToChatContainer: (component: {
-        render: (width: number) => string[];
-      }) => {
-        addedComponents.push(component);
-      },
-      requestRender,
-    } as unknown as MiladyTUI;
-
-    const bridge = new ElizaTUIBridge(runtime, tui, {
-      apiBaseUrl: "http://localhost:3137",
-    });
+    const { bridge, addedComponents, requestRender } = createBridgeHarness();
 
     const access = bridge as unknown as BridgeTestAccess;
     access.conversationId = "conv-active";
@@ -53,5 +67,41 @@ describe("ElizaTUIBridge proactive websocket routing", () => {
 
     const rendered = addedComponents[0].render(80).join("\n");
     expect(rendered).toContain("hello from autonomy");
+  });
+
+  it("does not suppress proactive messages from stale streamed text", () => {
+    const { bridge, addedComponents, requestRender } = createBridgeHarness();
+
+    const access = bridge as unknown as BridgeTestAccess;
+    access.conversationId = "conv-active";
+    access.streamedText = "repeatable status update";
+
+    access.handleApiWsMessage({
+      type: "proactive-message",
+      conversationId: "conv-active",
+      message: { id: "msg-3", text: "repeatable status update" },
+    });
+
+    expect(addedComponents).toHaveLength(1);
+    expect(requestRender).toHaveBeenCalledTimes(1);
+  });
+
+  it("disposes websocket client and pending render timers idempotently", () => {
+    vi.useFakeTimers();
+
+    const { bridge } = createBridgeHarness();
+    const close = vi.fn();
+
+    const access = bridge as unknown as BridgeTestAccess;
+    access.apiWsClient = { close };
+    access.pendingRender = setTimeout(() => {}, 10_000);
+
+    access.dispose();
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(access.apiWsClient).toBeNull();
+    expect(access.pendingRender).toBeNull();
+
+    access.dispose();
+    expect(close).toHaveBeenCalledTimes(1);
   });
 });

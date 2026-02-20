@@ -514,6 +514,7 @@ export async function launchTUI(
         }
 
         if (cmd === "exit" || cmd === "quit") {
+          bridge.dispose();
           await tui.stop();
           await runtimeRef.stop();
           process.exit(0);
@@ -546,6 +547,7 @@ export async function launchTUI(
 
     void (async () => {
       try {
+        bridge.dispose();
         await tui.stop();
       } finally {
         await runtimeRef.stop();
@@ -577,5 +579,9 @@ export async function launchTUI(
   }
 
   await bridge.initialize();
-  await tui.start();
+  try {
+    await tui.start();
+  } finally {
+    bridge.dispose();
+  }
 }
