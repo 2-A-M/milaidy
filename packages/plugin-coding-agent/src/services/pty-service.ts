@@ -23,15 +23,24 @@ import {
   type SessionFilter,
   type PTYManagerConfig,
   type WorkerSessionHandle,
+  type AutoResponseRule,
+  type StallClassification,
 } from "pty-manager";
 import {
+  createAdapter,
   createAllAdapters,
   checkAdapters,
+  generateApprovalConfig,
+  type BaseCodingAdapter,
   type AdapterType,
   type PreflightResult,
   type AgentCredentials,
+  type AgentFileDescriptor,
+  type WriteMemoryOptions,
+  type ApprovalPreset,
+  type ApprovalConfig,
 } from "coding-agent-adapters";
-import type { IAgentRuntime } from "@elizaos/core";
+import { ModelType, type IAgentRuntime } from "@elizaos/core";
 
 export interface PTYServiceConfig {
   /** Maximum output lines to keep per session (default: 1000) */
@@ -60,6 +69,12 @@ export interface SpawnSessionOptions {
   metadata?: Record<string, unknown>;
   /** Credentials for coding agents (API keys, tokens) */
   credentials?: AgentCredentials;
+  /** Memory/instructions content to write to the agent's memory file before spawning */
+  memoryContent?: string;
+  /** Approval preset controlling tool permissions (readonly, standard, permissive, autonomous) */
+  approvalPreset?: ApprovalPreset;
+  /** Custom credentials for MCP servers or other integrations */
+  customCredentials?: Record<string, string>;
 }
 
 export interface SessionInfo {
@@ -87,12 +102,16 @@ export class PTYService {
   private sessionWorkdirs: Map<string, string> = new Map();
   private eventCallbacks: SessionEventCallback[] = [];
   private outputUnsubscribers: Map<string, () => void> = new Map();
+  private sessionOutputBuffers: Map<string, string[]> = new Map();
+  private adapterCache: Map<string, BaseCodingAdapter> = new Map();
+  /** Tracks the buffer index when a task was sent, so we can capture the response on completion */
+  private taskResponseMarkers: Map<string, number> = new Map();
 
   constructor(runtime: IAgentRuntime, config: PTYServiceConfig = {}) {
     this.runtime = runtime;
     this.serviceConfig = {
       maxLogLines: config.maxLogLines ?? 1000,
-      debug: config.debug ?? false,
+      debug: config.debug ?? true,
       registerCodingAdapters: config.registerCodingAdapters ?? true,
     };
   }
@@ -117,10 +136,18 @@ export class PTYService {
     if (this.usingBunWorker) {
       // Use Bun-compatible manager that spawns a Node worker
       this.log("Detected Bun runtime, using BunCompatiblePTYManager");
-      const bunManager = new BunCompatiblePTYManager();
+      const bunManager = new BunCompatiblePTYManager({
+        adapterModules: ["coding-agent-adapters"],
+        stallDetectionEnabled: true,
+        stallTimeoutMs: 4000,
+        onStallClassify: async (sessionId: string, recentOutput: string, _stallDurationMs: number) => {
+          return this.classifyStall(sessionId, recentOutput);
+        },
+      });
 
       // Set up event forwarding for worker-based manager
       bunManager.on("session_ready", (session: WorkerSessionHandle) => {
+        this.log(`session_ready event received for ${session.id} (type: ${session.type}, status: ${session.status})`);
         this.emitEvent(session.id, "ready", { session });
       });
 
@@ -132,6 +159,45 @@ export class PTYService {
         this.emitEvent(id, "error", { message: error });
       });
 
+      bunManager.on("blocking_prompt", (session: WorkerSessionHandle, promptInfo: unknown, autoResponded: boolean) => {
+        const info = promptInfo as { type?: string; prompt?: string } | undefined;
+        this.log(`blocking_prompt for ${session.id}: type=${info?.type}, autoResponded=${autoResponded}, prompt="${(info?.prompt ?? "").slice(0, 80)}"`);
+        this.emitEvent(session.id, "blocked", { promptInfo, autoResponded });
+      });
+
+      bunManager.on("login_required", (session: WorkerSessionHandle, instructions?: string, url?: string) => {
+        // Auto-handle Gemini auth flow
+        if (session.type === "gemini") {
+          this.handleGeminiAuth(session.id);
+        }
+        this.emitEvent(session.id, "login_required", { instructions, url });
+      });
+
+      bunManager.on("task_complete", (session: WorkerSessionHandle) => {
+        const response = this.captureTaskResponse(session.id);
+        this.log(`Task complete for ${session.id} (adapter fast-path), response: ${response.length} chars`);
+        this.emitEvent(session.id, "task_complete", { session, response });
+      });
+
+      bunManager.on("message", (message: SessionMessage) => {
+        this.emitEvent(message.sessionId, "message", message);
+      });
+
+      // Log worker-level errors/stderr so we can debug startup failures
+      bunManager.on("worker_error", (err: unknown) => {
+        const msg = typeof err === "string" ? err : String(err);
+        // Worker stderr includes pino logs from pty-manager — show them
+        if (msg.includes("ready") || msg.includes("blocking") || msg.includes("auto-response") || msg.includes("Auto-responding") || msg.includes("detectReady") || msg.includes("stall") || msg.includes("Stall")) {
+          console.log("[PTYService/Worker]", msg.trim());
+        } else {
+          console.error("[PTYService] Worker error:", msg.slice(0, 200));
+        }
+      });
+
+      bunManager.on("worker_exit", (info: { code: number; signal: string }) => {
+        console.error("[PTYService] Worker exited:", info);
+      });
+
       await bunManager.waitForReady();
       this.manager = bunManager;
     } else {
@@ -139,6 +205,11 @@ export class PTYService {
       this.log("Using native PTYManager");
       const managerConfig: PTYManagerConfig = {
         maxLogLines: this.serviceConfig.maxLogLines,
+        stallDetectionEnabled: true,
+        stallTimeoutMs: 4000,
+        onStallClassify: async (sessionId: string, recentOutput: string, _stallDurationMs: number) => {
+          return this.classifyStall(sessionId, recentOutput);
+        },
       };
 
       const nodeManager = new PTYManager(managerConfig);
@@ -162,6 +233,19 @@ export class PTYService {
 
       nodeManager.on("blocking_prompt", (session: SessionHandle, promptInfo: unknown, autoResponded: boolean) => {
         this.emitEvent(session.id, "blocked", { promptInfo, autoResponded });
+      });
+
+      nodeManager.on("login_required", (session: SessionHandle, instructions?: string, url?: string) => {
+        if (session.type === "gemini") {
+          this.handleGeminiAuth(session.id);
+        }
+        this.emitEvent(session.id, "login_required", { instructions, url });
+      });
+
+      nodeManager.on("task_complete", (session: SessionHandle) => {
+        const response = this.captureTaskResponse(session.id);
+        this.log(`Task complete for ${session.id} (adapter fast-path), response: ${response.length} chars`);
+        this.emitEvent(session.id, "task_complete", { session, response });
       });
 
       nodeManager.on("session_stopped", (session: SessionHandle, reason: string) => {
@@ -195,6 +279,7 @@ export class PTYService {
     }
     this.sessionMetadata.clear();
     this.sessionWorkdirs.clear();
+    this.sessionOutputBuffers.clear();
     this.log("PTYService shutdown complete");
   }
 
@@ -219,31 +304,229 @@ export class PTYService {
     // Store workdir for later retrieval
     this.sessionWorkdirs.set(sessionId, workdir);
 
+    // Write memory content before spawning so the agent reads it on startup
+    if (options.memoryContent && options.agentType !== "shell") {
+      try {
+        const writtenPath = await this.writeMemoryFile(
+          options.agentType as AdapterType,
+          workdir,
+          options.memoryContent,
+        );
+        this.log(`Wrote memory file for ${options.agentType}: ${writtenPath}`);
+      } catch (err) {
+        this.log(`Failed to write memory file for ${options.agentType}: ${err}`);
+      }
+    }
+
+    // Write approval config files to workspace before spawn
+    if (options.approvalPreset && options.agentType !== "shell") {
+      try {
+        const written = await this.getAdapter(options.agentType as AdapterType)
+          .writeApprovalConfig(workdir, {
+            name: options.name,
+            type: options.agentType,
+            workdir,
+            adapterConfig: { approvalPreset: options.approvalPreset },
+          } as SpawnConfig);
+        this.log(`Wrote approval config (${options.approvalPreset}) for ${options.agentType}: ${written.join(", ")}`);
+      } catch (err) {
+        this.log(`Failed to write approval config: ${err}`);
+      }
+    }
+
     const spawnConfig: SpawnConfig & { id: string } = {
       id: sessionId,
       name: options.name,
       type: options.agentType,
       workdir,
       env: options.env,
-      adapterConfig: options.credentials as Record<string, unknown> | undefined,
+      adapterConfig: {
+        ...(options.credentials as Record<string, unknown> | undefined),
+        ...(options.customCredentials ? { custom: options.customCredentials } : {}),
+        interactive: true,
+        approvalPreset: options.approvalPreset,
+        // Forward adapter-relevant metadata (e.g. provider preference for Aider)
+        ...(options.metadata?.provider ? { provider: options.metadata.provider } : {}),
+        ...(options.metadata?.modelTier ? { modelTier: options.metadata.modelTier } : {}),
+      },
     };
 
     const session = await this.manager.spawn(spawnConfig);
 
-    // Store metadata separately
-    if (options.metadata) {
-      this.sessionMetadata.set(session.id, options.metadata);
+    // Store metadata separately (always include agentType for stall classification)
+    this.sessionMetadata.set(session.id, {
+      ...options.metadata,
+      agentType: options.agentType,
+    });
+
+    // Buffer output for Bun worker path (no logs() method available)
+    if (this.usingBunWorker) {
+      const buffer: string[] = [];
+      this.sessionOutputBuffers.set(session.id, buffer);
+      const unsubscribe = (this.manager as BunCompatiblePTYManager).onSessionData(session.id, (data: string) => {
+        const lines = data.split("\n");
+        buffer.push(...lines);
+        while (buffer.length > (this.serviceConfig.maxLogLines ?? 1000)) {
+          buffer.shift();
+        }
+      });
+      this.outputUnsubscribers.set(session.id, unsubscribe);
     }
+
+    // Defer initial task until session is ready.
+    // IMPORTANT: Set up the listener BEFORE pushDefaultRules (which has a 1500ms sleep),
+    // otherwise session_ready fires during pushDefaultRules and the listener misses it.
+    if (options.initialTask) {
+      const task = options.initialTask;
+      const sid = session.id;
+      let taskSent = false;
+      const sendTask = () => {
+        if (taskSent) return;
+        taskSent = true;
+        this.log(`Session ${sid} ready — sending deferred task (300ms settle delay)`);
+        // Delay to let TUI finish rendering after ready detection.
+        // Without this, Claude Code's TUI can swallow the Enter key
+        // if it arrives during a render cycle (50ms worker delay is too short).
+        setTimeout(() => {
+          this.sendToSession(sid, task).catch((err) =>
+            this.log(`Failed to send deferred task to ${sid}: ${err}`),
+          );
+        }, 300);
+        if (this.usingBunWorker) {
+          (this.manager as BunCompatiblePTYManager).removeListener("session_ready", onReady);
+        } else {
+          (this.manager as PTYManager).removeListener("session_ready", onReady);
+        }
+      };
+      const onReady = (readySession: WorkerSessionHandle | SessionHandle) => {
+        if (readySession.id !== sid) return;
+        sendTask();
+      };
+
+      if (session.status === "ready") {
+        sendTask();
+      } else {
+        if (this.usingBunWorker) {
+          (this.manager as BunCompatiblePTYManager).on("session_ready", onReady);
+        } else {
+          (this.manager as PTYManager).on("session_ready", onReady);
+        }
+      }
+    }
+
+    // Push default auto-response rules for common first-run prompts
+    await this.pushDefaultRules(session.id, options.agentType);
 
     const sessionInfo = this.toSessionInfo(session, workdir);
 
-    // Send initial task if provided
-    if (options.initialTask) {
-      await this.sendToSession(session.id, options.initialTask);
-    }
-
     this.log(`Spawned session ${session.id} (${options.agentType})`);
     return sessionInfo;
+  }
+
+  /**
+   * Push session-specific auto-response rules that depend on runtime config.
+   * Trust prompts, update notices, and other static rules are handled by
+   * adapter built-in rules (coding-agent-adapters). This only pushes rules
+   * that need runtime values (e.g. API keys).
+   */
+  private async pushDefaultRules(sessionId: string, agentType: string): Promise<void> {
+    const rules: AutoResponseRule[] = [];
+
+    // Aider gitignore prompt
+    if (agentType === "aider") {
+      rules.push({
+        pattern: /\.aider\*.*\.gitignore.*\(Y\)es\/\(N\)o/i,
+        type: "config",
+        response: "y",
+        description: "Auto-accept adding .aider* to .gitignore",
+        safe: true,
+      });
+    }
+
+    // Gemini — auth flow (update notices are informational, don't need a response)
+    if (agentType === "gemini") {
+      // Auth menu detection — select API key or Google login based on available credentials
+      const geminiApiKey = this.runtime.getSetting("GENERATIVE_AI_API_KEY") as string | undefined;
+
+      if (geminiApiKey) {
+        // Have API key → select option 2 "Use an API key"
+        rules.push({
+          pattern: /Log in with Google|Use an API key|Use Vertex AI|gemini api key/i,
+          type: "config",
+          response: "2",
+          description: "Select 'Use an API key' from Gemini auth menu",
+          safe: true,
+        });
+
+        // Step 2: API key input prompt — send the actual key value
+        rules.push({
+          pattern: /enter.*api.?key|paste.*api.?key|provide.*api.?key|api.?key\s*:/i,
+          type: "config",
+          response: geminiApiKey,
+          description: "Input Gemini API key from runtime settings",
+          safe: true,
+        });
+      } else {
+        // No API key → select option 1 "Log in with Google" (opens browser OAuth)
+        rules.push({
+          pattern: /Log in with Google|Use an API key|Use Vertex AI|gemini api key/i,
+          type: "config",
+          response: "1",
+          description: "Select 'Log in with Google' from Gemini auth menu (browser OAuth)",
+          safe: true,
+        });
+      }
+    }
+
+    if (rules.length === 0) return;
+
+    // Push rules to the session via the runtime API
+    try {
+      if (this.usingBunWorker) {
+        for (const rule of rules) {
+          await (this.manager as BunCompatiblePTYManager).addAutoResponseRule(sessionId, rule);
+        }
+      } else {
+        const nodeManager = this.manager as PTYManager;
+        for (const rule of rules) {
+          nodeManager.addAutoResponseRule(sessionId, rule);
+        }
+      }
+      this.log(`Pushed ${rules.length} auto-response rules to session ${sessionId}`);
+
+      // Note: No retroactive check needed here. The worker's tryAutoResponse()
+      // runs on every data chunk and checks the full output buffer against all
+      // active rules. Once rules are pushed, the next data chunk will trigger
+      // matching. The old retroactive check caused ghost responses because it
+      // bypassed the worker's TUI-aware response logic (sendKeys vs writeRaw).
+    } catch (err) {
+      this.log(`Failed to push rules to session ${sessionId}: ${err}`);
+    }
+  }
+
+  /**
+   * Handle Gemini authentication when login_required fires.
+   * Sends /auth to start the auth flow — auto-response rules
+   * then handle menu selection and API key input.
+   */
+  private async handleGeminiAuth(sessionId: string): Promise<void> {
+    const apiKey = this.runtime.getSetting("GENERATIVE_AI_API_KEY") as string | undefined;
+
+    if (apiKey) {
+      this.log(`Gemini auth: API key available, sending /auth to start API key flow`);
+    } else {
+      this.log(`Gemini auth: no API key configured, sending /auth for Google OAuth flow`);
+    }
+
+    // Send /auth via sendKeys to avoid send() which sets status to "busy".
+    // We need to stay in "authenticating" so detectReady fires after auth completes.
+    try {
+      await this.sendKeysToSession(sessionId, "/auth");
+      await new Promise((r) => setTimeout(r, 50));
+      await this.sendKeysToSession(sessionId, "enter");
+    } catch (err) {
+      this.log(`Gemini auth: failed to send /auth: ${err}`);
+    }
   }
 
   /**
@@ -257,6 +540,12 @@ export class PTYService {
     const session = this.manager.get(sessionId);
     if (!session) {
       throw new Error(`Session ${sessionId} not found`);
+    }
+
+    // Mark buffer position for task response capture
+    const buffer = this.sessionOutputBuffers.get(sessionId);
+    if (buffer) {
+      this.taskResponseMarkers.set(sessionId, buffer.length);
     }
 
     if (this.usingBunWorker) {
@@ -316,6 +605,8 @@ export class PTYService {
 
     this.sessionMetadata.delete(sessionId);
     this.sessionWorkdirs.delete(sessionId);
+    this.sessionOutputBuffers.delete(sessionId);
+    this.taskResponseMarkers.delete(sessionId);
     this.log(`Stopped session ${sessionId}`);
   }
 
@@ -387,9 +678,11 @@ export class PTYService {
     }
 
     if (this.usingBunWorker) {
-      // BunCompatiblePTYManager doesn't have logs() - output must be subscribed to
-      this.log("getSessionOutput not available with Bun worker - use subscribeToOutput");
-      return "";
+      // Read from our local buffer (populated by onSessionData subscription)
+      const buffer = this.sessionOutputBuffers.get(sessionId);
+      if (!buffer) return "";
+      const tail = lines ?? buffer.length;
+      return buffer.slice(-tail).join("\n");
     }
 
     const output: string[] = [];
@@ -422,6 +715,146 @@ export class PTYService {
   getSupportedAgentTypes(): CodingAgentType[] {
     return ["shell", "claude", "gemini", "codex", "aider"];
   }
+
+  /**
+   * Capture the agent's output since the last task was sent, stripped of ANSI codes.
+   * Returns the raw response text, or empty string if no marker exists.
+   */
+  private captureTaskResponse(sessionId: string): string {
+    const buffer = this.sessionOutputBuffers.get(sessionId);
+    const marker = this.taskResponseMarkers.get(sessionId);
+    if (!buffer || marker === undefined) return "";
+
+    const responseLines = buffer.slice(marker);
+    this.taskResponseMarkers.delete(sessionId);
+
+    // Join and strip ANSI escape sequences for clean text
+    const raw = responseLines.join("\n");
+    return raw
+      .replace(/\x1b\[\d*[CDABGdEF]/g, " ")          // cursor movement → space
+      .replace(/\x1b\[\d*(?:;\d+)?[Hf]/g, " ")        // cursor positioning → space
+      .replace(/\x1b\[\d*[JK]/g, "")                   // erase line/screen
+      .replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "") // all other ANSI
+      .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "")     // control chars
+      .replace(/ {3,}/g, " ")                           // collapse long space runs
+      .trim();
+  }
+
+  /**
+   * Classify a stalled session using Milady's LLM.
+   * Called by pty-manager when a busy session has no new output for stallTimeoutMs.
+   */
+  private async classifyStall(
+    sessionId: string,
+    recentOutput: string,
+  ): Promise<StallClassification | null> {
+    const meta = this.sessionMetadata.get(sessionId);
+    const agentType = meta?.agentType ?? "unknown";
+
+    const systemPrompt =
+      `You are Milady, an AI orchestrator managing coding agent sessions. ` +
+      `A ${agentType} coding agent (session: ${sessionId}) appears to have stalled — ` +
+      `it has stopped producing output while in a busy state.\n\n` +
+      `Here is the recent terminal output:\n` +
+      `---\n${recentOutput.slice(-1500)}\n---\n\n` +
+      `Classify what's happening:\n` +
+      `1. "waiting_for_input" — the agent is showing a prompt and waiting for user input\n` +
+      `2. "still_working" — the agent is processing (API call, compilation, etc.)\n` +
+      `3. "task_complete" — the agent finished its task and is back at its main prompt\n` +
+      `4. "error" — the agent hit an error state\n\n` +
+      `If "waiting_for_input", also provide:\n` +
+      `- "prompt": the text of what it's asking\n` +
+      `- "suggestedResponse": what to type/send. Use "keys:enter" for TUI menu confirmation, ` +
+      `"keys:down,enter" to select a non-default option, or plain text like "y" for text prompts.\n\n` +
+      `Respond with ONLY a JSON object:\n` +
+      `{"state": "...", "prompt": "...", "suggestedResponse": "..."}`;
+
+    try {
+      this.log(`Stall detected for ${sessionId}, asking LLM to classify...`);
+      const result = await this.runtime.useModel(ModelType.TEXT_SMALL, {
+        prompt: systemPrompt,
+      });
+
+      const jsonMatch = result.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        this.log(`Stall classification: no JSON in LLM response`);
+        return null;
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      const validStates: StallClassification["state"][] = ["waiting_for_input", "still_working", "task_complete", "error"];
+      if (!validStates.includes(parsed.state)) {
+        this.log(`Stall classification: invalid state "${parsed.state}"`);
+        return null;
+      }
+      const classification: StallClassification = {
+        state: parsed.state,
+        prompt: parsed.prompt,
+        suggestedResponse: parsed.suggestedResponse,
+      };
+      this.log(`Stall classification for ${sessionId}: ${classification.state}${classification.suggestedResponse ? ` → "${classification.suggestedResponse}"` : ""}`);
+      return classification;
+    } catch (err) {
+      this.log(`Stall classification failed: ${err}`);
+      return null;
+    }
+  }
+
+  // ─── Workspace Files ───
+
+  /**
+   * Get an adapter instance for metadata/file operations (cached).
+   * These run in the main process — not the PTY worker.
+   */
+  private getAdapter(agentType: AdapterType): BaseCodingAdapter {
+    let adapter = this.adapterCache.get(agentType);
+    if (!adapter) {
+      adapter = createAdapter(agentType);
+      this.adapterCache.set(agentType, adapter);
+    }
+    return adapter;
+  }
+
+  /**
+   * Get workspace file descriptors for an agent type.
+   * Describes what files the CLI reads (memory, config, rules).
+   */
+  getWorkspaceFiles(agentType: AdapterType): AgentFileDescriptor[] {
+    return this.getAdapter(agentType).getWorkspaceFiles();
+  }
+
+  /**
+   * Get the primary memory file path for an agent type.
+   * E.g. "CLAUDE.md" for claude, "GEMINI.md" for gemini.
+   */
+  getMemoryFilePath(agentType: AdapterType): string {
+    return this.getAdapter(agentType).memoryFilePath;
+  }
+
+  /**
+   * Get the approval config that would be generated for an agent type + preset.
+   * Useful for previewing what permissions an agent will have.
+   */
+  getApprovalConfig(agentType: AdapterType, preset: ApprovalPreset): ApprovalConfig {
+    return generateApprovalConfig(agentType, preset);
+  }
+
+  /**
+   * Write content to an agent's memory file in a workspace.
+   * Creates parent directories as needed.
+   *
+   * @returns The absolute path of the written file
+   */
+  async writeMemoryFile(
+    agentType: AdapterType,
+    workspacePath: string,
+    content: string,
+    options?: WriteMemoryOptions,
+  ): Promise<string> {
+    return this.getAdapter(agentType).writeMemoryFile(workspacePath, content, options);
+  }
+
+  // ─── Event & Adapter Registration ───
 
   /**
    * Register a callback for session events

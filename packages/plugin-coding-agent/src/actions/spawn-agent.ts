@@ -9,7 +9,7 @@
 
 import type { Action, IAgentRuntime, Memory, State, HandlerCallback, ActionResult, HandlerOptions } from "@elizaos/core";
 import { PTYService, type SessionInfo, type CodingAgentType } from "../services/pty-service.js";
-import type { AgentCredentials } from "coding-agent-adapters";
+import type { AgentCredentials, ApprovalPreset } from "coding-agent-adapters";
 
 /** Normalize user-provided agent type to adapter type */
 const normalizeAgentType = (input: string): CodingAgentType => {
@@ -110,12 +110,25 @@ export const spawnAgentAction: Action = {
     const agentType = normalizeAgentType(rawAgentType);
     const workdir = (params?.workdir as string) ?? (content.workdir as string) ?? process.cwd();
     const task = (params?.task as string) ?? (content.task as string);
+    const memoryContent = (params?.memoryContent as string) ?? (content.memoryContent as string);
+    const approvalPreset = (params?.approvalPreset as string) ?? (content.approvalPreset as string);
 
-    // Build credentials from runtime settings if not provided
+    // Custom credentials for MCP servers and other integrations
+    const customCredentialKeys = runtime.getSetting("CUSTOM_CREDENTIAL_KEYS") as string | undefined;
+    let customCredentials: Record<string, string> | undefined;
+    if (customCredentialKeys) {
+      customCredentials = {};
+      for (const key of customCredentialKeys.split(",").map(k => k.trim())) {
+        const val = runtime.getSetting(key) as string | undefined;
+        if (val) customCredentials[key] = val;
+      }
+    }
+
+    // Build credentials from runtime settings
     const credentials: AgentCredentials = {
       anthropicKey: runtime.getSetting("ANTHROPIC_API_KEY") as string | undefined,
       openaiKey: runtime.getSetting("OPENAI_API_KEY") as string | undefined,
-      googleKey: runtime.getSetting("GOOGLE_API_KEY") as string | undefined,
+      googleKey: runtime.getSetting("GOOGLE_GENERATIVE_AI_API_KEY") as string | undefined,
       githubToken: runtime.getSetting("GITHUB_TOKEN") as string | undefined,
     };
 
@@ -141,7 +154,10 @@ export const spawnAgentAction: Action = {
         agentType,
         workdir,
         initialTask: task,
+        memoryContent,
         credentials,
+        approvalPreset: approvalPreset as ApprovalPreset | undefined,
+        customCredentials,
         metadata: {
           requestedType: rawAgentType,
           messageId: message.id,
@@ -237,6 +253,18 @@ export const spawnAgentAction: Action = {
       description: "Initial task or prompt to send to the agent once spawned.",
       required: false,
       schema: { type: "string" as const },
+    },
+    {
+      name: "memoryContent",
+      description: "Instructions/context to write to the agent's memory file (e.g. CLAUDE.md) before spawning.",
+      required: false,
+      schema: { type: "string" as const },
+    },
+    {
+      name: "approvalPreset",
+      description: "Permission level: readonly (safe audit), standard (reads+web auto, writes prompt), permissive (file ops auto, shell prompts), autonomous (all auto, use with sandbox)",
+      required: false,
+      schema: { type: "string" as const, enum: ["readonly", "standard", "permissive", "autonomous"] },
     },
   ],
 };
