@@ -2,17 +2,17 @@
  * LIST_CODING_AGENTS action tests
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, jest, beforeEach } from "bun:test";
 import { listAgentsAction } from "../actions/list-agents.js";
 
-const mockListSessions = vi.fn();
+const mockListSessions = jest.fn();
 
 const createMockPTYService = (sessions: any[] = []) => ({
   listSessions: mockListSessions.mockReturnValue(sessions),
 });
 
 const createMockRuntime = (ptyService: any = null) => ({
-  getService: vi.fn((name: string) => {
+  getService: jest.fn((name: string) => {
     if (name === "PTY_SERVICE") return ptyService;
     return null;
   }),
@@ -26,7 +26,7 @@ const createMockMessage = () => ({
 
 describe("listAgentsAction", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   describe("action metadata", () => {
@@ -89,7 +89,7 @@ describe("listAgentsAction", () => {
       ];
       const ptyService = createMockPTYService(sessions);
       const runtime = createMockRuntime(ptyService);
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await listAgentsAction.handler(
         runtime as any,
@@ -110,7 +110,7 @@ describe("listAgentsAction", () => {
     it("should show message when no sessions", async () => {
       const ptyService = createMockPTYService([]);
       const runtime = createMockRuntime(ptyService);
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await listAgentsAction.handler(
         runtime as any,
@@ -141,7 +141,7 @@ describe("listAgentsAction", () => {
       ];
       const ptyService = createMockPTYService(sessions);
       const runtime = createMockRuntime(ptyService);
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       await listAgentsAction.handler(
         runtime as any,
@@ -176,7 +176,7 @@ describe("listAgentsAction", () => {
       ];
       const ptyService = createMockPTYService(sessions);
       const runtime = createMockRuntime(ptyService);
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       await listAgentsAction.handler(
         runtime as any,
@@ -193,7 +193,7 @@ describe("listAgentsAction", () => {
 
     it("should return false when PTYService not available", async () => {
       const runtime = createMockRuntime(null);
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await listAgentsAction.handler(
         runtime as any,

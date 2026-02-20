@@ -2,12 +2,12 @@
  * STOP_CODING_AGENT action tests
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, jest, beforeEach } from "bun:test";
 import { stopAgentAction } from "../actions/stop-agent.js";
 
-const mockStopSession = vi.fn();
-const mockGetSession = vi.fn();
-const mockListSessions = vi.fn();
+const mockStopSession = jest.fn();
+const mockGetSession = jest.fn();
+const mockListSessions = jest.fn();
 
 const createMockPTYService = (sessions: any[] = []) => ({
   stopSession: mockStopSession,
@@ -16,7 +16,7 @@ const createMockPTYService = (sessions: any[] = []) => ({
 });
 
 const createMockRuntime = (ptyService: any = null) => ({
-  getService: vi.fn((name: string) => {
+  getService: jest.fn((name: string) => {
     if (name === "PTY_SERVICE") return ptyService;
     return null;
   }),
@@ -30,7 +30,7 @@ const createMockMessage = (content: Record<string, unknown> = {}) => ({
 
 describe("stopAgentAction", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    jest.clearAllMocks();
     mockStopSession.mockResolvedValue(undefined);
     mockGetSession.mockReturnValue({
       id: "session-123",
@@ -85,7 +85,7 @@ describe("stopAgentAction", () => {
       const ptyService = createMockPTYService([{ id: "session-123" }]);
       const runtime = createMockRuntime(ptyService);
       const message = createMockMessage({ sessionId: "session-123" });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await stopAgentAction.handler(
         runtime as any,
@@ -109,7 +109,7 @@ describe("stopAgentAction", () => {
       const runtime = createMockRuntime(ptyService);
       const message = createMockMessage({});
       const state = { codingSession: { id: "session-123" } };
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       await stopAgentAction.handler(
         runtime as any,
@@ -127,7 +127,7 @@ describe("stopAgentAction", () => {
       const runtime = createMockRuntime(ptyService);
       const message = createMockMessage({ sessionId: "session-123" });
       const state: any = { codingSession: { id: "session-123" } };
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       await stopAgentAction.handler(
         runtime as any,
@@ -149,7 +149,7 @@ describe("stopAgentAction", () => {
       const ptyService = createMockPTYService(sessions);
       const runtime = createMockRuntime(ptyService);
       const message = createMockMessage({ all: true });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await stopAgentAction.handler(
         runtime as any,
@@ -174,7 +174,7 @@ describe("stopAgentAction", () => {
       mockGetSession.mockReturnValue({ id: "session-2", agentType: "shell" });
       const runtime = createMockRuntime(ptyService);
       const message = createMockMessage({});
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       await stopAgentAction.handler(
         runtime as any,
@@ -191,7 +191,7 @@ describe("stopAgentAction", () => {
       const ptyService = createMockPTYService([]);
       const runtime = createMockRuntime(ptyService);
       const message = createMockMessage({});
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await stopAgentAction.handler(
         runtime as any,
@@ -214,7 +214,7 @@ describe("stopAgentAction", () => {
       const ptyService = createMockPTYService([{ id: "other" }]);
       const runtime = createMockRuntime(ptyService);
       const message = createMockMessage({ sessionId: "nonexistent" });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await stopAgentAction.handler(
         runtime as any,
@@ -246,7 +246,7 @@ describe("stopAgentAction", () => {
       const ptyService = createMockPTYService(sessions);
       const runtime = createMockRuntime(ptyService);
       const message = createMockMessage({ all: true });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       // Should not throw, just log error
       const result = await stopAgentAction.handler(
@@ -266,7 +266,7 @@ describe("stopAgentAction", () => {
       const ptyService = createMockPTYService([{ id: "session-123" }]);
       const runtime = createMockRuntime(ptyService);
       const message = createMockMessage({ sessionId: "session-123" });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await stopAgentAction.handler(
         runtime as any,

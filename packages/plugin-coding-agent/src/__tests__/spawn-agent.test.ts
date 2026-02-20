@@ -2,29 +2,29 @@
  * SPAWN_CODING_AGENT action tests
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, jest, beforeEach } from "bun:test";
 import { spawnAgentAction } from "../actions/spawn-agent.js";
 
 // Mock PTYService
-const mockSpawnSession = vi.fn();
-const mockOnSessionEvent = vi.fn();
-const mockCheckAvailableAgents = vi.fn();
+const mockSpawnSession = jest.fn();
+const mockOnSessionEvent = jest.fn();
+const mockCheckAvailableAgents = jest.fn();
 
 const createMockPTYService = () => ({
   spawnSession: mockSpawnSession,
   onSessionEvent: mockOnSessionEvent,
-  getSession: vi.fn(),
-  listSessions: vi.fn().mockReturnValue([]),
+  getSession: jest.fn(),
+  listSessions: jest.fn().mockReturnValue([]),
   checkAvailableAgents: mockCheckAvailableAgents,
 });
 
 // Mock runtime
 const createMockRuntime = (ptyService: any = null) => ({
-  getService: vi.fn((name: string) => {
+  getService: jest.fn((name: string) => {
     if (name === "PTY_SERVICE") return ptyService;
     return null;
   }),
-  getSetting: vi.fn(),
+  getSetting: jest.fn(),
 });
 
 // Mock message
@@ -38,7 +38,7 @@ const createMockMessage = (content: Record<string, unknown> = {}) => ({
 
 describe("spawnAgentAction", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    jest.clearAllMocks();
     mockSpawnSession.mockResolvedValue({
       id: "session-123",
       agentType: "claude",
@@ -110,7 +110,7 @@ describe("spawnAgentAction", () => {
         workdir: "/test/path",
         task: "Fix the bug",
       });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await spawnAgentAction.handler(
         runtime as any,
@@ -138,7 +138,7 @@ describe("spawnAgentAction", () => {
       const ptyService = createMockPTYService();
       const runtime = createMockRuntime(ptyService);
       const message = createMockMessage({ workdir: "/test" });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       await spawnAgentAction.handler(
         runtime as any,
@@ -159,7 +159,7 @@ describe("spawnAgentAction", () => {
       const ptyService = createMockPTYService();
       const runtime = createMockRuntime(ptyService);
       const message = createMockMessage({ agentType: "claude-code" });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       await spawnAgentAction.handler(
         runtime as any,
@@ -180,7 +180,7 @@ describe("spawnAgentAction", () => {
       const ptyService = createMockPTYService();
       const runtime = createMockRuntime(ptyService);
       const message = createMockMessage({ agentType: "codex" });
-      const callback = vi.fn();
+      const callback = jest.fn();
       mockCheckAvailableAgents.mockResolvedValue([
         { adapter: "codex", installed: true, installCommand: "npm i -g @openai/codex", docsUrl: "https://openai.com" },
       ]);
@@ -204,7 +204,7 @@ describe("spawnAgentAction", () => {
       const ptyService = createMockPTYService();
       const runtime = createMockRuntime(ptyService);
       const message = createMockMessage({ agentType: "claude-code" });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       await spawnAgentAction.handler(
         runtime as any,
@@ -228,7 +228,7 @@ describe("spawnAgentAction", () => {
         agentType: "claude",
         workdir: "/test",
       });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       await spawnAgentAction.handler(
         runtime as any,
@@ -250,7 +250,7 @@ describe("spawnAgentAction", () => {
       const runtime = createMockRuntime(ptyService);
       const message = createMockMessage({ agentType: "claude" });
       const state: any = {};
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       await spawnAgentAction.handler(
         runtime as any,
@@ -274,7 +274,7 @@ describe("spawnAgentAction", () => {
         message as any,
         undefined,
         {},
-        vi.fn()
+        jest.fn()
       );
 
       expect(mockOnSessionEvent).toHaveBeenCalled();
@@ -284,7 +284,7 @@ describe("spawnAgentAction", () => {
       const ptyService = createMockPTYService();
       const runtime = createMockRuntime(ptyService);
       const message = createMockMessage({ agentType: "claude" });
-      const callback = vi.fn();
+      const callback = jest.fn();
       mockCheckAvailableAgents.mockResolvedValue([
         { adapter: "claude", installed: false, installCommand: "npm i -g @anthropic-ai/claude-code", docsUrl: "https://docs.anthropic.com" },
       ]);
@@ -309,7 +309,7 @@ describe("spawnAgentAction", () => {
     it("should return false when PTYService not available", async () => {
       const runtime = createMockRuntime(null);
       const message = createMockMessage({});
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await spawnAgentAction.handler(
         runtime as any,
@@ -332,7 +332,7 @@ describe("spawnAgentAction", () => {
       const ptyService = createMockPTYService();
       const runtime = createMockRuntime(ptyService);
       const message = createMockMessage({ agentType: "claude" });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await spawnAgentAction.handler(
         runtime as any,
@@ -354,7 +354,7 @@ describe("spawnAgentAction", () => {
       const ptyService = createMockPTYService();
       const runtime = createMockRuntime(ptyService);
       const message = createMockMessage({ agentType: "shell" });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       await spawnAgentAction.handler(
         runtime as any,

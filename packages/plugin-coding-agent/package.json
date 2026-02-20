@@ -14,9 +14,8 @@
     "README.md"
   ],
   "scripts": {
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
@@ -26,8 +25,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.2.3",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.0"
+    "typescript": "^5.9.3"
   },
   "license": "MIT",
   "dependencies": {

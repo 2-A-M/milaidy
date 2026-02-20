@@ -25,8 +25,6 @@ import {
   type WorkerSessionHandle,
   type AutoResponseRule,
   type StallClassification,
-  extractTaskCompletionTraceRecords,
-  buildTaskCompletionTimeline,
 } from "pty-manager";
 import {
   createAdapter,
@@ -42,7 +40,10 @@ import {
   type ApprovalPreset,
   type ApprovalConfig,
 } from "coding-agent-adapters";
-import { ModelType, type IAgentRuntime } from "@elizaos/core";
+import { type IAgentRuntime } from "@elizaos/core";
+import { captureTaskResponse } from "./ansi-utils.js";
+import { AgentMetricsTracker } from "./agent-metrics.js";
+import { classifyStallOutput } from "./stall-classifier.js";
 
 export interface PTYServiceConfig {
   /** Maximum output lines to keep per session (default: 1000) */
@@ -112,15 +113,7 @@ export class PTYService {
   private traceEntries: Array<string | Record<string, unknown>> = [];
   private static readonly MAX_TRACE_ENTRIES = 200;
   /** Lightweight per-agent-type metrics for observability */
-  private agentMetrics: Map<string, {
-    spawned: number;
-    completed: number;
-    completedViaFastPath: number;
-    completedViaClassifier: number;
-    stallCount: number;
-    avgCompletionMs: number;
-    totalCompletionMs: number;
-  }> = new Map();
+  private metricsTracker = new AgentMetricsTracker();
 
   constructor(runtime: IAgentRuntime, config: PTYServiceConfig = {}) {
     this.runtime = runtime;
@@ -189,9 +182,9 @@ export class PTYService {
       });
 
       bunManager.on("task_complete", (session: WorkerSessionHandle) => {
-        const response = this.captureTaskResponse(session.id);
+        const response = captureTaskResponse(session.id, this.sessionOutputBuffers, this.taskResponseMarkers);
         const durationMs = session.startedAt ? Date.now() - new Date(session.startedAt).getTime() : 0;
-        this.recordCompletion(session.type, "fast-path", durationMs);
+        this.metricsTracker.recordCompletion(session.type, "fast-path", durationMs);
         this.log(`Task complete for ${session.id} (adapter fast-path), response: ${response.length} chars`);
         this.emitEvent(session.id, "task_complete", { session, response });
       });
@@ -271,9 +264,9 @@ export class PTYService {
       });
 
       nodeManager.on("task_complete", (session: SessionHandle) => {
-        const response = this.captureTaskResponse(session.id);
+        const response = captureTaskResponse(session.id, this.sessionOutputBuffers, this.taskResponseMarkers);
         const durationMs = session.startedAt ? Date.now() - new Date(session.startedAt).getTime() : 0;
-        this.recordCompletion(session.type, "fast-path", durationMs);
+        this.metricsTracker.recordCompletion(session.type, "fast-path", durationMs);
         this.log(`Task complete for ${session.id} (adapter fast-path), response: ${response.length} chars`);
         this.emitEvent(session.id, "task_complete", { session, response });
       });
@@ -449,7 +442,7 @@ export class PTYService {
 
     const sessionInfo = this.toSessionInfo(session, workdir);
 
-    this.getMetrics(options.agentType).spawned++;
+    this.metricsTracker.get(options.agentType).spawned++;
     this.log(`Spawned session ${session.id} (${options.agentType})`);
     return sessionInfo;
   }
@@ -748,169 +741,26 @@ export class PTYService {
   }
 
   /**
-   * Capture the agent's output since the last task was sent, stripped of ANSI codes.
-   * Returns the raw response text, or empty string if no marker exists.
-   */
-  private captureTaskResponse(sessionId: string): string {
-    const buffer = this.sessionOutputBuffers.get(sessionId);
-    const marker = this.taskResponseMarkers.get(sessionId);
-    if (!buffer || marker === undefined) return "";
-
-    const responseLines = buffer.slice(marker);
-    this.taskResponseMarkers.delete(sessionId);
-
-    // Join and strip ANSI escape sequences for clean text
-    const raw = responseLines.join("\n");
-    return raw
-      .replace(/\x1b\[\d*[CDABGdEF]/g, " ")          // cursor movement → space
-      .replace(/\x1b\[\d*(?:;\d+)?[Hf]/g, " ")        // cursor positioning → space
-      .replace(/\x1b\[\d*[JK]/g, "")                   // erase line/screen
-      .replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "") // all other ANSI
-      .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "")     // control chars
-      .replace(/ {3,}/g, " ")                           // collapse long space runs
-      .trim();
-  }
-
-  /**
    * Classify a stalled session using Milady's LLM.
    * Called by pty-manager when a busy session has no new output for stallTimeoutMs.
    */
-  /**
-   * Strip ANSI escape sequences from raw terminal output for readable text.
-   * Replaces cursor-forward codes with spaces (TUI uses these instead of actual spaces).
-   */
-  private stripAnsi(raw: string): string {
-    return raw
-      .replace(/\x1b\[\d*[CDABGdEF]/g, " ")          // cursor movement → space
-      .replace(/\x1b\[\d*(?:;\d+)?[Hf]/g, " ")        // cursor positioning → space
-      .replace(/\x1b\[\d*[JK]/g, "")                   // erase line/screen
-      .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "") // OSC sequences (title bars)
-      .replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "") // all other ANSI
-      .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "")     // control chars
-      .replace(/ {3,}/g, " ")                           // collapse long space runs
-      .trim();
-  }
-
   private async classifyStall(
     sessionId: string,
     recentOutput: string,
   ): Promise<StallClassification | null> {
     const meta = this.sessionMetadata.get(sessionId);
-    const agentType = meta?.agentType ?? "unknown";
-    this.getMetrics(agentType).stallCount++;
-
-    // Use our own buffer if pty-manager's recentOutput is empty or too short.
-    // pty-manager's classifier stripping can produce very short output (e.g., 72 chars)
-    // that lacks completion evidence. Our raw buffer has everything.
-    let effectiveOutput = recentOutput;
-    if (!recentOutput || recentOutput.trim().length < 200) {
-      const ourBuffer = this.sessionOutputBuffers.get(sessionId);
-      if (ourBuffer && ourBuffer.length > 0) {
-        const rawTail = ourBuffer.slice(-100).join("\n");
-        const stripped = this.stripAnsi(rawTail);
-        if (stripped.length > effectiveOutput.length) {
-          effectiveOutput = stripped;
-          this.log(`Using own buffer for stall classification (${effectiveOutput.length} chars after stripping, pty-manager had ${recentOutput.length})`);
-        }
-      }
-    }
-
-    const systemPrompt =
-      `You are Milady, an AI orchestrator managing coding agent sessions. ` +
-      `A ${agentType} coding agent (session: ${sessionId}) appears to have stalled — ` +
-      `it has stopped producing output while in a busy state.\n\n` +
-      `Here is the recent terminal output:\n` +
-      `---\n${effectiveOutput.slice(-1500)}\n---\n\n` +
-      `Classify what's happening. Read the output carefully and choose the MOST specific match:\n\n` +
-      `1. "task_complete" — The agent FINISHED its task and returned to its idle prompt. ` +
-      `Strong indicators: a summary of completed work ("Done", "All done", "Here's what was completed"), ` +
-      `timing info ("Baked for", "Churned for", "Crunched for", "Cooked for", "Worked for"), ` +
-      `or the agent's main prompt symbol (❯) appearing AFTER completion output. ` +
-      `If the output contains evidence of completed work followed by an idle prompt, this is ALWAYS task_complete, ` +
-      `even though the agent is technically "waiting" — it is waiting for a NEW task, not asking a question.\n\n` +
-      `2. "waiting_for_input" — The agent is MID-TASK and blocked on a specific question or permission prompt. ` +
-      `The agent has NOT finished its work — it needs a response to continue. ` +
-      `Examples: Y/n confirmation, file permission dialogs, "Do you want to proceed?", ` +
-      `tool approval prompts, or interactive menus. ` +
-      `This is NOT the same as the agent sitting at its idle prompt after finishing work.\n\n` +
-      `3. "still_working" — The agent is actively processing (API call, compilation, thinking, etc.) ` +
-      `and has not produced final output yet. No prompt or completion summary visible.\n\n` +
-      `4. "error" — The agent hit an error state (crash, unrecoverable error, stack trace).\n\n` +
-      `IMPORTANT: If you see BOTH completed work output AND an idle prompt (❯), choose "task_complete". ` +
-      `Only choose "waiting_for_input" if the agent is clearly asking a question mid-task.\n\n` +
-      `If "waiting_for_input", also provide:\n` +
-      `- "prompt": the text of what it's asking\n` +
-      `- "suggestedResponse": what to type/send. Use "keys:enter" for TUI menu confirmation, ` +
-      `"keys:down,enter" to select a non-default option, or plain text like "y" for text prompts.\n\n` +
-      `Respond with ONLY a JSON object:\n` +
-      `{"state": "...", "prompt": "...", "suggestedResponse": "..."}`;
-
-    // Dump debug snapshot for offline analysis
-    try {
-      const fs = await import("node:fs");
-      const ourBuffer = this.sessionOutputBuffers.get(sessionId);
-      const ourTail = ourBuffer ? ourBuffer.slice(-100).join("\n") : "(no buffer)";
-      let traceTimeline = "(no trace entries)";
-      try {
-        const records = extractTaskCompletionTraceRecords(this.traceEntries);
-        const timeline = buildTaskCompletionTimeline(records, { adapterType: agentType as string });
-        traceTimeline = JSON.stringify(timeline, null, 2);
-      } catch (e) {
-        traceTimeline = `(trace error: ${e})`;
-      }
-      const snapshot = [
-        `=== STALL SNAPSHOT @ ${new Date().toISOString()} ===`,
-        `Session: ${sessionId} | Agent: ${agentType}`,
-        `recentOutput length: ${recentOutput.length} | effectiveOutput length: ${effectiveOutput.length}`,
-        ``,
-        `--- effectiveOutput (what LLM sees) ---`,
-        effectiveOutput.slice(-1500),
-        ``,
-        `--- trace timeline ---`,
-        traceTimeline,
-        ``,
-        `--- raw trace entries (last 20 of ${this.traceEntries.length}) ---`,
-        this.traceEntries.slice(-20).join("\n"),
-        ``,
-      ].join("\n");
-      fs.writeFileSync(`/tmp/stall-snapshot-${sessionId}.txt`, snapshot);
-      this.log(`Stall snapshot → /tmp/stall-snapshot-${sessionId}.txt`);
-    } catch (_) { /* best-effort */ }
-
-    try {
-      this.log(`Stall detected for ${sessionId}, asking LLM to classify...`);
-      const result = await this.runtime.useModel(ModelType.TEXT_SMALL, {
-        prompt: systemPrompt,
-      });
-
-      const jsonMatch = result.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        this.log(`Stall classification: no JSON in LLM response`);
-        return null;
-      }
-
-      const parsed = JSON.parse(jsonMatch[0]);
-      const validStates: StallClassification["state"][] = ["waiting_for_input", "still_working", "task_complete", "error"];
-      if (!validStates.includes(parsed.state)) {
-        this.log(`Stall classification: invalid state "${parsed.state}"`);
-        return null;
-      }
-      const classification: StallClassification = {
-        state: parsed.state,
-        prompt: parsed.prompt,
-        suggestedResponse: parsed.suggestedResponse,
-      };
-      this.log(`Stall classification for ${sessionId}: ${classification.state}${classification.suggestedResponse ? ` → "${classification.suggestedResponse}"` : ""}`);
-      if (classification.state === "task_complete") {
-        const session = this.manager?.get(sessionId);
-        const durationMs = session?.startedAt ? Date.now() - new Date(session.startedAt).getTime() : 0;
-        this.recordCompletion(agentType, "classifier", durationMs);
-      }
-      return classification;
-    } catch (err) {
-      this.log(`Stall classification failed: ${err}`);
-      return null;
-    }
+    const agentType = (meta?.agentType as string) ?? "unknown";
+    return classifyStallOutput({
+      sessionId,
+      recentOutput,
+      agentType,
+      buffers: this.sessionOutputBuffers,
+      traceEntries: this.traceEntries,
+      runtime: this.runtime,
+      manager: this.manager,
+      metricsTracker: this.metricsTracker,
+      log: (msg: string) => this.log(msg),
+    });
   }
 
   // ─── Workspace Files ───
@@ -1019,35 +869,12 @@ export class PTYService {
 
   // ─── Metrics ───
 
-  private getMetrics(agentType: string) {
-    let m = this.agentMetrics.get(agentType);
-    if (!m) {
-      m = { spawned: 0, completed: 0, completedViaFastPath: 0, completedViaClassifier: 0, stallCount: 0, avgCompletionMs: 0, totalCompletionMs: 0 };
-      this.agentMetrics.set(agentType, m);
-    }
-    return m;
-  }
-
-  private recordCompletion(agentType: string, method: "fast-path" | "classifier", durationMs: number): void {
-    const m = this.getMetrics(agentType);
-    m.completed++;
-    if (method === "fast-path") m.completedViaFastPath++;
-    else m.completedViaClassifier++;
-    m.totalCompletionMs += durationMs;
-    m.avgCompletionMs = Math.round(m.totalCompletionMs / m.completed);
-    this.log(`Metrics [${agentType}]: ${m.completed} completed (${m.completedViaFastPath} fast-path, ${m.completedViaClassifier} classifier), avg ${m.avgCompletionMs}ms, ${m.stallCount} stalls`);
-  }
-
   /**
    * Get agent performance metrics for observability.
    * Returns per-agent-type stats: completion counts, detection method, avg time, stall rate.
    */
-  getAgentMetrics(): Record<string, { spawned: number; completed: number; completedViaFastPath: number; completedViaClassifier: number; stallCount: number; avgCompletionMs: number }> {
-    const result: Record<string, ReturnType<PTYService["getMetrics"]>> = {};
-    for (const [type, m] of this.agentMetrics) {
-      result[type] = { ...m };
-    }
-    return result;
+  getAgentMetrics() {
+    return this.metricsTracker.getAll();
   }
 
   private log(message: string): void {

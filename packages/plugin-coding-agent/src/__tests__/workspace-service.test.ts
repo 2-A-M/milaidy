@@ -4,38 +4,34 @@
  * Tests git workspace management, branch operations, and PR creation.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-  CodingWorkspaceService,
-  type CodingWorkspaceConfig,
-  type WorkspaceResult,
-} from "../services/workspace-service.js";
+import { describe, it, expect, jest, beforeEach, mock } from "bun:test";
 
 // Track workspace count for unique IDs
 let workspaceCounter = 0;
 
 // Mock workspace service
 const mockWorkspaceService = {
-  initialize: vi.fn(),
-  provision: vi.fn(),
-  finalize: vi.fn(),
-  cleanup: vi.fn(),
-  onEvent: vi.fn(),
+  initialize: jest.fn(),
+  provision: jest.fn(),
+  finalize: jest.fn(),
+  cleanup: jest.fn(),
+  onEvent: jest.fn(),
 };
 
 // Mock credential service
 const mockCredentialService = {};
 
-// Mock git-workspace-service
-vi.mock("git-workspace-service", () => ({
+// Mock modules BEFORE importing CodingWorkspaceService
+mock.module("git-workspace-service", () => ({
   WorkspaceService: function() { return mockWorkspaceService; },
   CredentialService: function() { return mockCredentialService; },
   MemoryTokenStore: function() { return {}; },
+  GitHubPatClient: function() { return {}; },
+  OAuthDeviceFlow: function() { return {}; },
 }));
 
-// Mock child_process for git commands
-vi.mock("node:child_process", () => ({
-  execSync: vi.fn((cmd: string) => {
+mock.module("node:child_process", () => ({
+  execSync: jest.fn((cmd: string) => {
     if (cmd.includes("git status --porcelain")) {
       return "";
     }
@@ -49,18 +45,23 @@ vi.mock("node:child_process", () => ({
   }),
 }));
 
+// Dynamic import after mocks are registered
+const { CodingWorkspaceService } = await import("../services/workspace-service.js");
+type CodingWorkspaceConfig = import("../services/workspace-service.js").CodingWorkspaceConfig;
+type WorkspaceResult = import("../services/workspace-service.js").WorkspaceResult;
+
 // Mock runtime
 const createMockRuntime = (settings: Record<string, unknown> = {}) => ({
-  getSetting: vi.fn((key: string) => settings[key]),
-  getService: vi.fn(),
+  getSetting: jest.fn((key: string) => settings[key]),
+  getService: jest.fn(),
 });
 
 describe("CodingWorkspaceService", () => {
-  let service: CodingWorkspaceService;
+  let service: InstanceType<typeof CodingWorkspaceService>;
 
   beforeEach(async () => {
     workspaceCounter = 0;
-    vi.clearAllMocks();
+    jest.clearAllMocks();
 
     // Reset mock implementations
     mockWorkspaceService.initialize.mockResolvedValue(undefined);
@@ -189,15 +190,18 @@ describe("CodingWorkspaceService", () => {
     });
 
     it("should push changes", async () => {
-      await expect(service.push(workspace.id)).resolves.not.toThrow();
+      await service.push(workspace.id);
+      // If it doesn't throw, it succeeded
     });
 
     it("should push with force", async () => {
-      await expect(service.push(workspace.id, { force: true })).resolves.not.toThrow();
+      await service.push(workspace.id, { force: true });
+      // If it doesn't throw, it succeeded
     });
 
     it("should push with upstream", async () => {
-      await expect(service.push(workspace.id, { setUpstream: true })).resolves.not.toThrow();
+      await service.push(workspace.id, { setUpstream: true });
+      // If it doesn't throw, it succeeded
     });
 
     it("should throw for unknown workspace git operations", async () => {

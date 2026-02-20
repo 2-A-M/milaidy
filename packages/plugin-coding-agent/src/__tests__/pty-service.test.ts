@@ -4,52 +4,63 @@
  * Tests PTY session management, event handling, and adapter registration.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { PTYService, type PTYServiceConfig } from "../services/pty-service.js";
+import { describe, it, expect, jest, beforeEach, mock } from "bun:test";
 
 // Track session count for unique IDs
 let sessionCounter = 0;
 
 // Shared mock manager instance
 const mockManager = {
-  spawn: vi.fn(),
-  send: vi.fn(),
-  get: vi.fn(),
-  getSession: vi.fn(),
-  stop: vi.fn(),
-  logs: vi.fn(),
-  list: vi.fn(),
-  registerAdapter: vi.fn(),
-  on: vi.fn(),
-  shutdown: vi.fn(),
+  spawn: jest.fn(),
+  send: jest.fn(),
+  get: jest.fn(),
+  getSession: jest.fn(),
+  stop: jest.fn(),
+  logs: jest.fn(),
+  list: jest.fn(),
+  registerAdapter: jest.fn(),
+  on: jest.fn(),
+  removeListener: jest.fn(),
+  shutdown: jest.fn(),
 };
 
-// Mock pty-manager - must be a class/constructor
-vi.mock("pty-manager", () => ({
+// Mock modules BEFORE importing PTYService (ES imports are hoisted above mock.module calls)
+mock.module("pty-manager", () => ({
   PTYManager: function() { return mockManager; },
   ShellAdapter: function() {},
   BunCompatiblePTYManager: function() { return mockManager; },
   isBun: () => false,
+  extractTaskCompletionTraceRecords: () => [],
+  buildTaskCompletionTimeline: () => ({}),
 }));
 
-// Mock coding-agent-adapters
-vi.mock("coding-agent-adapters", () => ({
+mock.module("coding-agent-adapters", () => ({
   createAllAdapters: () => [],
-  checkAdapters: vi.fn().mockResolvedValue([]),
+  checkAdapters: jest.fn().mockResolvedValue([]),
+  createAdapter: jest.fn(),
+  generateApprovalConfig: jest.fn(),
 }));
+
+mock.module("@elizaos/core", () => ({
+  ModelType: { TEXT_SMALL: "text-small" },
+}));
+
+// Dynamic import after mocks are registered
+const { PTYService } = await import("../services/pty-service.js");
+type PTYServiceConfig = import("../services/pty-service.js").PTYServiceConfig;
 
 // Mock runtime
 const createMockRuntime = (settings: Record<string, unknown> = {}) => ({
-  getSetting: vi.fn((key: string) => settings[key]),
-  getService: vi.fn(),
+  getSetting: jest.fn((key: string) => settings[key]),
+  getService: jest.fn(),
 });
 
 describe("PTYService", () => {
-  let service: PTYService;
+  let service: InstanceType<typeof PTYService>;
 
   beforeEach(async () => {
     sessionCounter = 0;
-    vi.clearAllMocks();
+    jest.clearAllMocks();
 
     // Reset mock implementations
     mockManager.spawn.mockImplementation(() =>
@@ -79,7 +90,7 @@ describe("PTYService", () => {
     });
     mockManager.getSession.mockImplementation((id: string) => {
       if (id.startsWith("session-")) {
-        return { sendKeys: vi.fn() };
+        return { sendKeys: jest.fn() };
       }
       return undefined;
     });
@@ -124,6 +135,18 @@ describe("PTYService", () => {
     });
 
     it("should spawn session with initial task", async () => {
+      // Spawn returns "ready" so the deferred task path fires immediately
+      mockManager.spawn.mockImplementation(() =>
+        Promise.resolve({
+          id: `session-${++sessionCounter}`,
+          name: "test-session",
+          type: "shell",
+          status: "ready",
+          startedAt: new Date(),
+          lastActivityAt: new Date(),
+        })
+      );
+
       const session = await service.spawnSession({
         name: "test-session",
         agentType: "shell",
@@ -132,7 +155,10 @@ describe("PTYService", () => {
       });
 
       expect(session).toBeDefined();
-      expect(session.status).toBe("running");
+      expect(session.status).toBe("ready");
+
+      // The initial task is deferred via setTimeout(300ms) settle delay
+      await new Promise((r) => setTimeout(r, 400));
       expect(mockManager.send).toHaveBeenCalledWith(session.id, "Fix the bug");
     });
 
@@ -144,7 +170,7 @@ describe("PTYService", () => {
         metadata: { userId: "user-123", taskId: "task-456" },
       });
 
-      expect(session.metadata).toEqual({ userId: "user-123", taskId: "task-456" });
+      expect(session.metadata).toEqual({ userId: "user-123", taskId: "task-456", agentType: "shell" });
     });
 
     it("should get session by ID", async () => {
@@ -221,7 +247,7 @@ describe("PTYService", () => {
         workdir: "/test",
       });
 
-      const mockSendKeys = vi.fn();
+      const mockSendKeys = jest.fn();
       mockManager.getSession.mockReturnValueOnce({ sendKeys: mockSendKeys });
 
       await service.sendKeysToSession(session.id, "Enter");
@@ -258,7 +284,7 @@ describe("PTYService", () => {
 
   describe("event handling", () => {
     it("should register event callbacks", async () => {
-      const callback = vi.fn();
+      const callback = jest.fn();
       service.onSessionEvent(callback);
 
       // Callback should be registered (not called yet)

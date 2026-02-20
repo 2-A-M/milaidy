@@ -2,14 +2,14 @@
  * SEND_TO_CODING_AGENT action tests
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, jest, beforeEach } from "bun:test";
 import { sendToAgentAction } from "../actions/send-to-agent.js";
 
 // Mock PTYService
-const mockSendToSession = vi.fn();
-const mockSendKeysToSession = vi.fn();
-const mockGetSession = vi.fn();
-const mockListSessions = vi.fn();
+const mockSendToSession = jest.fn();
+const mockSendKeysToSession = jest.fn();
+const mockGetSession = jest.fn();
+const mockListSessions = jest.fn();
 
 const createMockPTYService = (sessions: any[] = []) => ({
   sendToSession: mockSendToSession,
@@ -19,7 +19,7 @@ const createMockPTYService = (sessions: any[] = []) => ({
 });
 
 const createMockRuntime = (ptyService: any = null) => ({
-  getService: vi.fn((name: string) => {
+  getService: jest.fn((name: string) => {
     if (name === "PTY_SERVICE") return ptyService;
     return null;
   }),
@@ -33,7 +33,7 @@ const createMockMessage = (content: Record<string, unknown> = {}) => ({
 
 describe("sendToAgentAction", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    jest.clearAllMocks();
     mockSendToSession.mockResolvedValue(undefined);
     mockSendKeysToSession.mockResolvedValue(undefined);
     mockGetSession.mockReturnValue({
@@ -102,7 +102,7 @@ describe("sendToAgentAction", () => {
         sessionId: "session-123",
         input: "yes",
       });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await sendToAgentAction.handler(
         runtime as any,
@@ -128,7 +128,7 @@ describe("sendToAgentAction", () => {
         sessionId: "session-123",
         keys: "Enter",
       });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await sendToAgentAction.handler(
         runtime as any,
@@ -147,7 +147,7 @@ describe("sendToAgentAction", () => {
       const runtime = createMockRuntime(ptyService);
       const message = createMockMessage({ input: "test" });
       const state = { codingSession: { id: "session-123" } };
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       await sendToAgentAction.handler(
         runtime as any,
@@ -165,7 +165,7 @@ describe("sendToAgentAction", () => {
       const ptyService = createMockPTYService(sessions);
       const runtime = createMockRuntime(ptyService);
       const message = createMockMessage({ input: "test" });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       await sendToAgentAction.handler(
         runtime as any,
@@ -182,7 +182,7 @@ describe("sendToAgentAction", () => {
       const ptyService = createMockPTYService([]);
       const runtime = createMockRuntime(ptyService);
       const message = createMockMessage({ input: "test" });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await sendToAgentAction.handler(
         runtime as any,
@@ -208,7 +208,7 @@ describe("sendToAgentAction", () => {
         sessionId: "nonexistent",
         input: "test",
       });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await sendToAgentAction.handler(
         runtime as any,
@@ -230,7 +230,7 @@ describe("sendToAgentAction", () => {
       const ptyService = createMockPTYService([{ id: "session-123" }]);
       const runtime = createMockRuntime(ptyService);
       const message = createMockMessage({ sessionId: "session-123" });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await sendToAgentAction.handler(
         runtime as any,
@@ -256,7 +256,7 @@ describe("sendToAgentAction", () => {
         sessionId: "session-123",
         input: "test",
       });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await sendToAgentAction.handler(
         runtime as any,

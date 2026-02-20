@@ -2,15 +2,15 @@
  * FINALIZE_WORKSPACE action tests
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, jest, beforeEach } from "bun:test";
 import { finalizeWorkspaceAction } from "../actions/finalize-workspace.js";
 
-const mockGetWorkspace = vi.fn();
-const mockListWorkspaces = vi.fn();
-const mockGetStatus = vi.fn();
-const mockCommit = vi.fn();
-const mockPush = vi.fn();
-const mockCreatePR = vi.fn();
+const mockGetWorkspace = jest.fn();
+const mockListWorkspaces = jest.fn();
+const mockGetStatus = jest.fn();
+const mockCommit = jest.fn();
+const mockPush = jest.fn();
+const mockCreatePR = jest.fn();
 
 const createMockWorkspaceService = () => ({
   getWorkspace: mockGetWorkspace,
@@ -22,7 +22,7 @@ const createMockWorkspaceService = () => ({
 });
 
 const createMockRuntime = (workspaceService: any = null) => ({
-  getService: vi.fn((name: string) => {
+  getService: jest.fn((name: string) => {
     if (name === "CODING_WORKSPACE_SERVICE") return workspaceService;
     return null;
   }),
@@ -36,7 +36,7 @@ const createMockMessage = (content: Record<string, unknown> = {}) => ({
 
 describe("finalizeWorkspaceAction", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    jest.clearAllMocks();
 
     mockGetWorkspace.mockReturnValue({
       id: "ws-123",
@@ -107,7 +107,7 @@ describe("finalizeWorkspaceAction", () => {
         prTitle: "Add new feature",
         prBody: "This adds the new feature",
       });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await finalizeWorkspaceAction.handler(
         runtime as any,
@@ -147,7 +147,7 @@ describe("finalizeWorkspaceAction", () => {
         id: "ws-from-state",
         branch: "main",
       });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       await finalizeWorkspaceAction.handler(
         runtime as any,
@@ -174,7 +174,7 @@ describe("finalizeWorkspaceAction", () => {
         branch: "main",
       });
       const message = createMockMessage({});
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       await finalizeWorkspaceAction.handler(
         runtime as any,
@@ -194,7 +194,7 @@ describe("finalizeWorkspaceAction", () => {
         workspaceId: "ws-123",
         skipPR: true,
       });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       await finalizeWorkspaceAction.handler(
         runtime as any,
@@ -222,7 +222,7 @@ describe("finalizeWorkspaceAction", () => {
         prTitle: "WIP: New feature",
         draft: true,
       });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       await finalizeWorkspaceAction.handler(
         runtime as any,
@@ -245,7 +245,7 @@ describe("finalizeWorkspaceAction", () => {
         prTitle: "Feature",
         baseBranch: "develop",
       });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       await finalizeWorkspaceAction.handler(
         runtime as any,
@@ -266,7 +266,7 @@ describe("finalizeWorkspaceAction", () => {
       const message = createMockMessage({
         workspaceId: "ws-123",
       });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       await finalizeWorkspaceAction.handler(
         runtime as any,
@@ -294,7 +294,7 @@ describe("finalizeWorkspaceAction", () => {
       const workspaceService = createMockWorkspaceService();
       const runtime = createMockRuntime(workspaceService);
       const message = createMockMessage({ workspaceId: "ws-123" });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await finalizeWorkspaceAction.handler(
         runtime as any,
@@ -319,7 +319,7 @@ describe("finalizeWorkspaceAction", () => {
       const workspaceService = createMockWorkspaceService();
       const runtime = createMockRuntime(workspaceService);
       const message = createMockMessage({});
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await finalizeWorkspaceAction.handler(
         runtime as any,
@@ -344,7 +344,7 @@ describe("finalizeWorkspaceAction", () => {
       const workspaceService = createMockWorkspaceService();
       const runtime = createMockRuntime(workspaceService);
       const message = createMockMessage({ workspaceId: "nonexistent" });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await finalizeWorkspaceAction.handler(
         runtime as any,
@@ -368,7 +368,7 @@ describe("finalizeWorkspaceAction", () => {
       const workspaceService = createMockWorkspaceService();
       const runtime = createMockRuntime(workspaceService);
       const message = createMockMessage({ workspaceId: "ws-123" });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await finalizeWorkspaceAction.handler(
         runtime as any,
@@ -392,7 +392,7 @@ describe("finalizeWorkspaceAction", () => {
       const workspaceService = createMockWorkspaceService();
       const runtime = createMockRuntime(workspaceService);
       const message = createMockMessage({ workspaceId: "ws-123" });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await finalizeWorkspaceAction.handler(
         runtime as any,
@@ -416,7 +416,7 @@ describe("finalizeWorkspaceAction", () => {
       const workspaceService = createMockWorkspaceService();
       const runtime = createMockRuntime(workspaceService);
       const message = createMockMessage({ workspaceId: "ws-123" });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await finalizeWorkspaceAction.handler(
         runtime as any,

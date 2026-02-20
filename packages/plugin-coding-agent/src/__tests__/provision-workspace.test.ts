@@ -2,12 +2,12 @@
  * PROVISION_WORKSPACE action tests
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, jest, beforeEach } from "bun:test";
 import { provisionWorkspaceAction } from "../actions/provision-workspace.js";
 
-const mockProvisionWorkspace = vi.fn();
-const mockGetWorkspace = vi.fn();
-const mockListWorkspaces = vi.fn();
+const mockProvisionWorkspace = jest.fn();
+const mockGetWorkspace = jest.fn();
+const mockListWorkspaces = jest.fn();
 
 const createMockWorkspaceService = () => ({
   provisionWorkspace: mockProvisionWorkspace,
@@ -16,7 +16,7 @@ const createMockWorkspaceService = () => ({
 });
 
 const createMockRuntime = (workspaceService: any = null) => ({
-  getService: vi.fn((name: string) => {
+  getService: jest.fn((name: string) => {
     if (name === "CODING_WORKSPACE_SERVICE") return workspaceService;
     return null;
   }),
@@ -30,7 +30,7 @@ const createMockMessage = (content: Record<string, unknown> = {}) => ({
 
 describe("provisionWorkspaceAction", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    jest.clearAllMocks();
     mockProvisionWorkspace.mockResolvedValue({
       id: "ws-123",
       path: "/tmp/workspaces/ws-123",
@@ -90,7 +90,7 @@ describe("provisionWorkspaceAction", () => {
         repo: "https://github.com/user/repo.git",
         baseBranch: "develop",
       });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await provisionWorkspaceAction.handler(
         runtime as any,
@@ -134,7 +134,7 @@ describe("provisionWorkspaceAction", () => {
         parentWorkspaceId: "parent-ws",
         branch: "feature/test",
       });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await provisionWorkspaceAction.handler(
         runtime as any,
@@ -172,7 +172,7 @@ describe("provisionWorkspaceAction", () => {
         branch: "feature/from-state",
       });
       const state = { codingWorkspace: { id: "state-ws" } };
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       await provisionWorkspaceAction.handler(
         runtime as any,
@@ -196,7 +196,7 @@ describe("provisionWorkspaceAction", () => {
         repo: "https://github.com/user/repo.git",
       });
       const state: any = {};
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       await provisionWorkspaceAction.handler(
         runtime as any,
@@ -215,7 +215,7 @@ describe("provisionWorkspaceAction", () => {
       const workspaceService = createMockWorkspaceService();
       const runtime = createMockRuntime(workspaceService);
       const message = createMockMessage({});
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await provisionWorkspaceAction.handler(
         runtime as any,
@@ -241,7 +241,7 @@ describe("provisionWorkspaceAction", () => {
         useWorktree: true,
         // no parentWorkspaceId or state
       });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await provisionWorkspaceAction.handler(
         runtime as any,
@@ -269,7 +269,7 @@ describe("provisionWorkspaceAction", () => {
       const message = createMockMessage({
         repo: "https://github.com/user/nonexistent.git",
       });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       const result = await provisionWorkspaceAction.handler(
         runtime as any,
@@ -293,7 +293,7 @@ describe("provisionWorkspaceAction", () => {
       const message = createMockMessage({
         repo: "https://github.com/user/repo.git",
       });
-      const callback = vi.fn();
+      const callback = jest.fn();
 
       await provisionWorkspaceAction.handler(
         runtime as any,
