@@ -380,12 +380,15 @@ export async function launchTUI(
               : "unknown";
 
             if (ctxEnabled) {
-              const lm = controller.getLargeModel();
+              const lm = controller?.getLargeModel();
+              const cloudModel = lm
+                ? `${lm.provider}/${lm.id} (via pi-ai)`
+                : "unknown (controller unavailable)";
               tui.addToChatContainer(
                 new Text(
                   [
                     "Knowledge Enrichment: ON",
-                    `  Cloud model: ${lm.provider}/${lm.id} (via pi-ai)`,
+                    `  Cloud model: ${cloudModel}`,
                     `  Embedding model: ${embModel}`,
                     `  Docs path: ${cfg.knowledge?.docsPath ?? "./docs"}`,
                   ].join("\n"),

@@ -164,6 +164,13 @@ export type SkillsConfig = {
   entries?: Record<string, SkillConfig>;
 };
 
+export type KnowledgeConfig = {
+  /** Enable contextual knowledge enrichment for document ingestion. */
+  contextualEnrichment?: boolean;
+  /** Docs directory path used for enrichment context. */
+  docsPath?: string;
+};
+
 // --- Models types (merged from types.models.ts) ---
 
 export type ModelApi =
@@ -455,6 +462,15 @@ export type PluginInstallRecord = {
   installedAt?: string;
 };
 
+export type RegistryEndpoint = {
+  /** Human-friendly label shown in UI. */
+  label: string;
+  /** Endpoint URL returning registry JSON payload. */
+  url: string;
+  /** Whether this endpoint is enabled for fetch/merge. */
+  enabled?: boolean;
+};
+
 export type PluginsConfig = {
   /** Enable or disable plugin loading. */
   enabled?: boolean;
@@ -466,6 +482,8 @@ export type PluginsConfig = {
   slots?: PluginSlotsConfig;
   entries?: Record<string, PluginEntryConfig>;
   installs?: Record<string, PluginInstallRecord>;
+  /** Additional plugin registry endpoints. */
+  registryEndpoints?: RegistryEndpoint[];
 };
 
 // --- Cloud types (ElizaCloud integration) ---
@@ -664,6 +682,7 @@ export type MiladyConfig = {
       avatar?: string;
     };
   };
+  knowledge?: KnowledgeConfig;
   skills?: SkillsConfig;
   plugins?: PluginsConfig;
   models?: ModelsConfig;
