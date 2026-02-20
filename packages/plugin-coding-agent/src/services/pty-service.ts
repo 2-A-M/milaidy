@@ -357,12 +357,26 @@ export class PTYService {
       }
     }
 
+    // Map model preferences to adapter-specific env vars
+    const modelPrefs = options.metadata?.modelPrefs as { powerful?: string; fast?: string } | undefined;
+    let modelEnv: Record<string, string> | undefined;
+    if (modelPrefs?.powerful) {
+      const envKeyMap: Record<string, string> = {
+        claude: "ANTHROPIC_MODEL",
+        gemini: "GEMINI_MODEL",
+        codex: "OPENAI_MODEL",
+        aider: "AIDER_MODEL",
+      };
+      const key = envKeyMap[options.agentType];
+      if (key) modelEnv = { [key]: modelPrefs.powerful };
+    }
+
     const spawnConfig: SpawnConfig & { id: string } = {
       id: sessionId,
       name: options.name,
       type: options.agentType,
       workdir,
-      env: options.env,
+      env: { ...options.env, ...modelEnv },
       adapterConfig: {
         ...(options.credentials as Record<string, unknown> | undefined),
         ...(options.customCredentials ? { custom: options.customCredentials } : {}),

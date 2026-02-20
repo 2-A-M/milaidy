@@ -553,7 +553,7 @@ export function findOwnPackageRoot(startDir: string): string {
         >;
         const pkgName =
           typeof pkg.name === "string" ? pkg.name.toLowerCase() : "";
-        if (pkgName === "milady") return dir;
+        if (pkgName === "milady" || pkgName === "milaidy") return dir;
       } catch {
         /* keep searching */
       }
@@ -6259,6 +6259,7 @@ async function handleRequest(
         "vision",
         "browser",
         "computeruse",
+        "coding-agent",
       ]);
       if (CAPABILITY_FEATURE_IDS.has(pluginId)) {
         if (!state.config.features) {

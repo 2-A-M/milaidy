@@ -190,16 +190,36 @@ export async function handleCodingAgentRoutes(
         githubToken: ctx.runtime.getSetting("GITHUB_TOKEN") as string | undefined,
       };
 
+      // Read model preferences from runtime settings
+      const agentStr = ((agentType as string) || "claude").toLowerCase();
+      const prefixMap: Record<string, string> = {
+        claude: "PARALLAX_CLAUDE",
+        gemini: "PARALLAX_GEMINI",
+        codex: "PARALLAX_CODEX",
+        aider: "PARALLAX_AIDER",
+      };
+      const prefix = prefixMap[agentStr];
+      const modelPowerful = prefix ? (ctx.runtime.getSetting(`${prefix}_MODEL_POWERFUL`) as string | null) : null;
+      const modelFast = prefix ? (ctx.runtime.getSetting(`${prefix}_MODEL_FAST`) as string | null) : null;
+      const aiderProvider = agentStr === "aider" ? (ctx.runtime.getSetting("PARALLAX_AIDER_PROVIDER") as string | null) : null;
+
       const session = await ctx.ptyService.spawnSession({
         name: `agent-${Date.now()}`,
-        agentType: ((agentType as string) || "claude") as import("../services/pty-service.js").CodingAgentType,
+        agentType: agentStr as import("../services/pty-service.js").CodingAgentType,
         workdir: workdir as string,
         initialTask: task as string,
         memoryContent: memoryContent as string | undefined,
         credentials,
         approvalPreset: approvalPreset as import("coding-agent-adapters").ApprovalPreset | undefined,
         customCredentials: customCredentials as Record<string, string> | undefined,
-        metadata: metadata as Record<string, unknown>,
+        metadata: {
+          ...(metadata as Record<string, unknown>),
+          ...(aiderProvider ? { provider: aiderProvider } : {}),
+          modelPrefs: {
+            ...(modelPowerful ? { powerful: modelPowerful } : {}),
+            ...(modelFast ? { fast: modelFast } : {}),
+          },
+        },
       });
 
       sendJson(res, {

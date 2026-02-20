@@ -440,6 +440,7 @@ const OPTIONAL_PLUGIN_MAP: Readonly<Record<string, string>> = {
   cron: "@elizaos/plugin-cron",
   computeruse: "@elizaos/plugin-computeruse",
   x402: "@elizaos/plugin-x402",
+  "coding-agent": "@milaidy/plugin-coding-agent",
 };
 
 function looksLikePlugin(value: unknown): value is Plugin {
@@ -676,9 +677,12 @@ export function collectPluginNames(config: MiladyConfig): Set<string> {
     }
   }
 
-  // Enforce shell feature gating last so allow-list entries cannot bypass it.
+  // Enforce feature gating last so allow-list entries cannot bypass it.
   if (shellPluginDisabled) {
     pluginsToLoad.delete("@elizaos/plugin-shell");
+  }
+  if (isPluginExplicitlyDisabled("@milaidy/plugin-coding-agent")) {
+    pluginsToLoad.delete("@milaidy/plugin-coding-agent");
   }
 
   return pluginsToLoad;
