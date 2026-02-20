@@ -1,0 +1,201 @@
+import { type IAgentRuntime, type JsonValue, ModelType } from "@elizaos/core";
+import {
+  type Api,
+  getProviders,
+  type Model,
+  stream,
+} from "@mariozechner/pi-ai";
+import { createPiAiHandler } from "./model-handler-stream.js";
+import type {
+  PiAiConfig,
+  PiAiHandlerConfig,
+  PiAiModelHandlerController,
+} from "./model-handler-types.js";
+
+export type {
+  PiAiConfig,
+  PiAiModelHandlerController,
+  StreamEvent,
+  StreamEventCallback,
+} from "./model-handler-types.js";
+
+/**
+ * Register pi-ai as the model provider for an ElizaOS runtime.
+ */
+export function registerPiAiModelHandler(
+  runtime: IAgentRuntime,
+  config: PiAiConfig,
+): PiAiModelHandlerController {
+  let largeModel = config.largeModel;
+  let smallModel = config.smallModel;
+
+  const providerName = config.providerName ?? "pi-ai";
+  const priority = config.priority ?? 1000;
+
+  const handlerConfig = {
+    onStreamEvent: config.onStreamEvent,
+    getAbortSignal: config.getAbortSignal,
+    getApiKey: config.getApiKey,
+    returnTextStreamResult: config.returnTextStreamResult,
+    forceStreaming: config.forceStreaming,
+  };
+
+  const largeHandler = createPiAiHandler(() => largeModel, handlerConfig);
+  const smallHandler = createPiAiHandler(() => smallModel, handlerConfig);
+
+  const aliases = new Set<string>([
+    providerName,
+    ...(config.providerAliases ?? []),
+    ...getProviders(),
+  ]);
+
+  for (const alias of aliases) {
+    runtime.registerModel(ModelType.TEXT_LARGE, largeHandler, alias, priority);
+    runtime.registerModel(ModelType.TEXT_SMALL, smallHandler, alias, priority);
+    runtime.registerModel(
+      ModelType.TEXT_REASONING_LARGE,
+      largeHandler,
+      alias,
+      priority,
+    );
+    runtime.registerModel(
+      ModelType.TEXT_REASONING_SMALL,
+      smallHandler,
+      alias,
+      priority,
+    );
+  }
+
+  const imageDescriptionHandler = createPiAiImageDescriptionHandler(
+    () => largeModel,
+    handlerConfig,
+  );
+
+  for (const alias of aliases) {
+    runtime.registerModel(
+      ModelType.IMAGE_DESCRIPTION,
+      imageDescriptionHandler,
+      alias,
+      priority,
+    );
+  }
+
+  return {
+    getLargeModel: () => largeModel,
+    setLargeModel: (model) => {
+      largeModel = model;
+    },
+    getSmallModel: () => smallModel,
+    setSmallModel: (model) => {
+      smallModel = model;
+    },
+  };
+}
+
+function parseImageUrl(imageUrl: string): {
+  data: string;
+  mimeType: string;
+} {
+  if (imageUrl.startsWith("data:")) {
+    const match = imageUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (match) {
+      return { mimeType: match[1], data: match[2] };
+    }
+  }
+  return { data: imageUrl, mimeType: "image/png" };
+}
+
+function createPiAiImageDescriptionHandler(
+  getModel: () => Model<Api>,
+  config: PiAiHandlerConfig,
+): (
+  runtime: IAgentRuntime,
+  params: Record<string, JsonValue | object>,
+) => Promise<JsonValue | object> {
+  return async (
+    _runtime: IAgentRuntime,
+    params: Record<string, JsonValue | object>,
+  ): Promise<JsonValue | object> => {
+    const model = getModel();
+
+    let imageUrl: string;
+    let prompt: string;
+
+    if (typeof params === "string") {
+      imageUrl = params;
+      prompt = "Analyze this image and describe what you see.";
+    } else {
+      const p = params as Record<string, unknown>;
+      imageUrl = (p.imageUrl ?? p.image_url ?? "") as string;
+      prompt = (p.prompt ??
+        "Analyze this image and describe what you see.") as string;
+    }
+
+    if (!imageUrl) {
+      throw new Error("IMAGE_DESCRIPTION requires an imageUrl");
+    }
+
+    let imgData: { data: string; mimeType: string };
+
+    if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+      const resp = await fetch(imageUrl);
+      if (!resp.ok) throw new Error(`Failed to fetch image: ${resp.status}`);
+      const buf = Buffer.from(await resp.arrayBuffer());
+      const ct = resp.headers.get("content-type") ?? "image/png";
+      imgData = { data: buf.toString("base64"), mimeType: ct };
+    } else {
+      imgData = parseImageUrl(imageUrl);
+    }
+
+    const context = {
+      systemPrompt: "",
+      messages: [
+        {
+          role: "user" as const,
+          content: [
+            { type: "text" as const, text: prompt },
+            {
+              type: "image" as const,
+              data: imgData.data,
+              mimeType: imgData.mimeType,
+            },
+          ],
+          timestamp: Date.now(),
+        },
+      ],
+    };
+
+    const apiKey = await config.getApiKey?.(model.provider);
+
+    let fullText = "";
+    try {
+      for await (const event of stream(model, context, {
+        maxTokens: 4096,
+        ...(apiKey ? { apiKey } : {}),
+      })) {
+        switch (event.type) {
+          case "text_delta":
+            fullText += event.delta;
+            break;
+          case "error":
+            if (event.reason !== "aborted") {
+              throw new Error(
+                event.error.errorMessage ?? "Vision model stream error",
+              );
+            }
+            break;
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `pi-ai IMAGE_DESCRIPTION failed (provider=${model.provider}, model=${model.id}): ${msg}`,
+      );
+    }
+
+    return {
+      title: "Image Analysis",
+      description: fullText,
+    };
+  };
+}

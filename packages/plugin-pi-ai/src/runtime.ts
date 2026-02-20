@@ -4,8 +4,8 @@ import {
   DEFAULT_PI_MODEL_SPEC,
   getPiModel,
   parseModelSpec,
-} from "../utils/pi-ai.js";
-import { registerPiAiModelHandler } from "./pi-ai-model-handler.js";
+} from "./model-utils.js";
+import { registerPiAiModelHandler } from "./model-handler.js";
 import { createPiCredentialProvider } from "./pi-credentials.js";
 
 export function isPiAiEnabledFromEnv(
@@ -18,27 +18,23 @@ export function isPiAiEnabledFromEnv(
 }
 
 export type RegisterPiAiRuntimeOptions = {
-  /**
-   * Legacy override: pi-ai model spec, format: provider/modelId
-   * (e.g. anthropic/claude-sonnet-4-20250514).
-   *
-   * When provided, this is used for both TEXT_SMALL and TEXT_LARGE unless
-   * smallModelSpec/largeModelSpec are also provided.
-   */
+  /** Legacy override: provider/modelId for both TEXT_SMALL and TEXT_LARGE. */
   modelSpec?: string;
-  /** Optional: model spec to use for TEXT_SMALL. */
+  /** Optional model spec to use for TEXT_SMALL. */
   smallModelSpec?: string;
-  /** Optional: model spec to use for TEXT_LARGE. */
+  /** Optional model spec to use for TEXT_LARGE. */
   largeModelSpec?: string;
-  /** Register handler priority (higher wins over plugin providers). Default: 10000. */
+  /** Optional handler registration priority. */
   priority?: number;
+  /** Optional override for pi credentials/settings directory. */
+  agentDir?: string;
 };
 
 export async function registerPiAiRuntime(
   runtime: IAgentRuntime,
   opts: RegisterPiAiRuntimeOptions = {},
 ): Promise<{ modelSpec: string; provider: string; id: string }> {
-  const piCreds = await createPiCredentialProvider();
+  const piCreds = await createPiCredentialProvider(opts.agentDir);
 
   const toValidModelSpec = (spec?: string): string | undefined => {
     if (!spec) return undefined;
@@ -54,11 +50,6 @@ export async function registerPiAiRuntime(
     toValidModelSpec(await piCreds.getDefaultModelSpec()) ??
     DEFAULT_PI_MODEL_SPEC;
 
-  // When a model spec is provided (e.g. from Milaidy's primary model config),
-  // verify that pi-ai has credentials for the provider before using it.
-  // If credentials are missing (or the value is not provider/model), fall back
-  // to the pi settings default so the user's pi OAuth/API-key based providers
-  // are used instead.
   const validatedModelSpec = (() => {
     const candidate = toValidModelSpec(opts.modelSpec);
     if (!candidate) return undefined;
@@ -84,17 +75,11 @@ export async function registerPiAiRuntime(
     largeModel,
     smallModel,
     providerName: "pi-ai",
-    // Also register under full model specs so callers that treat MODEL_PROVIDER
-    // as a modelSpec (provider/model) still route here.
     providerAliases: aliases,
     priority: opts.priority ?? 10000,
-    getApiKey: (p) => piCreds.getApiKey(p),
-    // The UI/API-server path typically does not request streaming, but we still
-    // want to use the streaming API internally for parity with the TUI and
-    // to avoid provider-specific non-streaming edge cases.
+    getApiKey: (provider) => piCreds.getApiKey(provider),
     forceStreaming: true,
   });
 
-  // Return the selected large model as the primary reference.
   return { modelSpec: largeSpec, provider: largeProvider, id: largeId };
 }

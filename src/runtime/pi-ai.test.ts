@@ -119,6 +119,58 @@ describe("pi-ai runtime registration", () => {
     }
   });
 
+  it("ignores invalid modelSpec values and falls back to defaults", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "milaidy-pi-ai-"));
+
+    await fs.writeFile(
+      path.join(tmp, "auth.json"),
+      JSON.stringify(
+        {
+          anthropic: { type: "api_key", key: "sk-ant-test-key" },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    await fs.writeFile(
+      path.join(tmp, "settings.json"),
+      JSON.stringify(
+        {
+          defaultProvider: "anthropic",
+          defaultModel: "claude-sonnet-4-20250514",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const saved = process.env.PI_CODING_AGENT_DIR;
+    process.env.PI_CODING_AGENT_DIR = tmp;
+
+    try {
+      const registerModel = vi.fn();
+      const runtime = {
+        registerModel,
+      } as unknown as IAgentRuntime;
+
+      const reg = await registerPiAiRuntime(runtime, {
+        modelSpec: "not-a-model-spec",
+      });
+
+      expect(reg.modelSpec).toBe("anthropic/claude-sonnet-4-20250514");
+      expect(reg.provider).toBe("anthropic");
+    } finally {
+      if (saved === undefined) {
+        delete process.env.PI_CODING_AGENT_DIR;
+      } else {
+        process.env.PI_CODING_AGENT_DIR = saved;
+      }
+    }
+  });
+
   it("uses modelSpec when provider has valid credentials", async () => {
     const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "milaidy-pi-ai-"));
 

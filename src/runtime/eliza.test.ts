@@ -71,6 +71,7 @@ describe("collectPluginNames", () => {
     "OLLAMA_BASE_URL",
     "ELIZAOS_CLOUD_API_KEY",
     "ELIZAOS_CLOUD_ENABLED",
+    "MILAIDY_USE_PI_AI",
     "OBSIDIAN_VAULT_PATH",
     "OBSIDAN_VAULT_PATH",
   ];
@@ -168,6 +169,44 @@ describe("collectPluginNames", () => {
     expect(names.has("@elizaos/plugin-openai")).toBe(true);
     expect(names.has("@elizaos/plugin-vercel-ai-gateway")).toBe(true);
     expect(names.has("@elizaos/plugin-groq")).toBe(false);
+  });
+
+  it("adds pi-ai provider plugin when MILAIDY_USE_PI_AI is enabled", () => {
+    process.env.MILAIDY_USE_PI_AI = "1";
+    const names = collectPluginNames({} as MiladyConfig);
+
+    expect(names.has("@elizaos/plugin-pi-ai")).toBe(true);
+    // pi-ai mode should suppress direct provider plugins.
+    expect(names.has("@elizaos/plugin-anthropic")).toBe(false);
+    expect(names.has("@elizaos/plugin-openai")).toBe(false);
+    expect(names.has("@elizaos/plugin-elizacloud")).toBe(false);
+  });
+
+  it("cloud mode takes precedence over pi-ai mode", () => {
+    process.env.MILAIDY_USE_PI_AI = "1";
+    const config = {
+      cloud: { enabled: true },
+    } as unknown as MiladyConfig;
+    const names = collectPluginNames(config);
+
+    expect(names.has("@elizaos/plugin-elizacloud")).toBe(true);
+    expect(names.has("@elizaos/plugin-pi-ai")).toBe(false);
+  });
+
+  it("pi-ai mode overrides explicit direct-provider entries", () => {
+    process.env.MILAIDY_USE_PI_AI = "1";
+    const config = {
+      plugins: {
+        entries: {
+          openai: { enabled: true },
+        },
+      },
+    } as unknown as MiladyConfig;
+
+    const names = collectPluginNames(config);
+
+    expect(names.has("@elizaos/plugin-pi-ai")).toBe(true);
+    expect(names.has("@elizaos/plugin-openai")).toBe(false);
   });
 
   it("does not auto-enable a provider from env when explicitly disabled in plugins.entries", () => {

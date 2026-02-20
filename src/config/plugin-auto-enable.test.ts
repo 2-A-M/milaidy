@@ -236,6 +236,16 @@ describe("applyPluginAutoEnable — env vars", () => {
     expect(changes.some((c) => c.includes("REPOPROMPT_CLI_PATH"))).toBe(true);
   });
 
+  it("enables pi-ai plugin when MILAIDY_USE_PI_AI is set", () => {
+    const params = makeParams({
+      env: { MILAIDY_USE_PI_AI: "1" },
+    });
+    const { config, changes } = applyPluginAutoEnable(params);
+
+    expect(config.plugins?.allow).toContain("pi-ai");
+    expect(changes.some((c) => c.includes("MILAIDY_USE_PI_AI"))).toBe(true);
+  });
+
   it("skips env var with empty string value", () => {
     const params = makeParams({ env: { OPENAI_API_KEY: "" } });
     const { changes } = applyPluginAutoEnable(params);
@@ -502,6 +512,12 @@ describe("AUTH_PROVIDER_PLUGINS", () => {
     );
     expect(AUTH_PROVIDER_PLUGINS.OBSIDAN_VAULT_PATH).toBe(
       "@elizaos/plugin-obsidian",
+    );
+  });
+
+  it("maps MILAIDY_USE_PI_AI to pi-ai plugin", () => {
+    expect(AUTH_PROVIDER_PLUGINS.MILAIDY_USE_PI_AI).toBe(
+      "@elizaos/plugin-pi-ai",
     );
   });
 });

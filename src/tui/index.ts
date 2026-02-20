@@ -193,6 +193,9 @@ export async function launchTUI(
           onStreamEvent: (event) => bridge.onStreamEvent(event),
           getAbortSignal: () => bridge.getAbortSignal(),
         }),
+    // Keep TUI model switching authoritative even when the runtime also loaded
+    // the pi-ai provider plugin.
+    priority: 20000,
     getApiKey: (p) => piCreds.getApiKey(p),
   });
 

@@ -408,6 +408,8 @@ export interface OnboardingData {
   // Local-specific
   provider?: string;
   providerApiKey?: string;
+  /** Optional primary model override (provider/model), used by pi-ai mode. */
+  primaryModel?: string;
   openrouterModel?: string;
   subscriptionProvider?: string;
   // Messaging channel setup
