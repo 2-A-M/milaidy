@@ -68,7 +68,9 @@ export function CodingAgentSettingsSection() {
   const [prefs, setPrefs] = useState<Record<string, string>>({});
 
   // Dynamic model lists keyed by provider ID (e.g. "anthropic" → ModelOption[])
-  const [providerModels, setProviderModels] = useState<Record<string, ModelOption[]>>({});
+  const [providerModels, setProviderModels] = useState<
+    Record<string, ModelOption[]>
+  >({});
 
   useEffect(() => {
     void (async () => {
@@ -87,10 +89,13 @@ export function CodingAgentSettingsSection() {
         const loaded: Record<string, string> = {};
         for (const agent of ["CLAUDE", "GEMINI", "CODEX", "AIDER"] as const) {
           const p = `PARALLAX_${agent}`;
-          if (env[`${p}_MODEL_POWERFUL`]) loaded[`${p}_MODEL_POWERFUL`] = env[`${p}_MODEL_POWERFUL`];
-          if (env[`${p}_MODEL_FAST`]) loaded[`${p}_MODEL_FAST`] = env[`${p}_MODEL_FAST`];
+          if (env[`${p}_MODEL_POWERFUL`])
+            loaded[`${p}_MODEL_POWERFUL`] = env[`${p}_MODEL_POWERFUL`];
+          if (env[`${p}_MODEL_FAST`])
+            loaded[`${p}_MODEL_FAST`] = env[`${p}_MODEL_FAST`];
         }
-        if (env.PARALLAX_AIDER_PROVIDER) loaded.PARALLAX_AIDER_PROVIDER = env.PARALLAX_AIDER_PROVIDER;
+        if (env.PARALLAX_AIDER_PROVIDER)
+          loaded.PARALLAX_AIDER_PROVIDER = env.PARALLAX_AIDER_PROVIDER;
         setPrefs(loaded);
 
         // Process fetched models — filter to "chat" category only
@@ -100,8 +105,18 @@ export function CodingAgentSettingsSection() {
           ["google-genai", googleRes],
           ["openai", openaiRes],
         ] as const) {
-          if (res?.models && Array.isArray(res.models) && res.models.length > 0) {
-            const chatModels = (res.models as Array<{ id: string; name: string; category: string }>)
+          if (
+            res?.models &&
+            Array.isArray(res.models) &&
+            res.models.length > 0
+          ) {
+            const chatModels = (
+              res.models as Array<{
+                id: string;
+                name: string;
+                category: string;
+              }>
+            )
               .filter((m) => m.category === "chat")
               .map((m) => ({ value: m.id, label: m.name || m.id }));
             if (chatModels.length > 0) {
@@ -161,7 +176,8 @@ export function CodingAgentSettingsSection() {
   }
 
   const prefix = ENV_PREFIX[activeTab];
-  const aiderProvider = (prefs.PARALLAX_AIDER_PROVIDER || "anthropic") as AiderProvider;
+  const aiderProvider = (prefs.PARALLAX_AIDER_PROVIDER ||
+    "anthropic") as AiderProvider;
   const providerId = getProviderId(activeTab, aiderProvider);
   const modelOptions = getModelOptions(providerId);
   const powerfulValue = prefs[`${prefix}_MODEL_POWERFUL`] ?? "";
@@ -214,7 +230,9 @@ export function CodingAgentSettingsSection() {
           <select
             className="px-2.5 py-1.5 border border-[var(--border)] bg-[var(--card)] text-xs focus:border-[var(--accent)] focus:outline-none"
             value={powerfulValue}
-            onChange={(e) => setPref(`${prefix}_MODEL_POWERFUL`, e.target.value)}
+            onChange={(e) =>
+              setPref(`${prefix}_MODEL_POWERFUL`, e.target.value)
+            }
           >
             <option value="">Default</option>
             {modelOptions.map((opt) => (

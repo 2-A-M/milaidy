@@ -14,9 +14,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { THEMES, useApp } from "../AppContext";
 import { client } from "../api-client";
+import { CodingAgentSettingsSection } from "./CodingAgentSettingsSection";
 import { ConfigPageView } from "./ConfigPageView";
 import { ConfigRenderer, defaultRegistry } from "./config-renderer";
-import { CodingAgentSettingsSection } from "./CodingAgentSettingsSection";
 import { GitHubSettingsSection } from "./GitHubSettingsSection";
 import { MediaSettingsSection } from "./MediaSettingsSection";
 import { PermissionsSection } from "./PermissionsSection";
