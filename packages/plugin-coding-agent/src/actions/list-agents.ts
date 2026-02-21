@@ -16,7 +16,8 @@ import type {
   Memory,
   State,
 } from "@elizaos/core";
-import type { PTYService, SessionInfo } from "../services/pty-service.js";
+import type { PTYService } from "../services/pty-service.js";
+import type { SessionInfo } from "../services/pty-types.js";
 
 export const listAgentsAction: Action = {
   name: "LIST_CODING_AGENTS",

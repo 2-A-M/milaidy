@@ -19,12 +19,12 @@ import type {
   State,
 } from "@elizaos/core";
 import type { AgentCredentials, ApprovalPreset } from "coding-agent-adapters";
+import type { PTYService } from "../services/pty-service.js";
 import {
   type CodingAgentType,
   normalizeAgentType,
-  type PTYService,
   type SessionInfo,
-} from "../services/pty-service.js";
+} from "../services/pty-types.js";
 import type { CodingWorkspaceService } from "../services/workspace-service.js";
 
 export const spawnAgentAction: Action = {

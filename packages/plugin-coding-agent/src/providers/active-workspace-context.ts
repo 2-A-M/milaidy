@@ -10,7 +10,8 @@
  */
 
 import type { IAgentRuntime, Memory, Provider, State } from "@elizaos/core";
-import type { PTYService, SessionInfo } from "../services/pty-service.js";
+import type { PTYService } from "../services/pty-service.js";
+import type { SessionInfo } from "../services/pty-types.js";
 import type {
   CodingWorkspaceService,
   WorkspaceResult,
