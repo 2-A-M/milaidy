@@ -4082,7 +4082,7 @@ function applyCors(
     );
     res.setHeader(
       "Access-Control-Allow-Headers",
-      "Content-Type, Authorization, X-Milady-Token, X-Api-Key, X-Milady-Export-Token, X-Milady-Client-Id",
+      "Content-Type, Authorization, X-Milady-Token, X-Api-Key, X-Milady-Export-Token, X-Milady-Client-Id, X-Milady-Terminal-Token",
     );
   }
 
@@ -4385,6 +4385,62 @@ export function resolveWalletExportRejection(
 
   if (!tokenMatches(expected, provided)) {
     return { status: 401, reason: "Invalid export token." };
+  }
+
+  return null;
+}
+
+interface TerminalRunRequestBody {
+  terminalToken?: string;
+}
+
+export interface TerminalRunRejection {
+  status: 401 | 403;
+  reason: string;
+}
+
+export function resolveTerminalRunRejection(
+  req: http.IncomingMessage,
+  body: TerminalRunRequestBody,
+): TerminalRunRejection | null {
+  const expected = process.env.MILADY_TERMINAL_RUN_TOKEN?.trim();
+  const apiTokenEnabled = Boolean(process.env.MILADY_API_TOKEN?.trim());
+
+  // Compatibility mode: local loopback sessions without API token keep
+  // existing behavior unless an explicit terminal token is configured.
+  if (!expected && !apiTokenEnabled) {
+    return null;
+  }
+
+  if (!expected) {
+    return {
+      status: 403,
+      reason:
+        "Terminal run is disabled for token-authenticated API sessions. Set MILADY_TERMINAL_RUN_TOKEN to enable command execution.",
+    };
+  }
+
+  const headerToken =
+    typeof req.headers["x-milady-terminal-token"] === "string"
+      ? req.headers["x-milady-terminal-token"].trim()
+      : "";
+  const bodyToken =
+    typeof body.terminalToken === "string" ? body.terminalToken.trim() : "";
+  const provided = headerToken || bodyToken;
+
+  if (!provided) {
+    return {
+      status: 401,
+      reason:
+        "Missing terminal token. Provide X-Milady-Terminal-Token header or terminalToken in request body.",
+    };
+  }
+
+  if (!tokenMatches(expected, provided)) {
+    return {
+      status: 401,
+      reason: "Invalid terminal token.",
+    };
   }
 
   return null;
@@ -11633,11 +11689,19 @@ async function handleRequest(
       return;
     }
 
-    const body = await readJsonBody<{ command?: string; clientId?: unknown }>(
-      req,
-      res,
-    );
+    const body = await readJsonBody<{
+      command?: string;
+      clientId?: unknown;
+      terminalToken?: string;
+    }>(req, res);
     if (!body) return;
+
+    const terminalRejection = resolveTerminalRunRejection(req, body);
+    if (terminalRejection) {
+      error(res, terminalRejection.reason, terminalRejection.status);
+      return;
+    }
+
     const command = typeof body.command === "string" ? body.command.trim() : "";
     if (!command) {
       error(res, "Missing or empty command");
