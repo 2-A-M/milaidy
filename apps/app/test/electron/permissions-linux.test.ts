@@ -2,7 +2,15 @@
  * Unit tests for Linux permission detection
  * (apps/app/electron/src/native/permissions-linux.ts)
  */
-import { type Mock, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type Mock,
+  vi,
+} from "vitest";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -11,7 +19,9 @@ import { type Mock, afterEach, beforeEach, describe, expect, it, vi } from "vite
 vi.mock("node:child_process", async () => {
   const { promisify } = await import("node:util");
   const execFn = vi.fn();
-  (execFn as any)[promisify.custom!] = (...args: any[]) =>
+  // biome-ignore lint/suspicious/noExplicitAny: test mock requires dynamic property assignment
+  // biome-ignore lint/style/noNonNullAssertion: promisify.custom is always defined in Node
+  (execFn as any)[promisify.custom!] = (...args: unknown[]) =>
     new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
       const cb = (err: Error | null, stdout = "", stderr = "") => {
         if (err) {
@@ -84,7 +94,7 @@ function mockExecSequence(
   }>,
 ) {
   execMock.mockImplementation(
-    (cmd: string, opts: unknown, cb?: Function) => {
+    (cmd: string, opts: unknown, cb?: (...args: unknown[]) => void) => {
       const callback = typeof opts === "function" ? opts : cb;
       for (const { pattern, result } of entries) {
         const matches =
@@ -418,7 +428,7 @@ describe("openPrivacySettings", () => {
     setEnv("XDG_CURRENT_DESKTOP", "sway");
     // All `which` commands fail
     execMock.mockImplementation(
-      (cmd: string, opts: unknown, cb?: Function) => {
+      (_cmd: string, opts: unknown, cb?: (...args: unknown[]) => void) => {
         const callback = typeof opts === "function" ? opts : cb;
         callback?.(null, "", "");
       },
@@ -431,7 +441,7 @@ describe("openPrivacySettings", () => {
   it("does not try pavucontrol for camera permission", async () => {
     setEnv("XDG_CURRENT_DESKTOP", "sway");
     execMock.mockImplementation(
-      (cmd: string, opts: unknown, cb?: Function) => {
+      (_cmd: string, opts: unknown, cb?: (...args: unknown[]) => void) => {
         const callback = typeof opts === "function" ? opts : cb;
         callback?.(null, "", "");
       },
@@ -440,7 +450,9 @@ describe("openPrivacySettings", () => {
     await openPrivacySettings("camera");
     // Should not have tried pavucontrol for camera
     const calls = execMock.mock.calls.map((c: unknown[]) => c[0]);
-    expect(calls.some((c: string) => c.includes("pavucontrol"))).toBe(false);
+    expect(
+      calls.some((c: unknown) => (c as string).includes("pavucontrol")),
+    ).toBe(false);
   });
 });
 
@@ -496,6 +508,7 @@ describe("checkPermission dispatcher", () => {
   });
 
   it("returns not-applicable for unknown", async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: testing unknown permission id
     const result = await checkPermission("unknown-id" as any);
     expect(result.status).toBe("not-applicable");
   });
@@ -512,7 +525,7 @@ describe("requestPermission dispatcher", () => {
 
     // All which commands fail, so fallback to shell.openPath, then re-check
     execMock.mockImplementation(
-      (cmd: string, opts: unknown, cb?: Function) => {
+      (cmd: string, opts: unknown, cb?: (...args: unknown[]) => void) => {
         const callback = typeof opts === "function" ? opts : cb;
         if (cmd.includes("pactl info")) {
           callback?.(new Error("failed"), "", "failed");
@@ -541,7 +554,7 @@ describe("requestPermission dispatcher", () => {
     setEnv("XDG_CURRENT_DESKTOP", "sway");
 
     execMock.mockImplementation(
-      (cmd: string, opts: unknown, cb?: Function) => {
+      (cmd: string, opts: unknown, cb?: (...args: unknown[]) => void) => {
         const callback = typeof opts === "function" ? opts : cb;
         if (cmd.includes("ls /dev/video")) {
           callback?.(null, "No such file or directory", "");
@@ -565,7 +578,7 @@ describe("requestPermission dispatcher", () => {
     setEnv("XDG_CURRENT_DESKTOP", "sway");
 
     execMock.mockImplementation(
-      (cmd: string, opts: unknown, cb?: Function) => {
+      (_cmd: string, opts: unknown, cb?: (...args: unknown[]) => void) => {
         const callback = typeof opts === "function" ? opts : cb;
         callback?.(null, "", "");
       },
@@ -590,6 +603,7 @@ describe("requestPermission dispatcher", () => {
   });
 
   it("returns not-applicable for unknown", async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: testing unknown permission id
     const result = await requestPermission("unknown-id" as any);
     expect(result.status).toBe("not-applicable");
   });

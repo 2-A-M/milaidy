@@ -45,8 +45,8 @@ vi.mock("../../electron/src/native/permissions-linux", () => mockLinux);
 
 import { ipcMain } from "electron";
 import {
-  PermissionManager,
   getPermissionManager,
+  PermissionManager,
   registerPermissionsIPC,
 } from "../../electron/src/native/permissions";
 import type {
@@ -78,7 +78,7 @@ function granted(): PermissionCheckResult {
 function denied(): PermissionCheckResult {
   return { status: "denied", canRequest: false };
 }
-function notDetermined(): PermissionCheckResult {
+function _notDetermined(): PermissionCheckResult {
   return { status: "not-determined", canRequest: true };
 }
 
@@ -234,10 +234,9 @@ describe("PermissionManager", () => {
       manager.setMainWindow(win);
       manager.setShellEnabled(false);
 
-      expect(win.webContents.send).toHaveBeenCalledWith(
-        "permissions:changed",
-        { id: "shell" },
-      );
+      expect(win.webContents.send).toHaveBeenCalledWith("permissions:changed", {
+        id: "shell",
+      });
     });
   });
 
@@ -334,10 +333,9 @@ describe("PermissionManager", () => {
       manager.setMainWindow(win);
 
       await manager.requestPermission("microphone");
-      expect(win.webContents.send).toHaveBeenCalledWith(
-        "permissions:changed",
-        { id: "microphone" },
-      );
+      expect(win.webContents.send).toHaveBeenCalledWith("permissions:changed", {
+        id: "microphone",
+      });
     });
 
     it("returns not-applicable for inapplicable permissions", async () => {
@@ -430,10 +428,9 @@ describe("PermissionManager", () => {
 
       await manager.requestPermission("microphone");
 
-      expect(win.webContents.send).toHaveBeenCalledWith(
-        "permissions:changed",
-        { id: "microphone" },
-      );
+      expect(win.webContents.send).toHaveBeenCalledWith("permissions:changed", {
+        id: "microphone",
+      });
     });
 
     it("no-ops when window is null", async () => {

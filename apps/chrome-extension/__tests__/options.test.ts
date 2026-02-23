@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { installChromeMock, type ChromeMock } from "./chrome-mock";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { type ChromeMock, installChromeMock } from "./chrome-mock";
 
 /* ------------------------------------------------------------------ */
 /*  Minimal DOM stubs                                                  */
@@ -35,12 +35,15 @@ beforeEach(() => {
     save: makeFakeElement(),
   };
 
+  // biome-ignore lint/suspicious/noExplicitAny: mocking document on globalThis requires any
   (globalThis as any).document = {
     getElementById: vi.fn((id: string) => elements[id] ?? null),
   };
 
   // Default fetch: relay reachable
+  // biome-ignore lint/suspicious/noExplicitAny: mocking fetch on globalThis requires any
   (globalThis as any).fetch = vi.fn(async () => ({ ok: true, status: 200 }));
+  // biome-ignore lint/suspicious/noExplicitAny: mocking AbortController on globalThis requires any
   (globalThis as any).AbortController = class {
     signal = {};
     abort() {}
@@ -106,6 +109,7 @@ describe("updateRelayUrl", () => {
   it("handles missing element gracefully", async () => {
     const { updateRelayUrl } = await importOptions();
     // Override AFTER import so module side effects have the real elements
+    // biome-ignore lint/suspicious/noExplicitAny: mocking document on globalThis requires any
     (globalThis as any).document.getElementById = vi.fn(() => null);
     expect(() => updateRelayUrl(9999)).not.toThrow();
   });
@@ -126,6 +130,7 @@ describe("setStatus", () => {
   it("handles missing element gracefully", async () => {
     const { setStatus } = await importOptions();
     // Override AFTER import so module side effects have the real elements
+    // biome-ignore lint/suspicious/noExplicitAny: mocking document on globalThis requires any
     (globalThis as any).document.getElementById = vi.fn(() => null);
     expect(() => setStatus("ok", "test")).not.toThrow();
   });
@@ -137,6 +142,7 @@ describe("setStatus", () => {
 
 describe("checkRelayReachable", () => {
   it("sets ok status on successful fetch", async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: mocking fetch on globalThis requires any
     (globalThis as any).fetch = vi.fn(async () => ({ ok: true, status: 200 }));
     const { checkRelayReachable } = await importOptions();
     await checkRelayReachable(18792);
@@ -145,6 +151,7 @@ describe("checkRelayReachable", () => {
   });
 
   it("sets error status on fetch failure", async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: mocking fetch on globalThis requires any
     (globalThis as any).fetch = vi.fn(async () => {
       throw new Error("connect refused");
     });
@@ -155,6 +162,7 @@ describe("checkRelayReachable", () => {
   });
 
   it("sets error status on non-ok response", async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: mocking fetch on globalThis requires any
     (globalThis as any).fetch = vi.fn(async () => ({
       ok: false,
       status: 503,
@@ -202,6 +210,7 @@ describe("save", () => {
   });
 
   it("calls checkRelayReachable after saving", async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: mocking fetch on globalThis requires any
     (globalThis as any).fetch = vi.fn(async () => ({ ok: true, status: 200 }));
     const { save } = await importOptions();
     elements.port.value = "4000";

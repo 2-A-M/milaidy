@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { installChromeMock, type ChromeMock } from "./chrome-mock";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { type ChromeMock, installChromeMock } from "./chrome-mock";
 
 /* ------------------------------------------------------------------ */
 /*  MockWebSocket                                                      */
@@ -56,7 +56,8 @@ async function waitForWsAndOpen(): Promise<MockWebSocket> {
   await vi.waitFor(() => {
     if (!MockWebSocket._last) throw new Error("ws not created yet");
   });
-  const ws = MockWebSocket._last!;
+  const ws = MockWebSocket._last;
+  if (!ws) throw new Error("ws not created yet");
   ws.triggerOpen();
   return ws;
 }
@@ -78,6 +79,7 @@ let chromeMock: ChromeMock;
 
 // Provide WebSocket constants on globalThis so background.js can
 // reference WebSocket.OPEN etc.
+// biome-ignore lint/suspicious/noExplicitAny: mocking WebSocket on globalThis requires any
 (globalThis as any).WebSocket = MockWebSocket;
 
 beforeEach(() => {
@@ -86,7 +88,9 @@ beforeEach(() => {
   MockWebSocket._last = null;
 
   // Default fetch: relay reachable
+  // biome-ignore lint/suspicious/noExplicitAny: mocking fetch on globalThis requires any
   (globalThis as any).fetch = vi.fn(async () => ({ ok: true, status: 200 }));
+  // biome-ignore lint/suspicious/noExplicitAny: mocking AbortSignal on globalThis requires any
   (globalThis as any).AbortSignal = { timeout: () => ({}) };
 });
 
@@ -375,16 +379,18 @@ describe("ensureRelayConnection", () => {
 
   it("does preflight fetch", async () => {
     const fetchMock = vi.fn(async () => ({ ok: true }));
+    // biome-ignore lint/suspicious/noExplicitAny: mocking fetch on globalThis requires any
     (globalThis as any).fetch = fetchMock;
     const bg = await importBg();
     const p = bg.ensureRelayConnection();
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const ws = await waitForWsAndOpen();
+    const _ws = await waitForWsAndOpen();
     await p;
     expect(fetchMock).toHaveBeenCalled();
   });
 
   it("throws when preflight fetch fails", async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: mocking fetch on globalThis requires any
     (globalThis as any).fetch = vi.fn(async () => {
       throw new Error("ECONNREFUSED");
     });
@@ -407,6 +413,7 @@ describe("ensureRelayConnection", () => {
     await vi.waitFor(() => {
       if (!MockWebSocket._last) throw new Error("ws not created yet");
     });
+    // biome-ignore lint/style/noNonNullAssertion: already checked in waitFor above
     MockWebSocket._last!.triggerError();
     await expect(p).rejects.toThrow("WebSocket connect failed");
   });
@@ -494,6 +501,7 @@ describe("attachTab", () => {
       JSON.parse(c[0] as string),
     );
     const attachEvent = sent.find(
+      // biome-ignore lint/suspicious/noExplicitAny: parsed JSON has dynamic structure
       (m: any) =>
         m.method === "forwardCDPEvent" &&
         m.params?.method === "Target.attachedToTarget",
@@ -528,6 +536,7 @@ describe("detachTab", () => {
       JSON.parse(c[0] as string),
     );
     const detachEvent = sent.find(
+      // biome-ignore lint/suspicious/noExplicitAny: parsed JSON has dynamic structure
       (m: any) =>
         m.method === "forwardCDPEvent" &&
         m.params?.method === "Target.detachedFromTarget",
@@ -785,6 +794,7 @@ describe("connectOrToggleForActiveTab", () => {
 
     const connectP = bg.connectOrToggleForActiveTab();
     await vi.waitFor(() => expect(MockWebSocket._last).not.toBeNull());
+    // biome-ignore lint/style/noNonNullAssertion: checked by waitFor above
     MockWebSocket._last!.triggerOpen();
     await connectP;
 
@@ -792,6 +802,7 @@ describe("connectOrToggleForActiveTab", () => {
   });
 
   it("handles connection error", async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: mocking fetch on globalThis requires any
     (globalThis as any).fetch = vi.fn(async () => {
       throw new Error("ECONNREFUSED");
     });

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,6 +11,8 @@ interface GameContextStub {
   activeGameSandbox: string;
   activeGamePostMessageAuth: boolean;
   activeGamePostMessagePayload: AppViewerAuthMessage | null;
+  gameOverlayEnabled: boolean;
+  plugins: { id: string; enabled: boolean }[];
   logs: LogEntry[];
   loadLogs: () => Promise<void>;
   setState: (
@@ -51,6 +54,8 @@ function createContext(overrides?: Partial<GameContextStub>): GameContextStub {
       type: "HYPERSCAPE_AUTH",
       authToken: "token-default",
     },
+    gameOverlayEnabled: false,
+    plugins: [],
     logs: [],
     loadLogs: vi.fn(async () => {}),
     setState: vi.fn<GameContextStub["setState"]>(),

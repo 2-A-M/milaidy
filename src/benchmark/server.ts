@@ -317,16 +317,14 @@ async function collectSessionDiagnostics(
   const summaryPreview = latestSummaryText.slice(0, 400);
 
   const providerNames = runtime.providers.map((provider) => provider.name);
-  const evaluatorNames = (
-    runtime as unknown as { evaluators?: Array<{ name?: string }> }
-  ).evaluators
-    ?.map((evaluator) => evaluator?.name ?? "")
-    .filter((name) => name.length > 0) ?? [];
-  const actionNames = (
-    runtime as unknown as { actions?: Array<{ name?: string }> }
-  ).actions
-    ?.map((action) => action?.name?.toUpperCase() ?? "")
-    .filter((name) => name.length > 0) ?? [];
+  const evaluatorNames =
+    (runtime as unknown as { evaluators?: Array<{ name?: string }> }).evaluators
+      ?.map((evaluator) => evaluator?.name ?? "")
+      .filter((name) => name.length > 0) ?? [];
+  const actionNames =
+    (runtime as unknown as { actions?: Array<{ name?: string }> }).actions
+      ?.map((action) => action?.name?.toUpperCase() ?? "")
+      .filter((name) => name.length > 0) ?? [];
 
   return {
     benchmark: session.benchmark,
@@ -335,10 +333,9 @@ async function collectSessionDiagnostics(
     relay_room_id: session.relayRoomId,
     room_metadata: {
       last_compaction_at: lastCompactionAt,
-      compaction_history:
-        Array.isArray(room?.metadata?.compactionHistory)
-          ? room.metadata.compactionHistory
-          : [],
+      compaction_history: Array.isArray(room?.metadata?.compactionHistory)
+        ? room.metadata.compactionHistory
+        : [],
     },
     memory_counts: {
       messages_total: allMessages.length,

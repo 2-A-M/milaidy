@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * Tests for plugin-bridge — capabilities detection and feature flags on web platform.
  */

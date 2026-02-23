@@ -537,10 +537,11 @@ export function ChatView() {
         {/* Paperclip / image attach button */}
         <button
           type="button"
-          className={`h-[38px] w-[38px] shrink-0 flex items-center justify-center border rounded cursor-pointer transition-all self-end ${chatPendingImages.length > 0
+          className={`h-[38px] w-[38px] shrink-0 flex items-center justify-center border rounded cursor-pointer transition-all self-end ${
+            chatPendingImages.length > 0
               ? "border-accent bg-accent/10 text-accent"
               : "border-border bg-card text-muted hover:border-accent hover:text-accent"
-            }`}
+          }`}
           onClick={() => fileInputRef.current?.click()}
           aria-label="Attach image"
           title="Attach image"
@@ -565,10 +566,11 @@ export function ChatView() {
         {voice.supported && (
           <button
             type="button"
-            className={`h-[38px] w-[38px] flex-shrink-0 flex items-center justify-center border rounded cursor-pointer transition-all self-end ${voice.isListening
+            className={`h-[38px] w-[38px] flex-shrink-0 flex items-center justify-center border rounded cursor-pointer transition-all self-end ${
+              voice.isListening
                 ? "bg-accent border-accent text-accent-fg shadow-[0_0_10px_rgba(124,58,237,0.4)] animate-pulse"
                 : "border-border bg-card text-muted hover:border-accent hover:text-accent"
-              }`}
+            }`}
             onClick={voice.toggleListening}
             aria-label={
               voice.isListening ? "Stop voice input" : "Start voice input"

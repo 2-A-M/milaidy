@@ -99,7 +99,11 @@ export function SaveCommandModal({
 
         {/* Body */}
         <div className="px-5 py-4 flex flex-col gap-3">
-          <label id={inputLabelId} htmlFor={inputId} className="text-xs text-muted">
+          <label
+            id={inputLabelId}
+            htmlFor={inputId}
+            className="text-xs text-muted"
+          >
             Command name
           </label>
           <div className="flex items-center gap-1">

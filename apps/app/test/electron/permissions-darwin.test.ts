@@ -2,7 +2,7 @@
  * Unit tests for macOS permission detection
  * (apps/app/electron/src/native/permissions-darwin.ts)
  */
-import { type Mock, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -13,7 +13,9 @@ vi.mock("node:child_process", async () => {
   const execFn = vi.fn();
   // Attach custom promisify so util.promisify(exec) returns { stdout, stderr }
   // matching Node's real child_process.exec behavior.
-  (execFn as any)[promisify.custom!] = (...args: any[]) =>
+  // biome-ignore lint/suspicious/noExplicitAny: test mock requires dynamic property assignment
+  // biome-ignore lint/style/noNonNullAssertion: promisify.custom is always defined in Node
+  (execFn as any)[promisify.custom!] = (...args: unknown[]) =>
     new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
       const cb = (err: Error | null, stdout = "", stderr = "") => {
         if (err) {
@@ -70,7 +72,7 @@ function mockExecResult(
   result: { stdout: string; stderr?: string } | Error,
 ) {
   execMock.mockImplementation(
-    (cmd: string, opts: unknown, cb?: Function) => {
+    (cmd: string, opts: unknown, cb?: (...args: unknown[]) => void) => {
       const callback = typeof opts === "function" ? opts : cb;
       const matches =
         typeof pattern === "string" ? cmd.includes(pattern) : pattern.test(cmd);
@@ -87,14 +89,14 @@ function mockExecResult(
 /**
  * Configure exec to respond to multiple patterns in order.
  */
-function mockExecSequence(
+function _mockExecSequence(
   entries: Array<{
     pattern: string | RegExp;
     result: { stdout: string; stderr?: string } | Error;
   }>,
 ) {
   execMock.mockImplementation(
-    (cmd: string, opts: unknown, cb?: Function) => {
+    (cmd: string, opts: unknown, cb?: (...args: unknown[]) => void) => {
       const callback = typeof opts === "function" ? opts : cb;
       for (const { pattern, result } of entries) {
         const matches =
@@ -144,7 +146,7 @@ describe("checkAccessibility", () => {
     // First call: no clear result, second call: position query succeeds
     let callCount = 0;
     execMock.mockImplementation(
-      (cmd: string, opts: unknown, cb?: Function) => {
+      (_cmd: string, opts: unknown, cb?: (...args: unknown[]) => void) => {
         const callback = typeof opts === "function" ? opts : cb;
         callCount++;
         if (callCount === 1) {
@@ -164,7 +166,7 @@ describe("checkAccessibility", () => {
   it("returns denied when both queries fail", async () => {
     let callCount = 0;
     execMock.mockImplementation(
-      (cmd: string, opts: unknown, cb?: Function) => {
+      (_cmd: string, opts: unknown, cb?: (...args: unknown[]) => void) => {
         const callback = typeof opts === "function" ? opts : cb;
         callCount++;
         if (callCount === 1) {
@@ -407,6 +409,7 @@ describe("checkPermission dispatcher", () => {
   });
 
   it("returns not-applicable for unknown", async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: testing unknown permission id
     const result = await checkPermission("unknown-id" as any);
     expect(result.status).toBe("not-applicable");
   });
@@ -462,6 +465,7 @@ describe("requestPermission dispatcher", () => {
   });
 
   it("returns not-applicable for unknown", async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: testing unknown permission id
     const result = await requestPermission("unknown-id" as any);
     expect(result.status).toBe("not-applicable");
   });

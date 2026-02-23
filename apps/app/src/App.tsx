@@ -6,7 +6,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useApp } from "./AppContext";
 import { AdvancedPageView } from "./components/AdvancedPageView";
 import { AppsPageView } from "./components/AppsPageView";
-import { APPS_ENABLED } from "./navigation";
 import { AutonomousPanel } from "./components/AutonomousPanel";
 import { BugReportModal } from "./components/BugReportModal";
 import { CharacterView } from "./components/CharacterView";
@@ -32,6 +31,7 @@ import { StartupFailureView } from "./components/StartupFailureView";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { BugReportProvider, useBugReportState } from "./hooks/useBugReport";
 import { useContextMenu } from "./hooks/useContextMenu";
+import { APPS_ENABLED } from "./navigation";
 
 const CHAT_MOBILE_BREAKPOINT_PX = 1024;
 
