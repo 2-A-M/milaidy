@@ -8730,11 +8730,22 @@ async function handleRequest(
       : false;
     const ogCode = readOGCodeFromState();
 
+    // Include Merkle tree info for mint readiness
+    const { info } = buildWhitelistTree();
+    const proofReady = walletAddress
+      ? generateProof(walletAddress).isWhitelisted
+      : false;
+
     json(res, {
       eligible: twitterVerified,
       twitterVerified,
       ogCode: ogCode ?? null,
       walletAddress,
+      merkle: {
+        root: info.root,
+        addressCount: info.addressCount,
+        proofReady,
+      },
     });
     return;
   }
