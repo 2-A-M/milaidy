@@ -10,8 +10,7 @@
     "capacitor.config.*",
     "app/**/*",
     "milady-dist/**/*.js",
-    "milady-dist/package.json",
-    "milady-dist/node_modules/**/*"
+    "milady-dist/package.json"
   ],
   "asarUnpack": ["milady-dist/**/*"],
   "publish": {

@@ -185,6 +185,43 @@ jobs:
         run: bun run build
         working-directory: apps/app/electron
 
+      # Re-bundle server.ts and eliza.ts as standalone files with all deps
+      # inlined (no code splitting).  The main build uses unbundle mode which
+      # creates code-split shared chunks with external imports, but ESM
+      # import() from app.asar.unpacked can't resolve those externals.
+      # Running tsdown separately ensures zero external dependencies.
+      - name: Re-bundle dist for Electron (standalone server & eliza)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Re-bundling server.ts and eliza.ts as standalone files..."
+          npx tsdown src/api/server.ts \
+            --format esm \
+            --platform node \
+            --out-dir dist \
+            --no-clean \
+            --external node-llama-cpp \
+            --external '@reflink/reflink' \
+            --external '@reflink/reflink-darwin-arm64' \
+            --external '@reflink/reflink-darwin-x64' \
+            --external '@reflink/reflink-linux-arm64-gnu' \
+            --external '@reflink/reflink-linux-x64-gnu' \
+            --external fsevents
+          npx tsdown src/runtime/eliza.ts \
+            --format esm \
+            --platform node \
+            --out-dir dist \
+            --no-clean \
+            --external node-llama-cpp \
+            --external '@reflink/reflink' \
+            --external '@reflink/reflink-darwin-arm64' \
+            --external '@reflink/reflink-darwin-x64' \
+            --external '@reflink/reflink-linux-arm64-gnu' \
+            --external '@reflink/reflink-linux-x64-gnu' \
+            --external fsevents
+          echo "Re-bundled server.js: $(wc -c < dist/server.js) bytes"
+          echo "Re-bundled eliza.js: $(wc -c < dist/eliza.js) bytes"
+
       # Copy milady dist into the electron directory so electron-builder can
       # include it in the ASAR *and* asarUnpack can extract it.  The from/to
       # file mapping in electron-builder doesn't support asarUnpack, so we
@@ -195,8 +232,7 @@ jobs:
           set -euo pipefail
           rm -rf milady-dist
           mkdir -p milady-dist
-
-          # 1. Copy only .js files and package.json (matching the old filter)
+          # Copy only .js files and package.json (matching the old filter)
           find ../../../dist -name '*.js' | while read f; do
             rel="${f#../../../dist/}"
             mkdir -p "milady-dist/$(dirname "$rel")"
@@ -204,40 +240,6 @@ jobs:
           done
           echo '{"type":"module"}' > milady-dist/package.json
           echo "Copied $(find milady-dist -name '*.js' | wc -l | tr -d ' ') JS files to milady-dist/"
-
-          # 2. Scan dist for external npm imports and copy needed node_modules
-          #    so ESM import() from app.asar.unpacked can resolve them.
-          #    (ESM ignores NODE_PATH, so deps must be on the real filesystem.)
-          ext_deps=$(grep -rh 'from "' milady-dist/ 2>/dev/null \
-            | grep -v 'from "\.\/' \
-            | grep -v 'from "node:' \
-            | sed 's/.*from "//;s/".*//' \
-            | sed 's|/.*||' \
-            | sort -u)
-
-          # For scoped packages, keep the scope+name together
-          scoped_deps=$(grep -rh 'from "@' milady-dist/ 2>/dev/null \
-            | grep -v 'from "\.\/' \
-            | sed 's/.*from "//;s/".*//' \
-            | sed 's|\(/[^/]*\)/.*|\1|' \
-            | sort -u)
-
-          all_deps=$(echo -e "$ext_deps\n$scoped_deps" | sort -u | grep -v '^$')
-          echo "External deps found: $all_deps"
-
-          node_modules_root="../../../node_modules"
-          for dep in $all_deps; do
-            src="$node_modules_root/$dep"
-            if [ -d "$src" ]; then
-              dest="milady-dist/node_modules/$dep"
-              mkdir -p "$(dirname "$dest")"
-              cp -R "$src" "$dest"
-              echo "  Copied $dep"
-            else
-              echo "  WARN: $dep not found in node_modules (may be bundled inline)"
-            fi
-          done
-          echo "Done copying external deps"
         working-directory: apps/app/electron
 
       - name: Prepare platform electron-builder config
