@@ -17,7 +17,17 @@ import path from "node:path";
 import process from "node:process";
 import * as readline from "node:readline";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import * as clack from "@clack/prompts";
+
+// @clack/prompts is loaded lazily inside runFirstTimeSetup() so the
+// packaged Electron app (which never runs interactive onboarding) does
+// not crash when the package is unavailable.
+type ClackModule = typeof import("@clack/prompts");
+let _clack: ClackModule | null = null;
+async function loadClack(): Promise<ClackModule> {
+  if (!_clack) _clack = await import("@clack/prompts");
+  return _clack;
+}
+
 import {
   AgentRuntime,
   AutonomyService,
@@ -371,7 +381,8 @@ function ensureTrajectoryLoggerEnabled(
  * Extracted to avoid duplicating the cancel+exit pattern 7 times.
  */
 function cancelOnboarding(): never {
-  clack.cancel("Maybe next time!");
+  // _clack is guaranteed to be loaded by the time onboarding calls this.
+  _clack?.cancel("Maybe next time!");
   process.exit(0);
 }
 
@@ -2188,6 +2199,9 @@ async function runFirstTimeSetup(config: MiladyConfig): Promise<MiladyConfig> {
 
   // Only prompt when stdin is a TTY (interactive terminal)
   if (!process.stdin.isTTY) return config;
+
+  // Load @clack/prompts lazily — only needed for interactive CLI onboarding.
+  const clack = await loadClack();
 
   // ── Step 1: Welcome ────────────────────────────────────────────────────
   clack.intro("WELCOME TO MILADY!");
