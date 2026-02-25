@@ -614,7 +614,7 @@ Prioritization order applied: correctness/security first, then reliability/obser
   - `docs/plugins/skills.md` — added Skill Operations Runbook covering catalog, marketplace, and skill loading failure modes with recovery procedures.
   - `docs/guides/connectors.md` — added platform-specific failure modes for Discord, Telegram, Slack, and WhatsApp with recovery procedures.
   - `docs/plugin-registry/computeruse.md` — added vision model selection, action failure taxonomy, sandbox configuration, cross-platform guidance, and recovery procedures.
-  - `docs/guides/media-generation.md` — already comprehensive (no changes needed).
+  - `docs/guides/media-generation.md` — expanded runbook with provider-specific failure modes (auth, empty responses, Ollama, Google Veo polling), recovery procedures (credential rotation, fallback debugging, Ollama model corruption), and a 5-item setup checklist.
 - Acceptance criteria:
   - Registry/drop, skill catalog, media provider, connector specifics, and CUA operations have setup, failure, and verify guidance.
 - Verification commands:
