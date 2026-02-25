@@ -400,6 +400,8 @@ jobs:
           # We forcefully remove these root ignore files just for packaging so electron-builder only uses the local .npmignore
           rm -f ../../../.gitignore || true
           rm -f ../../../.npmignore || true
+          rm -f .gitignore || true
+          rm -f .npmignore || true
           rm -rf ../../../.git || true
 
           echo "DUMPING CONTENTS OF TSC-OUT"
