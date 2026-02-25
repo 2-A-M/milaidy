@@ -47,6 +47,27 @@ jobs:
           path: coverage/
           retention-days: 14
 
+  db-check:
+    name: Database Security Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run repository postinstall patches
+        run: bun run postinstall
+
+      - name: Run database security and query-guard tests
+        run: bun run db:check
+
   e2e-tests:
     name: E2E Tests (Vitest)
     runs-on: ubuntu-latest
@@ -237,13 +258,14 @@ jobs:
   test-status:
     name: All Tests Passed
     if: always()
-    needs: [unit-tests, e2e-tests, app-startup-e2e, electron-ui-e2e, electron-packaged-dmg-e2e, cloud-live-e2e, validation-e2e]
+    needs: [unit-tests, db-check, e2e-tests, app-startup-e2e, electron-ui-e2e, electron-packaged-dmg-e2e, cloud-live-e2e, validation-e2e]
     runs-on: ubuntu-latest
     steps:
       - name: Check test results
         run: |
           # Note: electron jobs are optional (macOS packaging can have flaky deps)
           if [[ "${{ needs.unit-tests.result }}" == "failure" || \
+                "${{ needs.db-check.result }}" == "failure" || \
                 "${{ needs.e2e-tests.result }}" == "failure" || \
                 "${{ needs.app-startup-e2e.result }}" == "failure" || \
                 "${{ needs.cloud-live-e2e.result }}" == "failure" || \

@@ -632,7 +632,7 @@ Prioritization order applied: correctness/security first, then reliability/obser
 - Acceptance criteria:
   - `db:check` (or documented explicit N/A policy) exists and is enforced in docs/workflow.
 - Resolution:
-  - `bun run db:check` exists in `package.json` — runs database security and read-only query-guard tests (20 tests).
+  - `bun run db:check` exists in `package.json` — runs database security and read-only query-guard tests (30 tests).
   - **Explicit N/A policy for manual migrations:** `@elizaos/plugin-sql` auto-applies schema migrations on startup. There are no user-managed migration files. Schema versioning is embedded in the plugin package. See `docs/plugin-registry/sql.md` §Migrations.
 - Verification commands:
   - `bun run db:check`
@@ -719,7 +719,7 @@ bunx vitest run --config vitest.e2e.config.ts test/e2e-validation.e2e.test.ts
 bun run db:check
 ```
 
-- Runs database security tests and read-only query-guard tests (20 tests).
+- Runs database security tests and read-only query-guard tests (30 tests).
 - **Migration policy (N/A):** `@elizaos/plugin-sql` auto-applies schema migrations on startup — there are no user-managed migration files and no manual migration step is required. Schema versions are embedded in the plugin package.
 
 ---
