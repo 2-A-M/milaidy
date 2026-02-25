@@ -13353,6 +13353,8 @@ export async function startApiServer(opts?: {
           model: state.model,
           startedAt: state.startedAt,
           startup: state.startup,
+          pendingRestart: state.pendingRestartReasons.length > 0,
+          pendingRestartReasons: state.pendingRestartReasons,
         }),
       );
       const replay = state.eventBuffer.slice(-120);
