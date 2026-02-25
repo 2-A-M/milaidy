@@ -6,13 +6,15 @@
   },
   "files": [
     "assets/**/*",
-    "app-build/**/*",
+    "dist-tsc/**/*",
     "capacitor.config.*",
     "app/**/*",
     "milady-dist/**/*.js",
     "milady-dist/package.json"
   ],
-  "asarUnpack": ["milady-dist/**/*"],
+  "asarUnpack": [
+    "milady-dist/**/*"
+  ],
   "publish": {
     "provider": "github",
     "owner": "milady-ai",
@@ -35,7 +37,10 @@
   },
   "mac": {
     "category": "public.app-category.productivity",
-    "target": ["dmg", "zip"],
+    "target": [
+      "dmg",
+      "zip"
+    ],
     "icon": "assets/appIcon.png",
     "hardenedRuntime": true,
     "gatekeeperAssess": false,
@@ -66,7 +71,10 @@
     ]
   },
   "linux": {
-    "target": ["AppImage", "deb"],
+    "target": [
+      "AppImage",
+      "deb"
+    ],
     "category": "Utility",
     "icon": "assets/appIcon.png"
   }

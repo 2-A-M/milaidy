@@ -402,9 +402,9 @@ jobs:
           rm -f .gitignore || true
           rm -f .npmignore || true
 
-          echo "DUMPING CONTENTS OF APP-BUILD"
-          ls -la app-build || echo "APP-BUILD DIR IS MISSING"
-          ls -la app-build/src || echo "APP-BUILD/SRC DIR IS MISSING"
+          echo "DUMPING CONTENTS OF DIST-TSC"
+          ls -la dist-tsc || echo "DIST-TSC DIR IS MISSING"
+          ls -la dist-tsc/src || echo "DIST-TSC/SRC DIR IS MISSING"
           
           npx electron-builder build ${{ matrix.platform.electron-args }} -c ./electron-builder.ci.json -p never
         working-directory: apps/app/electron
