@@ -258,6 +258,22 @@ jobs:
 
           echo '{"type":"module"}' > apps/app/electron/milady-dist/package.json
           echo "Copied $(find apps/app/electron/milady-dist -name '*.js' | wc -l | tr -d ' ') JS files to milady-dist/"
+
+          # Copy @elizaos/* plugins from root node_modules to milady-dist/node_modules
+          # This allows eliza.js dynamic imports to resolve without electron-builder dependency issues
+          echo "Copying @elizaos/* plugins to milady-dist/node_modules..."
+          mkdir -p apps/app/electron/milady-dist/node_modules/@elizaos
+          for pkg in core prompts plugin-sql plugin-local-embedding plugin-secrets-manager plugin-form \
+                     plugin-knowledge plugin-rolodex plugin-trajectory-logger plugin-agent-orchestrator \
+                     plugin-cron plugin-shell plugin-plugin-manager plugin-agent-skills plugin-pdf \
+                     plugin-anthropic plugin-vision plugin-openai plugin-google-genai plugin-groq \
+                     plugin-ollama plugin-openrouter plugin-edge-tts plugin-elevenlabs; do
+            if [ -d "node_modules/@elizaos/$pkg" ]; then
+              cp -r "node_modules/@elizaos/$pkg" "apps/app/electron/milady-dist/node_modules/@elizaos/"
+              echo "  Copied @elizaos/$pkg"
+            fi
+          done
+          echo "Done copying @elizaos plugins"
         working-directory: .
 
       - name: Prepare platform electron-builder config
