@@ -59,6 +59,7 @@
         "@lunchtable/plugin-ltcg": "^0.1.0",
         "@mariozechner/pi-ai": "0.52.12",
         "@mariozechner/pi-tui": "0.54.0",
+        "@milaidy/plugin-coding-agent": "workspace:*",
         "@noble/curves": "^2.0.1",
         "@opentelemetry/api": "1.9.0",
         "@tensorflow/tfjs-core": "1.7.0",
@@ -175,7 +176,7 @@
     },
     "apps/app/electron": {
       "name": "Milady",
-      "version": "2.0.0-alpha.52",
+      "version": "2.0.0-alpha.65",
       "dependencies": {
         "@capacitor-community/electron": "^5.0.1",
         "@noble/curves": "^2.0.1",
@@ -369,6 +370,23 @@
       },
       "dependencies": {
         "miladyai": "next",
+      },
+    },
+    "packages/plugin-coding-agent": {
+      "name": "@milaidy/plugin-coding-agent",
+      "version": "0.1.0",
+      "dependencies": {
+        "coding-agent-adapters": "0.8.0",
+        "pty-console": "0.3.0",
+      },
+      "devDependencies": {
+        "@types/node": "^25.2.3",
+        "typescript": "^5.9.3",
+      },
+      "peerDependencies": {
+        "@elizaos/core": ">=2.0.0-alpha.0",
+        "git-workspace-service": ">=0.3.0",
+        "pty-manager": ">=1.8.0",
       },
     },
     "packages/psyop": {
@@ -958,6 +976,8 @@
     "@milady/capacitor-swabble": ["@milady/capacitor-swabble@workspace:apps/app/plugins/swabble"],
 
     "@milady/capacitor-talkmode": ["@milady/capacitor-talkmode@workspace:apps/app/plugins/talkmode"],
+
+    "@milaidy/plugin-coding-agent": ["@milaidy/plugin-coding-agent@workspace:packages/plugin-coding-agent"],
 
     "@mistralai/mistralai": ["@mistralai/mistralai@1.10.0", "", { "dependencies": { "zod": "^3.20.0", "zod-to-json-schema": "^3.24.1" } }, "sha512-tdIgWs4Le8vpvPiUEWne6tK0qbVc+jMenujnvTqOjogrJUsCSQhus0tHTU1avDDh5//Rq2dFgP9mWRAdIEoBqg=="],
 
@@ -3074,6 +3094,8 @@
     "proxy-from-env": ["proxy-from-env@1.1.0", "", {}, "sha512-D+zkORCbA9f1tdWRK0RaCR3GPv50cMxcrz4X8k5LTSUD1Dkw47mKJEZQNunItRTkWwgtaUSo1RVFRIG9ZXiFYg=="],
 
     "psyop": ["psyop@workspace:packages/psyop"],
+
+    "pty-console": ["pty-console@0.3.0", "", { "dependencies": { "pty-manager": "^1.9.0" } }, "sha512-IEizJ4F8LjQJLimLT7aHRFzWTU19Bjv2/3h6Ols+Zn9iU23iQmF1lIGaDuwWmlZ0ADUOPUkGiWwOh+7MFM074g=="],
 
     "pty-manager": ["pty-manager@1.9.0", "", { "dependencies": { "node-pty": "^1.0.0" }, "bin": { "pty-worker": "dist/pty-worker.js" } }, "sha512-QhGslG2X3IlJkK+75nFCLmBYQgI6ExMCRmI8vgIy14NzpfHGogUYb4/gviqAAGWpr3raIPdsxxHJAVlKvUdp2w=="],
 

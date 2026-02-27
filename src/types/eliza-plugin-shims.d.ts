@@ -47,3 +47,20 @@ declare module "@elizaos/plugin-agent-orchestrator" {
     [key: string]: any;
   }
 }
+declare module "@milaidy/plugin-coding-agent" {
+  import type { Plugin } from "@elizaos/core";
+  // biome-ignore lint/suspicious/noExplicitAny: local workspace plugin
+  export const createCodingAgentRouteHandler: any;
+  // biome-ignore lint/suspicious/noExplicitAny: local workspace plugin
+  export const getCoordinator: any;
+  export const codingAgentPlugin: Plugin;
+  export default codingAgentPlugin;
+  export interface SwarmEvent {
+    // biome-ignore lint/suspicious/noExplicitAny: local workspace plugin
+    [key: string]: any;
+  }
+  export interface PTYService {
+    // biome-ignore lint/suspicious/noExplicitAny: local workspace plugin
+    [key: string]: any;
+  }
+}

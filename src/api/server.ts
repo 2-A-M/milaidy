@@ -11312,25 +11312,46 @@ async function handleRequest(
       pathname.startsWith("/api/workspace") ||
       pathname.startsWith("/api/issues"))
   ) {
-    // Try to dynamically load the route handler from the plugin
+    // Try to dynamically load the route handler from the local plugin first
     let handled = false;
+
+    // Try @milaidy/plugin-coding-agent first (local workspace plugin)
     try {
-      const orchestratorPlugin = await import(
-        "@elizaos/plugin-agent-orchestrator"
-      );
-      if (orchestratorPlugin.createCodingAgentRouteHandler) {
-        const coordinator = orchestratorPlugin.getCoordinator?.(state.runtime);
-        const handler = orchestratorPlugin.createCodingAgentRouteHandler(
+      const codingAgentPlugin = await import("@milaidy/plugin-coding-agent");
+      if (codingAgentPlugin.createCodingAgentRouteHandler) {
+        const coordinator = codingAgentPlugin.getCoordinator?.(state.runtime);
+        const handler = codingAgentPlugin.createCodingAgentRouteHandler(
           state.runtime,
           coordinator,
         );
         handled = await handler(req, res, pathname);
       }
     } catch {
-      // Plugin doesn't export these functions - skip routing
+      // Local plugin not available, try npm plugin
     }
 
-    // Fallback: Handle coding-agents routes using AgentOrchestratorService
+    // Fallback to @elizaos/plugin-agent-orchestrator (npm)
+    if (!handled) {
+      try {
+        const orchestratorPlugin = await import(
+          "@elizaos/plugin-agent-orchestrator"
+        );
+        if (orchestratorPlugin.createCodingAgentRouteHandler) {
+          const coordinator = orchestratorPlugin.getCoordinator?.(
+            state.runtime,
+          );
+          const handler = orchestratorPlugin.createCodingAgentRouteHandler(
+            state.runtime,
+            coordinator,
+          );
+          handled = await handler(req, res, pathname);
+        }
+      } catch {
+        // Plugin doesn't export these functions - skip routing
+      }
+    }
+
+    // Final fallback: Handle coding-agents routes using AgentOrchestratorService
     if (!handled && pathname.startsWith("/api/coding-agents")) {
       handled = await handleCodingAgentsFallback(
         state.runtime,
