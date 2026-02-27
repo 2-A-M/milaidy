@@ -525,7 +525,13 @@ export interface PluginInfo {
   enabled: boolean;
   configured: boolean;
   envKey: string | null;
-  category: "ai-provider" | "connector" | "database" | "app" | "feature";
+  category:
+    | "ai-provider"
+    | "connector"
+    | "streaming"
+    | "database"
+    | "app"
+    | "feature";
   source: "bundled" | "store";
   parameters: PluginParamDef[];
   validationErrors: Array<{ field: string; message: string }>;
@@ -624,6 +630,8 @@ export interface ConversationMessage {
   blocks?: ContentBlock[];
   /** Source channel when forwarded from another channel (e.g. "autonomy"). */
   source?: string;
+  /** Username of the sender (e.g. retake viewer username, discord username). */
+  from?: string;
 }
 
 export type ConversationChannelType =
@@ -4342,6 +4350,158 @@ export class MiladyClient {
     } catch {
       return "";
     }
+  }
+
+  // ── Stream controls ─────────────────────────────────────────────────────
+
+  async streamGoLive(): Promise<{
+    ok: boolean;
+    live: boolean;
+    rtmpUrl?: string;
+    inputMode?: string;
+    audioSource?: string;
+    message?: string;
+    destination?: string;
+  }> {
+    return this.fetch("/api/stream/live", { method: "POST" });
+  }
+
+  async streamGoOffline(): Promise<{ ok: boolean; live: boolean }> {
+    return this.fetch("/api/stream/offline", { method: "POST" });
+  }
+
+  async streamStatus(): Promise<{
+    ok: boolean;
+    running: boolean;
+    ffmpegAlive: boolean;
+    uptime: number;
+    frameCount: number;
+    volume: number;
+    muted: boolean;
+    audioSource: string;
+    inputMode: string | null;
+    destination?: { id: string; name: string } | null;
+  }> {
+    return this.fetch("/api/stream/status");
+  }
+
+  async getStreamingDestinations(): Promise<{
+    ok: boolean;
+    destinations: Array<{ id: string; name: string }>;
+  }> {
+    return this.fetch("/api/streaming/destinations");
+  }
+
+  async setActiveDestination(destinationId: string): Promise<{
+    ok: boolean;
+    destination?: { id: string; name: string };
+  }> {
+    return this.fetch("/api/streaming/destination", {
+      method: "POST",
+      body: JSON.stringify({ destinationId }),
+    });
+  }
+
+  async setStreamVolume(
+    volume: number,
+  ): Promise<{ ok: boolean; volume: number; muted: boolean }> {
+    return this.fetch("/api/stream/volume", {
+      method: "POST",
+      body: JSON.stringify({ volume }),
+    });
+  }
+
+  async muteStream(): Promise<{ ok: boolean; muted: boolean; volume: number }> {
+    return this.fetch("/api/stream/mute", { method: "POST" });
+  }
+
+  async unmuteStream(): Promise<{
+    ok: boolean;
+    muted: boolean;
+    volume: number;
+  }> {
+    return this.fetch("/api/stream/unmute", { method: "POST" });
+  }
+
+  // ── Stream voice (TTS) ───────────────────────────────────────────────
+
+  async getStreamVoice(): Promise<{
+    ok: boolean;
+    enabled: boolean;
+    autoSpeak: boolean;
+    provider: string | null;
+    configuredProvider: string | null;
+    hasApiKey: boolean;
+    isSpeaking: boolean;
+    isAttached: boolean;
+  }> {
+    return this.fetch("/api/stream/voice");
+  }
+
+  async saveStreamVoice(settings: {
+    enabled?: boolean;
+    autoSpeak?: boolean;
+    provider?: string;
+  }): Promise<{
+    ok: boolean;
+    voice: { enabled: boolean; autoSpeak: boolean };
+  }> {
+    return this.fetch("/api/stream/voice", {
+      method: "POST",
+      body: JSON.stringify(settings),
+    });
+  }
+
+  async streamVoiceSpeak(
+    text: string,
+  ): Promise<{ ok: boolean; speaking: boolean }> {
+    return this.fetch("/api/stream/voice/speak", {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    });
+  }
+
+  // ── Overlay layout ────────────────────────────────────────────────────
+
+  async getOverlayLayout(
+    destinationId?: string | null,
+  ): Promise<{ ok: boolean; layout: unknown; destinationId?: string }> {
+    const qs = destinationId
+      ? `?destination=${encodeURIComponent(destinationId)}`
+      : "";
+    return this.fetch(`/api/stream/overlay-layout${qs}`);
+  }
+
+  async saveOverlayLayout(
+    layout: unknown,
+    destinationId?: string | null,
+  ): Promise<{ ok: boolean; layout: unknown; destinationId?: string }> {
+    const qs = destinationId
+      ? `?destination=${encodeURIComponent(destinationId)}`
+      : "";
+    return this.fetch(`/api/stream/overlay-layout${qs}`, {
+      method: "POST",
+      body: JSON.stringify({ layout }),
+    });
+  }
+
+  // ── Stream visual settings (theme, avatar for headless parity) ────────
+
+  async getStreamSettings(): Promise<{
+    ok: boolean;
+    settings: { theme?: string; avatarIndex?: number };
+  }> {
+    return this.fetch("/api/stream/settings");
+  }
+
+  async saveStreamSettings(settings: {
+    theme?: string;
+    avatarIndex?: number;
+  }): Promise<{ ok: boolean; settings: unknown }> {
+    return this.fetch("/api/stream/settings", {
+      method: "POST",
+      body: JSON.stringify({ settings }),
+    });
   }
 }
 

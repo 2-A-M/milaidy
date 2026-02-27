@@ -214,6 +214,115 @@ describe("sensitive endpoint auth gates (MW-04)", () => {
     });
   });
 
+  // ── Connector deletion ───────────────────────────────────────────
+
+  describe("DELETE /api/connectors/:name", () => {
+    it("rejects unauthenticated connector deletion with 401", async () => {
+      const { status, data } = await req(
+        port,
+        "DELETE",
+        "/api/connectors/telegram",
+      );
+      expect(status).toBe(401);
+      expect(data.error).toMatch(/unauthorized/i);
+    });
+
+    it("accepts authenticated connector deletion", async () => {
+      const { status } = await req(port, "DELETE", "/api/connectors/telegram", {
+        token: TOKEN,
+      });
+      expect(status).not.toBe(401);
+    });
+  });
+
+  // ── MCP server creation ─────────────────────────────────────────
+
+  describe("POST /api/mcp/config/server", () => {
+    it("rejects unauthenticated MCP server creation with 401", async () => {
+      const { status, data } = await req(
+        port,
+        "POST",
+        "/api/mcp/config/server",
+        { body: { name: "evil-server", command: "cat /etc/passwd" } },
+      );
+      expect(status).toBe(401);
+      expect(data.error).toMatch(/unauthorized/i);
+    });
+
+    it("accepts authenticated MCP server creation", async () => {
+      const { status } = await req(port, "POST", "/api/mcp/config/server", {
+        body: { name: "test-server", command: "echo" },
+        token: TOKEN,
+      });
+      expect(status).not.toBe(401);
+    });
+  });
+
+  // ── MCP server deletion ─────────────────────────────────────────
+
+  describe("DELETE /api/mcp/config/server/:name", () => {
+    it("rejects unauthenticated MCP server deletion with 401", async () => {
+      const { status, data } = await req(
+        port,
+        "DELETE",
+        "/api/mcp/config/server/evil-server",
+      );
+      expect(status).toBe(401);
+      expect(data.error).toMatch(/unauthorized/i);
+    });
+
+    it("accepts authenticated MCP server deletion", async () => {
+      const { status } = await req(
+        port,
+        "DELETE",
+        "/api/mcp/config/server/test-server",
+        { token: TOKEN },
+      );
+      expect(status).not.toBe(401);
+    });
+  });
+
+  // ── Wallet import ───────────────────────────────────────────────
+
+  describe("POST /api/wallet/import", () => {
+    it("rejects unauthenticated wallet import with 401", async () => {
+      const { status, data } = await req(port, "POST", "/api/wallet/import", {
+        body: { chain: "evm", privateKey: "0xSTOLEN" },
+      });
+      expect(status).toBe(401);
+      expect(data.error).toMatch(/unauthorized/i);
+    });
+
+    it("accepts authenticated wallet import", async () => {
+      const { status } = await req(port, "POST", "/api/wallet/import", {
+        body: { chain: "evm", privateKey: "0xTEST" },
+        token: TOKEN,
+      });
+      expect(status).not.toBe(401);
+    });
+  });
+
+  // ── Wallet export ───────────────────────────────────────────────
+
+  describe("POST /api/wallet/export", () => {
+    it("rejects unauthenticated wallet export with 401", async () => {
+      const { status, data } = await req(port, "POST", "/api/wallet/export", {
+        body: { chain: "evm" },
+      });
+      expect(status).toBe(401);
+      expect(data.error).toMatch(/unauthorized/i);
+    });
+
+    it("accepts authenticated wallet export", async () => {
+      const { status } = await req(port, "POST", "/api/wallet/export", {
+        body: { chain: "evm" },
+        token: TOKEN,
+      });
+      // Not 401 — may fail for other reasons (no wallet configured) but auth gate passes
+      expect(status).not.toBe(401);
+    });
+  });
+
   // ── Terminal execution ────────────────────────────────────────────
 
   describe("POST /api/terminal/run", () => {
