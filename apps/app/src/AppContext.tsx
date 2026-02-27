@@ -411,6 +411,7 @@ function parseConversationMessageEvent(
   const text = value.text;
   const timestamp = value.timestamp;
   const source = value.source;
+  const from = value.from;
   if (
     typeof id !== "string" ||
     (role !== "user" && role !== "assistant") ||
@@ -422,6 +423,9 @@ function parseConversationMessageEvent(
   const parsed: ConversationMessage = { id, role, text, timestamp };
   if (typeof source === "string" && source.length > 0) {
     parsed.source = source;
+  }
+  if (typeof from === "string" && from.length > 0) {
+    parsed.from = from;
   }
   return parsed;
 }
@@ -695,7 +699,7 @@ export interface AppState {
 
   // Plugins
   plugins: PluginInfo[];
-  pluginFilter: "all" | "ai-provider" | "connector" | "feature";
+  pluginFilter: "all" | "ai-provider" | "connector" | "feature" | "streaming";
   pluginStatusFilter: "all" | "enabled" | "disabled";
   pluginSearch: string;
   pluginSettingsOpen: Set<string>;
@@ -872,6 +876,7 @@ export interface AppState {
   commandPaletteOpen: boolean;
   commandQuery: string;
   commandActiveIndex: number;
+  closeCommandPalette: () => void;
 
   // Emote picker
   emotePickerOpen: boolean;
@@ -941,6 +946,8 @@ export interface AppActions {
   handleSelectConversation: (id: string) => Promise<void>;
   handleDeleteConversation: (id: string) => Promise<void>;
   handleRenameConversation: (id: string, title: string) => Promise<void>;
+  /** Send a programmatic message (e.g. from a UiSpec action) without touching chatInput. */
+  sendActionMessage: (text: string) => Promise<void>;
 
   // Triggers
   loadTriggers: () => Promise<void>;
@@ -1184,7 +1191,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // --- Plugins ---
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const [pluginFilter, setPluginFilter] = useState<
-    "all" | "ai-provider" | "connector" | "feature"
+    "all" | "ai-provider" | "connector" | "feature" | "streaming"
   >("all");
   const [pluginStatusFilter, setPluginStatusFilter] = useState<
     "all" | "enabled" | "disabled"
@@ -1302,6 +1309,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const normalized = normalizeAvatarIndex(v);
     setSelectedVrmIndexRaw(normalized);
     saveAvatarIndex(normalized);
+    // Sync to server so headless stream capture uses the same avatar
+    client.saveStreamSettings({ avatarIndex: normalized }).catch(() => {});
   }, []);
 
   // --- Cloud ---
@@ -1578,6 +1587,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setTheme = useCallback((name: ThemeName) => {
     setCurrentTheme(name);
     applyTheme(name);
+    // Sync to server so headless stream capture uses the same theme
+    client.saveStreamSettings({ theme: name }).catch(() => {});
   }, []);
 
   // ── Navigation ─────────────────────────────────────────────────────
@@ -2813,6 +2824,113 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadConversations,
       appendLocalCommandTurn,
       tryHandlePrefixedChatCommand,
+    ],
+  );
+
+  const sendActionMessage = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      if (chatSendBusyRef.current || chatSending) return;
+      chatSendBusyRef.current = true;
+
+      try {
+        let convId: string = activeConversationId ?? "";
+        if (!convId) {
+          try {
+            const { conversation } = await client.createConversation();
+            setConversations((prev) => [conversation, ...prev]);
+            setActiveConversationId(conversation.id);
+            activeConversationIdRef.current = conversation.id;
+            convId = conversation.id;
+          } catch {
+            return;
+          }
+        }
+
+        client.sendWsMessage({
+          type: "active-conversation",
+          conversationId: convId,
+        });
+
+        const now = Date.now();
+        const userMsgId = `temp-action-${now}`;
+        const assistantMsgId = `temp-action-resp-${now}`;
+
+        setConversationMessages((prev: ConversationMessage[]) => [
+          ...prev,
+          { id: userMsgId, role: "user", text: trimmed, timestamp: now },
+          { id: assistantMsgId, role: "assistant", text: "", timestamp: now },
+        ]);
+        setChatSending(true);
+        setChatFirstTokenReceived(false);
+
+        const controller = new AbortController();
+        chatAbortRef.current = controller;
+        let streamedAssistantText = "";
+
+        try {
+          const data = await client.sendConversationMessageStream(
+            convId,
+            trimmed,
+            (token) => {
+              const delta = computeStreamingDelta(streamedAssistantText, token);
+              if (!delta) return;
+              streamedAssistantText += delta;
+              setChatFirstTokenReceived(true);
+              setConversationMessages((prev) =>
+                prev.map((message) =>
+                  message.id === assistantMsgId
+                    ? { ...message, text: `${message.text}${delta}` }
+                    : message,
+                ),
+              );
+            },
+            "DM",
+            controller.signal,
+          );
+
+          if (shouldApplyFinalStreamText(streamedAssistantText, data.text)) {
+            setConversationMessages((prev) => {
+              let changed = false;
+              const next = prev.map((message) => {
+                if (message.id !== assistantMsgId) return message;
+                if (message.text === data.text) return message;
+                changed = true;
+                return { ...message, text: data.text };
+              });
+              return changed ? next : prev;
+            });
+          }
+          void loadConversations();
+        } catch (err) {
+          const abortError = err as Error;
+          if (abortError.name === "AbortError") {
+            setConversationMessages((prev) =>
+              prev.filter(
+                (message) =>
+                  !(message.id === assistantMsgId && !message.text.trim()),
+              ),
+            );
+            return;
+          }
+          await loadConversationMessages(convId);
+        } finally {
+          if (chatAbortRef.current === controller) {
+            chatAbortRef.current = null;
+          }
+          setChatSending(false);
+          setChatFirstTokenReceived(false);
+        }
+      } finally {
+        chatSendBusyRef.current = false;
+      }
+    },
+    [
+      chatSending,
+      activeConversationId,
+      loadConversationMessages,
+      loadConversations,
     ],
   );
 
@@ -4228,6 +4346,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ── Emote picker ────────────────────────────────────────────────────
 
+  const closeCommandPalette = useCallback(() => {
+    _setCommandPaletteOpen(false);
+    setCommandQuery("");
+    setCommandActiveIndex(0);
+  }, []);
+
   const openEmotePicker = useCallback(() => {
     setEmotePickerOpen(true);
   }, []);
@@ -4774,6 +4898,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       void loadWorkbench();
+      void loadPlugins(); // Hydrate plugin state early so Nav sees streaming-base toggle
 
       // Hydrate coding agent sessions
       client
@@ -4871,6 +4996,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
           } else {
             // Non-active — mark unread
             setUnreadConversations((prev) => new Set([...prev, convId]));
+          }
+
+          // Synthesize agent_event for non-retake sources (e.g. discord)
+          // so they appear in the StreamView activity feed
+          if (
+            msg.source &&
+            msg.source !== "retake" &&
+            msg.source !== "client_chat" &&
+            msg.role === "user"
+          ) {
+            appendAutonomousEvent({
+              type: "agent_event",
+              version: 1,
+              eventId: `synth-${msg.id}`,
+              ts: msg.timestamp,
+              stream: "message",
+              payload: {
+                text: msg.text,
+                from: msg.from,
+                source: msg.source,
+                direction: "inbound",
+                channel: msg.source,
+              },
+            });
           }
 
           // Bump conversation to top of list
@@ -5315,6 +5464,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     commandPaletteOpen,
     commandQuery,
     commandActiveIndex,
+    closeCommandPalette,
     emotePickerOpen,
     mcpConfiguredServers,
     mcpServerStatuses,
@@ -5362,6 +5512,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     handleSelectConversation,
     handleDeleteConversation,
     handleRenameConversation,
+    sendActionMessage,
     loadTriggers,
     createTrigger,
     updateTrigger,
