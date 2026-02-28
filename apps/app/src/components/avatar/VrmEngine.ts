@@ -545,7 +545,8 @@ export class VrmEngine {
 
       gltf.scene.updateMatrixWorld(true);
       vrm.scene.updateMatrixWorld(true);
-      const emoteLabel = glbPath.split("/").pop()?.replace(".glb", "") ?? "emote";
+      const emoteLabel =
+        glbPath.split("/").pop()?.replace(".glb", "") ?? "emote";
       const clip = retargetMixamoGltfToVrm(
         { scene: gltf.scene, animations: gltf.animations },
         vrm,
