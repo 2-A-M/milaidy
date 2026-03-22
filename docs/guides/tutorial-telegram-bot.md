@@ -92,6 +92,8 @@ Chat ID formats:
 
 To find your chat ID, use [@userinfobot](https://t.me/userinfobot) on Telegram.
 
+Changes to allowed chats take effect immediately — no restart needed.
+
 ### Show / Hide Token
 
 Click the **Show** button next to the Bot Token field to reveal the saved token value. Click **Hide** to mask it again.
