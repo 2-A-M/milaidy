@@ -5,11 +5,7 @@
  * Uses Bun's native bundler — no monorepo build-utils dependency.
  */
 
-import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-
-const distDir = join(process.cwd(), "dist");
+import { execSync } from "node:child_process";
 
 const result = await Bun.build({
   entrypoints: ["src/index.ts"],
@@ -56,15 +52,12 @@ if (!result.success) {
   process.exit(1);
 }
 
-// Create type declaration stub
-if (!existsSync(distDir)) {
-  await mkdir(distDir, { recursive: true });
+// Emit real declaration files via tsc
+try {
+  execSync("bunx tsc -p tsconfig.build.json", { stdio: "inherit" });
+} catch {
+  // Non-fatal — plugin works at runtime without .d.ts files
+  console.warn("[plugin-whatsapp] tsc declaration emit failed (non-fatal)");
 }
-const dtsContent = [
-  'export * from "../src/index";',
-  'export { default } from "../src/index";',
-  "",
-].join("\n");
-await writeFile(join(distDir, "index.d.ts"), dtsContent, "utf8");
 
 console.log("[plugin-whatsapp] Build complete");
