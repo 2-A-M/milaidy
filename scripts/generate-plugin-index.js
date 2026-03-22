@@ -224,7 +224,9 @@ export function resolveSetupGuideUrl(id) {
   const anchor = SETUP_GUIDE_ANCHORS[id];
   if (!anchor) return undefined;
   // Full URLs are used as-is; anchors are appended to the default root
-  return anchor.startsWith("http") ? anchor : `${PLUGIN_SETUP_GUIDE_ROOT}${anchor}`;
+  return anchor.startsWith("http")
+    ? anchor
+    : `${PLUGIN_SETUP_GUIDE_ROOT}${anchor}`;
 }
 
 export function normalizeRepositoryUrl(repository) {
