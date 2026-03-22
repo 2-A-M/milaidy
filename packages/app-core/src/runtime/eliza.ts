@@ -26,7 +26,7 @@ import {
   syncElizaEnvToMilady,
   syncMiladyEnvToEliza,
 } from "../config/brand-env.js";
-import { loadElizaConfig } from "../config/config.js";
+import { loadElizaConfig, saveElizaConfig } from "../config/config.js";
 import { STYLE_PRESETS } from "../onboarding-presets.js";
 import { normalizeCharacterMessageExamples } from "../utils/character-message-examples";
 import { ensureRuntimeSqlCompatibility } from "../utils/sql-compat";
@@ -177,6 +177,9 @@ export function collectPluginNames(
   ) {
     result.add(EDGE_TTS_PLUGIN);
   }
+  // Plugin manager — required for dashboard "Install" button to work.
+  // Commented out in upstream CORE_PLUGINS; we always load it.
+  result.add("@elizaos/plugin-plugin-manager");
   syncBrandEnvAliases();
   return result;
 }
@@ -677,6 +680,32 @@ export interface BootElizaRuntimeOptionsExt extends BootElizaRuntimeOptions {
   onEmbeddingProgress?: EmbeddingProgressCallback;
 }
 
+const PLUGIN_MANAGER_PACKAGE = "@elizaos/plugin-plugin-manager";
+
+/**
+ * Ensure plugin-plugin-manager is in the config's plugins.entries so
+ * upstream collectPluginNames loads it. Required for the dashboard
+ * "Install Plugin" button.
+ */
+function ensurePluginManagerAllowed(): void {
+  try {
+    const config = loadElizaConfig();
+    const entries =
+      config.plugins?.entries ?? ({} as Record<string, { enabled?: boolean }>);
+    const id = "plugin-manager";
+    if (entries[id]?.enabled === false) return; // explicitly disabled by user
+    if (entries[id]) return; // already present
+    config.plugins ??= {} as unknown as typeof config.plugins;
+    (config.plugins as Record<string, unknown>).entries = {
+      ...entries,
+      [id]: { enabled: true },
+    };
+    saveElizaConfig(config);
+  } catch {
+    // Non-fatal — plugin install button won't work but everything else is fine
+  }
+}
+
 export async function bootElizaRuntime(
   opts: BootElizaRuntimeOptionsExt = {},
 ): Promise<Awaited<ReturnType<typeof upstreamBootElizaRuntime>>> {
@@ -694,6 +723,10 @@ export async function bootElizaRuntime(
     if (!process.env.EMBEDDING_DIMENSION) {
       process.env.EMBEDDING_DIMENSION = "384";
     }
+
+    // Ensure plugin-manager is in the allow list so upstream collectPluginNames
+    // loads it. Required for the dashboard "Install Plugin" button to work.
+    ensurePluginManagerAllowed();
 
     const runtime = await upstreamBootElizaRuntime(opts);
     return runtime ? await repairRuntimeAfterBoot(runtime) : runtime;
@@ -720,6 +753,8 @@ export async function startEliza(
     if (!process.env.EMBEDDING_DIMENSION) {
       process.env.EMBEDDING_DIMENSION = "384";
     }
+
+    ensurePluginManagerAllowed();
 
     if (options?.serverOnly) {
       let currentRuntime =

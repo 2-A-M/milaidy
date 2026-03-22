@@ -125,6 +125,12 @@ test-output/
 
 # External plugin repos (not submodules)
 elizaos-plugins/
+
+# Workspace plugin build artifacts
+plugins/*/dist/
+plugins/*/node_modules/
+plugins/*/.turbo/
+plugins/*/bun.lock
 e2e-screenshots/
 data/
 .avatar-clone-tmp
