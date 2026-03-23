@@ -6279,7 +6279,7 @@
           "placeholder": "JSON array of group IDs, e.g.:\n[\"120363001234567890@g.us\"]"
         }
       },
-      "setupGuideUrl": "https://docs.eliza.ai/plugin-setup-guide#whatsapp"
+      "setupGuideUrl": "https://docs.milady.ai/guides/whatsapp"
     },
     {
       "id": "x402",
