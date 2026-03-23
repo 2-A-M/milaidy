@@ -6244,9 +6244,7 @@
           "label": "DM Policy",
           "type": "select",
           "options": [
-            { "value": "pairing", "label": "Pairing", "description": "Respond after user pairs with the bot" },
-            { "value": "open", "label": "Open", "description": "Respond to anyone" },
-            { "value": "allowlist", "label": "Allowlist", "description": "Only respond to allowed users" },
+            { "value": "open", "label": "Open", "description": "Respond to anyone who messages" },
             { "value": "disabled", "label": "Disabled", "description": "Don't accept DMs" }
           ]
         },
@@ -6254,8 +6252,7 @@
           "label": "Group Policy",
           "type": "select",
           "options": [
-            { "value": "allowlist", "label": "Allowlist", "description": "Only respond in allowed groups" },
-            { "value": "open", "label": "Open", "description": "Respond in any group" },
+            { "value": "open", "label": "Open", "description": "Respond in any group the bot is in" },
             { "value": "disabled", "label": "Disabled", "description": "Don't respond in groups" }
           ]
         }
