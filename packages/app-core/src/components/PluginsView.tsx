@@ -497,7 +497,54 @@ export function paramsToSchema(
 
 /* ── PluginConfigForm bridge ─────────────────────────────────────────── */
 
-function PluginConfigForm({
+/* ── WhatsApp auth mode toggle ──────────────────────────────────────── */
+
+/** Cloud API fields hidden in QR code mode. */
+const WHATSAPP_CLOUD_KEYS = new Set([
+  "WHATSAPP_ACCESS_TOKEN",
+  "WHATSAPP_PHONE_NUMBER_ID",
+  "WHATSAPP_WEBHOOK_VERIFY_TOKEN",
+]);
+
+/** QR/Baileys fields hidden in Cloud API mode. */
+const WHATSAPP_BAILEYS_KEYS = new Set(["WHATSAPP_AUTH_DIR"]);
+
+type WhatsAppAuthMode = "qr" | "cloudapi";
+
+function WhatsAppAuthModeToggle({
+  mode,
+  onModeChange,
+}: {
+  mode: WhatsAppAuthMode;
+  onModeChange: (mode: WhatsAppAuthMode) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card,rgba(255,255,255,0.03))] p-1 mb-4">
+      {(
+        [
+          { id: "qr", label: "QR Code (Personal)" },
+          { id: "cloudapi", label: "Cloud API (Business)" },
+        ] as const
+      ).map((opt) => (
+        <button
+          key={opt.id}
+          type="button"
+          className={`flex-1 text-[12px] font-semibold py-2 px-3 rounded-md transition-colors ${
+            mode === opt.id
+              ? "bg-[var(--accent)] text-[var(--accent-fg,#fff)]"
+              : "text-[var(--muted)] hover:text-[var(--text)]"
+          }`}
+          onClick={() => onModeChange(opt.id)}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Wraps PluginConfigForm with auth mode toggle for WhatsApp. */
+function WhatsAppPluginConfig({
   plugin,
   pluginConfigs,
   onParamChange,
@@ -505,6 +552,47 @@ function PluginConfigForm({
   plugin: PluginInfo;
   pluginConfigs: Record<string, Record<string, string>>;
   onParamChange: (pluginId: string, paramKey: string, value: string) => void;
+}) {
+  // Detect initial mode from current config
+  const hasAuthDir = !!(
+    pluginConfigs.whatsapp?.WHATSAPP_AUTH_DIR ||
+    plugin.parameters?.find((p) => p.key === "WHATSAPP_AUTH_DIR")?.isSet
+  );
+  const hasCloudToken = !!(
+    pluginConfigs.whatsapp?.WHATSAPP_ACCESS_TOKEN ||
+    plugin.parameters?.find((p) => p.key === "WHATSAPP_ACCESS_TOKEN")?.isSet
+  );
+  const [authMode, setAuthMode] = useState<WhatsAppAuthMode>(
+    hasCloudToken && !hasAuthDir ? "cloudapi" : "qr",
+  );
+
+  const hiddenKeys =
+    authMode === "qr" ? WHATSAPP_CLOUD_KEYS : WHATSAPP_BAILEYS_KEYS;
+
+  return (
+    <>
+      <WhatsAppAuthModeToggle mode={authMode} onModeChange={setAuthMode} />
+      <PluginConfigForm
+        plugin={plugin}
+        pluginConfigs={pluginConfigs}
+        onParamChange={onParamChange}
+        hiddenKeys={hiddenKeys}
+      />
+      {authMode === "qr" && <WhatsAppQrOverlay accountId="default" />}
+    </>
+  );
+}
+
+function PluginConfigForm({
+  plugin,
+  pluginConfigs,
+  onParamChange,
+  hiddenKeys,
+}: {
+  plugin: PluginInfo;
+  pluginConfigs: Record<string, Record<string, string>>;
+  onParamChange: (pluginId: string, paramKey: string, value: string) => void;
+  hiddenKeys?: Set<string>;
 }) {
   const params = plugin.parameters ?? [];
   const { schema, hints: autoHints } = useMemo(
@@ -514,15 +602,22 @@ function PluginConfigForm({
 
   // Merge server-provided configUiHints over auto-generated hints.
   // Server hints take priority (override auto-generated ones).
+  // Also apply hiddenKeys from parent (e.g. WhatsApp auth mode toggle).
   const hints = useMemo(() => {
-    const serverHints = plugin.configUiHints;
-    if (!serverHints || Object.keys(serverHints).length === 0) return autoHints;
     const merged: Record<string, ConfigUiHint> = { ...autoHints };
-    for (const [key, serverHint] of Object.entries(serverHints)) {
-      merged[key] = { ...merged[key], ...serverHint };
+    const serverHints = plugin.configUiHints;
+    if (serverHints) {
+      for (const [key, serverHint] of Object.entries(serverHints)) {
+        merged[key] = { ...merged[key], ...serverHint };
+      }
+    }
+    if (hiddenKeys) {
+      for (const key of hiddenKeys) {
+        merged[key] = { ...merged[key], hidden: true };
+      }
     }
     return merged;
-  }, [autoHints, plugin.configUiHints]);
+  }, [autoHints, plugin.configUiHints, hiddenKeys]);
 
   // Build values from current config state + existing server values.
   // Array-typed fields need comma-separated strings parsed into arrays.
@@ -2338,13 +2433,18 @@ function PluginListView({ label, mode = "all", inModal }: PluginListViewProps) {
 
                           {hasParams ? (
                             <div className="space-y-4">
-                              <PluginConfigForm
-                                plugin={plugin}
-                                pluginConfigs={pluginConfigs}
-                                onParamChange={handleParamChange}
-                              />
-                              {plugin.id === "whatsapp" && (
-                                <WhatsAppQrOverlay accountId="default" />
+                              {plugin.id === "whatsapp" ? (
+                                <WhatsAppPluginConfig
+                                  plugin={plugin}
+                                  pluginConfigs={pluginConfigs}
+                                  onParamChange={handleParamChange}
+                                />
+                              ) : (
+                                <PluginConfigForm
+                                  plugin={plugin}
+                                  pluginConfigs={pluginConfigs}
+                                  onParamChange={handleParamChange}
+                                />
                               )}
                             </div>
                           ) : (
@@ -2949,13 +3049,18 @@ function PluginListView({ label, mode = "all", inModal }: PluginListViewProps) {
                   )}
 
                   <div className="px-5 py-3">
-                    <PluginConfigForm
-                      plugin={p}
-                      pluginConfigs={pluginConfigs}
-                      onParamChange={handleParamChange}
-                    />
-                    {p.id === "whatsapp" && (
-                      <WhatsAppQrOverlay accountId="default" />
+                    {p.id === "whatsapp" ? (
+                      <WhatsAppPluginConfig
+                        plugin={p}
+                        pluginConfigs={pluginConfigs}
+                        onParamChange={handleParamChange}
+                      />
+                    ) : (
+                      <PluginConfigForm
+                        plugin={p}
+                        pluginConfigs={pluginConfigs}
+                        onParamChange={handleParamChange}
+                      />
                     )}
                   </div>
                 </div>

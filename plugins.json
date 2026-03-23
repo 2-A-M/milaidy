@@ -6236,6 +6236,11 @@
           "sensitive": false
         }
       },
+      "configUiHints": {
+        "WHATSAPP_AUTH_DIR": { "advanced": true, "label": "Auth Directory" },
+        "WHATSAPP_API_VERSION": { "advanced": true, "label": "API Version" },
+        "WHATSAPP_BUSINESS_ACCOUNT_ID": { "advanced": true, "label": "Business Account ID" }
+      },
       "setupGuideUrl": "https://docs.eliza.ai/plugin-setup-guide#whatsapp"
     },
     {
