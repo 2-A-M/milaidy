@@ -16,7 +16,7 @@ import type {
   WgpuTagElement,
 } from "./types";
 import {
-  DEFAULT_RELEASE_NOTES_URL,
+
   RELEASE_NOTES_PARTITION,
   SESSION_PARTITIONS,
 } from "./types";
@@ -192,6 +192,9 @@ export function ReleaseNotesSection({
   onReleaseNotesUrlChange: (value: string) => void;
   onResetUrl: () => void;
 }) {
+  const { appUrl } = useBranding();
+  const defaultReleaseNotesUrl = `${appUrl}/releases/`;
+
   return (
     <section className="rounded-2xl border border-border bg-bg-accent p-4">
       <div className="mb-4">
@@ -208,7 +211,7 @@ export function ReleaseNotesSection({
         <Input
           value={releaseNotesUrl}
           onChange={(event) => onReleaseNotesUrlChange(event.target.value)}
-          placeholder={DEFAULT_RELEASE_NOTES_URL}
+          placeholder={defaultReleaseNotesUrl}
           className="font-mono text-xs"
         />
         <div className="flex flex-wrap gap-2">
@@ -244,7 +247,7 @@ export function ReleaseNotesSection({
         ) : (
           <div className="rounded-xl border border-border bg-bg p-3 text-xs text-muted">
             Using updater URL:{" "}
-            {nativeUpdater?.baseUrl ?? DEFAULT_RELEASE_NOTES_URL}
+            {nativeUpdater?.baseUrl ?? defaultReleaseNotesUrl}
           </div>
         )}
       </div>
@@ -265,6 +268,9 @@ export function BuildRuntimeSection({
   nativeUpdater: DesktopUpdaterSnapshot | null;
   onToggleDock: () => void;
 }) {
+  const { appUrl } = useBranding();
+  const defaultReleaseNotesUrl = `${appUrl}/releases/`;
+
   return (
     <section className="rounded-2xl border border-border bg-bg-accent p-4">
       <div className="mb-4">
@@ -292,7 +298,7 @@ export function BuildRuntimeSection({
         <DefinitionRow label="CEF version" value={buildInfo?.cefVersion} />
         <DefinitionRow
           label="Updater base URL"
-          value={nativeUpdater?.baseUrl ?? DEFAULT_RELEASE_NOTES_URL}
+          value={nativeUpdater?.baseUrl ?? defaultReleaseNotesUrl}
         />
         <DefinitionRow
           label="Dock icon visible"
@@ -502,6 +508,12 @@ export function WgpuSurfaceSection({
           <div className="mb-3 text-xs font-semibold text-txt">
             Browser WebGPU Status
           </div>
+          <p className="mb-3 text-xs text-muted">
+            This reports whether the desktop webview is expected to expose
+            WebGPU for the WGPU preview above. It is not overall app health:
+            companion and avatar already fall back to WebGL when WebGPU is
+            missing.
+          </p>
           <DefinitionRow
             label="Inline surface ready"
             value={String(wgpuReady)}
@@ -535,3 +547,4 @@ export function WgpuSurfaceSection({
     </section>
   );
 }
+import { useBranding } from "../../config/branding";

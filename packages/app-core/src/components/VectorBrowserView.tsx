@@ -7,7 +7,7 @@
  * Toggle to a 2D scatter-plot graph view of embeddings.
  */
 
-import { Button, Input } from "@miladyai/ui";
+import { Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@miladyai/ui";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { client, type QueryResult, type TableInfo } from "../api";
@@ -644,7 +644,11 @@ function VectorGraph3D({
       let onWheel: ((e: WheelEvent) => void) | null = null;
       let onMouseLeave: (() => void) | null = null;
       let handleResize: (() => void) | null = null;
+      let visibilityHandler: (() => void) | null = null;
       let cleanedUp = false;
+      let rafActive =
+        typeof document === "undefined" ||
+        document.visibilityState === "visible";
 
       cleanupRef.current = () => {
         if (cleanedUp) return;
@@ -920,13 +924,27 @@ function VectorGraph3D({
         return;
       }
 
-      // Animation loop
+      // Animation loop — pause while tab is hidden to save GPU.
       const animate = () => {
+        if (!rafActive || cleanedUp) return;
         updateCamera();
         renderer.render(scene, camera);
         animationRef.current = requestAnimationFrame(animate);
       };
-      animate();
+      visibilityHandler = () => {
+        if (document.visibilityState === "hidden") {
+          rafActive = false;
+          cancelAnimationFrame(animationRef.current);
+          animationRef.current = 0;
+        } else {
+          rafActive = true;
+          animationRef.current = requestAnimationFrame(animate);
+        }
+      };
+      document.addEventListener("visibilitychange", visibilityHandler);
+      if (rafActive) {
+        animate();
+      }
 
       // Resize handler
       handleResize = () => {
@@ -1424,26 +1442,30 @@ export function VectorBrowserView({ leftNav }: { leftNav?: ReactNode }) {
             )}
 
             {tables.length > 1 && (
-              <select
+              <Select
                 value={selectedTable}
-                onChange={(e) => {
-                  setSelectedTable(e.target.value);
+                onValueChange={(value) => {
+                  setSelectedTable(value);
                   setPage(0);
                   setSearch("");
                   setSearchInput("");
                 }}
-                className="px-3 py-1.5 text-xs border border-border bg-card rounded-lg text-txt"
               >
-                {tables.map((t) => (
-                  <option key={t.name} value={t.name}>
-                    {t.name} (
-                    {typeof t.rowCount === "object"
-                      ? JSON.stringify(t.rowCount)
-                      : t.rowCount}
-                    )
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="px-3 py-1.5 text-xs border border-border bg-card rounded-lg text-txt h-auto w-auto">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {tables.map((t) => (
+                    <SelectItem key={t.name} value={t.name}>
+                      {t.name} (
+                      {typeof t.rowCount === "object"
+                        ? JSON.stringify(t.rowCount)
+                        : t.rowCount}
+                      )
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
 
             {/* View mode toggle */}

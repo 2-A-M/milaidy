@@ -4,51 +4,14 @@
  * Tests the GET /api/health endpoint added for system observability.
  */
 
-import http from "node:http";
 import { startApiServer } from "@miladyai/app-core/src/api/server";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { req } from "./helpers/http";
 
 vi.mock("@miladyai/app-core/src/services/mcp-marketplace", () => ({
   searchMcpMarketplace: vi.fn().mockResolvedValue({ results: [] }),
   getMcpServerDetails: vi.fn().mockResolvedValue(null),
 }));
-
-function req(
-  port: number,
-  method: string,
-  p: string,
-): Promise<{
-  status: number;
-  data: Record<string, unknown>;
-}> {
-  return new Promise((resolve, reject) => {
-    const r = http.request(
-      {
-        hostname: "127.0.0.1",
-        port,
-        path: p,
-        method,
-        headers: { "Content-Type": "application/json" },
-      },
-      (res) => {
-        const ch: Buffer[] = [];
-        res.on("data", (c: Buffer) => ch.push(c));
-        res.on("end", () => {
-          const raw = Buffer.concat(ch).toString("utf-8");
-          let data: Record<string, unknown> = {};
-          try {
-            data = JSON.parse(raw) as Record<string, unknown>;
-          } catch {
-            data = { _raw: raw };
-          }
-          resolve({ status: res.statusCode ?? 0, data });
-        });
-      },
-    );
-    r.on("error", reject);
-    r.end();
-  });
-}
 
 let port: number;
 let server: Awaited<ReturnType<typeof startApiServer>>;
@@ -66,6 +29,52 @@ afterAll(async () => {
     await server.close();
   }
 }, 15_000);
+
+describe("GET /api/dev/stack", () => {
+  it("returns schema, live listen port, and desktop fields from env", async () => {
+    const { status, data } = await req(port, "GET", "/api/dev/stack");
+    expect(status).toBe(200);
+    expect(data.schema).toBe("milady.dev.stack/v1");
+    expect(data.api).toEqual({
+      listenPort: port,
+      baseUrl: `http://127.0.0.1:${port}`,
+    });
+    expect(data.desktop).toMatchObject({
+      rendererUrl: null,
+      uiPort: null,
+      desktopApiBase: null,
+    });
+    expect(data.cursorScreenshot).toEqual({
+      available: false,
+      path: null,
+    });
+    expect(data.desktopDevLog).toEqual({
+      filePath: null,
+      apiTailPath: null,
+    });
+    expect(Array.isArray(data.hints)).toBe(true);
+  });
+});
+
+describe("GET /api/dev/console-log", () => {
+  it("returns 404 when log path env is not set", async () => {
+    const { status, data } = await req(port, "GET", "/api/dev/console-log");
+    expect(status).toBe(404);
+    expect(data).toMatchObject({ error: expect.any(String) });
+  });
+});
+
+describe("GET /api/dev/cursor-screenshot", () => {
+  it("returns 404 when Electrobun screenshot upstream is not configured", async () => {
+    const { status, data } = await req(
+      port,
+      "GET",
+      "/api/dev/cursor-screenshot",
+    );
+    expect(status).toBe(404);
+    expect(data).toMatchObject({ error: expect.any(String) });
+  });
+});
 
 describe("GET /api/health", () => {
   it("returns structured status", async () => {

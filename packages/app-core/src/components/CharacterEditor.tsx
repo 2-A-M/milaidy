@@ -5,23 +5,24 @@
  * right panel has style rules + examples. Footer has voice + save + reset.
  */
 
-import { client, type StylePreset } from "@miladyai/app-core/api";
+import { client } from "../api/client";
 import {
   APP_EMOTE_EVENT,
   dispatchWindowEvent,
   VOICE_CONFIG_UPDATED_EVENT,
-} from "@miladyai/app-core/events";
+} from "../events/index";
 import {
   type MiladyStylePreset,
   STYLE_PRESETS,
-} from "@miladyai/app-core/onboarding-presets";
-import { useApp } from "@miladyai/app-core/state";
-import { normalizeCharacterMessageExamples } from "@miladyai/app-core/utils/character-message-examples";
+} from "../onboarding-presets";
+import { useApp } from "../state/useApp";
+import { normalizeCharacterMessageExamples } from "../utils/character-message-examples";
 import {
   EDGE_BACKUP_VOICES,
   PREMADE_VOICES,
   sanitizeApiKey,
-} from "@miladyai/app-core/voice";
+  type VoicePreset,
+} from "../voice/types";
 import { Button, Input, Textarea, ThemedSelect } from "@miladyai/ui";
 import { useChatAvatarVoiceBridge, useVoiceChat } from "../hooks";
 import { AvatarSelector } from "./AvatarSelector";
@@ -75,8 +76,22 @@ import {
   useRef,
   useState,
 } from "react";
-import "./CharacterEditor.css";
+/* ── Shared gold gradient styles ─────────────────────────────────── */
+const goldGradientStyle = {
+  background: "linear-gradient(135deg, var(--burnished-gold) 0%, var(--classic-gold) 58%, var(--highlight-gold) 100%)",
+  color: "#1a1a1a",
+  borderColor: "rgba(232, 217, 168, 0.55)",
+  boxShadow: "0 0 18px var(--gold-glow), inset 0 1px 0 var(--soft-white-glow)",
+} as const;
 
+const idleSaveBtnStyle = {
+  background: "linear-gradient(135deg, rgba(122,90,31,0.25) 0%, rgba(207,175,90,0.2) 58%, rgba(242,210,122,0.15) 100%)",
+  color: "rgba(232, 217, 168, 0.5)",
+  borderColor: "rgba(207, 175, 90, 0.2)",
+  boxShadow: "none",
+} as const;
+
+const pageTabsBoxShadow = "0 10px 26px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.05)";
 /* ── Constants ─────────────────────────────────────────────────────── */
 
 const DEFAULT_ELEVEN_FAST_MODEL = "eleven_flash_v2_5";
@@ -245,12 +260,20 @@ export function CharacterEditor({
   >("identity");
   const [rightTab, setRightTab] = useState<"style" | "examples">("style");
   const [customizing, setCustomizing] = useState(false);
+  const leftPanelRef = useRef<HTMLDivElement>(null);
+  const rightPanelRef = useRef<HTMLDivElement>(null);
 
   // Sync rightTab with activePage
   useEffect(() => {
     if (activePage === "style") setRightTab("style");
     else if (activePage === "examples") setRightTab("examples");
   }, [activePage]);
+
+  useEffect(() => {
+    if (!customizing) return;
+    leftPanelRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    rightPanelRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [activePage, customizing]);
 
   /* ── Style entry state ──────────────────────────────────────────── */
   const [pendingStyleEntries, setPendingStyleEntries] = useState<
@@ -352,7 +375,10 @@ export function CharacterEditor({
     }
   }, [onboardingPresetStyles]);
 
-  const characterRoster = resolveRosterEntries(rosterStyles);
+  const characterRoster = useMemo(
+    () => resolveRosterEntries(rosterStyles),
+    [rosterStyles],
+  );
 
   const d = characterDraft;
   const fallbackCharacterName =
@@ -379,25 +405,31 @@ export function CharacterEditor({
     : characterData;
 
   /* ── Resolve active roster entry ────────────────────────────────── */
-  const activeCharacterRosterEntry: CharacterRosterEntry | null = (() => {
-    if (selectedCharacterId) {
-      const found = characterRoster.find((e) => e.id === selectedCharacterId);
-      if (found) return found;
-    }
-    const byVrm = characterRoster.find(
-      (e) => e.avatarIndex === selectedVrmIndex,
-    );
-    if (byVrm) return byVrm;
+  const activeCharacterRosterEntry: CharacterRosterEntry | null =
+    useMemo(() => {
+      if (selectedCharacterId) {
+        const found = characterRoster.find((e) => e.id === selectedCharacterId);
+        if (found) return found;
+      }
+      const byVrm = characterRoster.find(
+        (e) => e.avatarIndex === selectedVrmIndex,
+      );
+      if (byVrm) return byVrm;
 
-    if (!currentCharacter) return null;
-    const currentName =
-      typeof currentCharacter.name === "string"
-        ? currentCharacter.name.trim()
-        : "";
-    const byName = characterRoster.find((e) => e.name === currentName);
-    if (byName) return byName;
-    return null;
-  })();
+      if (!currentCharacter) return null;
+      const currentName =
+        typeof currentCharacter.name === "string"
+          ? currentCharacter.name.trim()
+          : "";
+      const byName = characterRoster.find((e) => e.name === currentName);
+      if (byName) return byName;
+      return null;
+    }, [
+      characterRoster,
+      currentCharacter,
+      selectedCharacterId,
+      selectedVrmIndex,
+    ]);
 
   /* ── Seed savedCharacterId from server data on first load ────────── */
   useEffect(() => {
@@ -977,8 +1009,8 @@ export function CharacterEditor({
   /* ── Loading state ──────────────────────────────────────────────── */
   if (characterLoading && !characterData) {
     return (
-      <div className="ce-root">
-        <div className="ce-loading">
+      <div className="relative flex flex-col justify-end w-full flex-1 gap-2 overflow-hidden select-none transition-[width,margin-left] duration-[400ms] ease-in-out [-webkit-tap-highlight-color:transparent] max-[600px]:overflow-visible">
+        <div className="flex items-center justify-center flex-1 text-muted text-[13px]">
           {t("charactereditor.LoadingCharacterData", {
             defaultValue: "Loading character data...",
           })}
@@ -989,11 +1021,11 @@ export function CharacterEditor({
 
   /* ── Render ─────────────────────────────────────────────────────── */
   return (
-    <div className="ce-layout-container" onWheel={(e) => e.stopPropagation()}>
-      <div className={`ce-root${customizing ? " ce-root--editor-active" : ""}`}>
+    <div className="absolute inset-0 z-10 flex flex-col pointer-events-none pt-[4.5rem] px-6 pb-3 max-md:px-3 max-md:pb-2 max-md:pt-[4.5rem] [&>*]:pointer-events-auto" onWheel={(e) => e.stopPropagation()}>
+      <div className={`relative flex flex-col justify-end w-full flex-1 gap-2 overflow-hidden select-none transition-[width,margin-left] duration-[400ms] ease-in-out [-webkit-tap-highlight-color:transparent] max-[600px]:overflow-visible [&_input]:select-text [&_textarea]:select-text [&_*:focus-visible:not(input):not(textarea)]:outline-none [&_*:focus-visible:not(input):not(textarea)]:shadow-none [&_button:focus-visible]:outline-none [&_button:focus-visible]:shadow-none${customizing ? " md:w-[40%] md:ml-auto" : ""}`}>
         {/* ── Character Roster (when NOT customizing) ────────────────── */}
         {!customizing && (
-          <div className="ce-roster-wrap">
+          <div className="shrink min-h-0 overflow-hidden flex flex-col items-center justify-end w-full relative max-[600px]:!overflow-visible pointer-events-auto">
             <CharacterRoster
               entries={characterRoster}
               selectedId={
@@ -1005,67 +1037,79 @@ export function CharacterEditor({
         )}
 
         {customizing && (
-          <div className="ce-page-tabs-row">
-            <div className="ce-page-tabs">
-              <button
+          <div
+            className="pointer-events-auto flex flex-col gap-3 flex-1 min-h-0"
+            role="region"
+            aria-label={t("charactereditor.TabbedEditorGroupLabel", {
+              defaultValue: "Character editor — tabbed sections",
+            })}
+          >
+            <div className="flex items-center justify-between gap-3 shrink-0">
+              <div className="flex gap-1 p-1 rounded-lg bg-bg-elevated border border-border items-center shrink-0" style={{ boxShadow: "0 10px 26px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.05)" }}>
+                <button
+                  type="button"
+                  className="flex-initial px-[0.6rem] py-1.5 rounded-md border border-transparent bg-transparent text-txt text-[10px] font-bold uppercase tracking-[0.1em] cursor-pointer transition-[background,border-color,color,box-shadow] duration-150 text-center hover:text-txt-strong hover:bg-bg-hover hover:border-border"
+                  style={activePage === "identity" ? goldGradientStyle : undefined}
+                  onClick={() => setActivePage("identity")}
+                >
+                  {t("charactereditor.TabCharacter", {
+                    defaultValue: "Character",
+                  })}
+                </button>
+                <button
+                  type="button"
+                  className="flex-initial px-[0.6rem] py-1.5 rounded-md border border-transparent bg-transparent text-txt text-[10px] font-bold uppercase tracking-[0.1em] cursor-pointer transition-[background,border-color,color,box-shadow] duration-150 text-center hover:text-txt-strong hover:bg-bg-hover hover:border-border"
+                  style={activePage === "style" ? goldGradientStyle : undefined}
+                  onClick={() => {
+                    setRightTab("style");
+                    setActivePage("style");
+                  }}
+                >
+                  {t("charactereditor.TabStyles", { defaultValue: "Styles" })}
+                </button>
+                <button
+                  type="button"
+                  className="flex-initial px-[0.6rem] py-1.5 rounded-md border border-transparent bg-transparent text-txt text-[10px] font-bold uppercase tracking-[0.1em] cursor-pointer transition-[background,border-color,color,box-shadow] duration-150 text-center hover:text-txt-strong hover:bg-bg-hover hover:border-border"
+                  style={activePage === "examples" ? goldGradientStyle : undefined}
+                  onClick={() => {
+                    setRightTab("examples");
+                    setActivePage("examples");
+                  }}
+                >
+                  {t("charactereditor.TabExamples", { defaultValue: "Examples" })}
+                </button>
+              </div>
+              <Button
                 type="button"
-                className={`ce-page-tab ${activePage === "identity" ? "ce-page-tab--active" : ""}`}
-                onClick={() => setActivePage("identity")}
-              >
-                {t("charactereditor.TabCharacter", {
-                  defaultValue: "Character",
+                variant="outline"
+                size="sm"
+                className="h-9 rounded-xl px-2.5 text-[11px] font-semibold disabled:opacity-40"
+                style={goldGradientStyle}
+                onClick={handleResetToDefaults}
+                disabled={!activeCharacterRosterEntry}
+                title={t("charactereditor.ResetToDefaults", {
+                  defaultValue: "Reset to Defaults",
                 })}
-              </button>
-              <button
-                type="button"
-                className={`ce-page-tab ${activePage === "style" ? "ce-page-tab--active" : ""}`}
-                onClick={() => {
-                  setRightTab("style");
-                  setActivePage("style");
-                }}
               >
-                {t("charactereditor.TabStyles", { defaultValue: "Styles" })}
-              </button>
-              <button
-                type="button"
-                className={`ce-page-tab ${activePage === "examples" ? "ce-page-tab--active" : ""}`}
-                onClick={() => {
-                  setRightTab("examples");
-                  setActivePage("examples");
-                }}
-              >
-                {t("charactereditor.TabExamples", { defaultValue: "Examples" })}
-              </button>
+                <RotateCcw className="h-4 w-4 mr-1" />
+                {t("charactereditor.Reset", { defaultValue: "Reset" })}
+              </Button>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="ce-reset-btn"
-              onClick={handleResetToDefaults}
-              disabled={!activeCharacterRosterEntry}
-              title={t("charactereditor.ResetToDefaults", {
-                defaultValue: "Reset to Defaults",
-              })}
-            >
-              <RotateCcw className="h-4 w-4 mr-1" />
-              {t("charactereditor.Reset", { defaultValue: "Reset" })}
-            </Button>
-          </div>
-        )}
 
-        {customizing && (
-          <div className="ce-panels ce-panels--single">
+            <div
+              className="flex flex-col flex-1 min-h-0 overflow-hidden max-md:gap-0"
+            >
             {/* ── LEFT PANEL (Character identity) ───────────────────────── */}
             <div
-              className={`ce-panel ce-panel-left ${activePage !== "identity" ? "ce-panel--hidden" : ""}`}
+              ref={leftPanelRef}
+              className={`flex flex-col flex-1 gap-3 min-h-0 overflow-y-auto pr-1 [scrollbar-gutter:stable] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-sm ${activePage !== "identity" ? "hidden" : ""}`}
             >
               {/* Name + Voice (50/50 split) */}
-              <section className="ce-section">
-                <div className="ce-name-voice-row">
-                  <div className="ce-name-voice-col">
-                    <div className="ce-section-header">
-                      <span className="ce-label">
+              <section className="flex flex-col gap-2 p-3 border border-border rounded-xl bg-card">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-2 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
                         {t("charactereditor.Name", { defaultValue: "Name" })}
                       </span>
                     </div>
@@ -1078,16 +1122,16 @@ export function CharacterEditor({
                       onChange={(
                         e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
                       ) => handleFieldEdit("name", e.target.value)}
-                      className="ce-input"
+                      className="h-8 rounded-lg border-border bg-white/[0.04] text-[13px] text-txt"
                     />
                   </div>
-                  <div className="ce-name-voice-col">
-                    <div className="ce-section-header">
-                      <span className="ce-label">
+                  <div className="flex flex-col gap-2 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
                         {t("charactereditor.Voice", { defaultValue: "Voice" })}
                       </span>
                     </div>
-                    <div className="ce-voice-inline">
+                    <div className="flex items-center gap-1.5">
                       <ThemedSelect
                         value={voiceSelectValue}
                         groups={
@@ -1106,7 +1150,7 @@ export function CharacterEditor({
                           defaultValue: "Select a voice",
                         })}
                         menuPlacement="bottom"
-                        className="ce-voice-inline-select"
+                        className="flex-1 min-w-0"
                         triggerClassName="h-8 rounded-md border-border/50 bg-bg/65 px-3 py-0 text-[11px] shadow-inner backdrop-blur-sm"
                         menuClassName="border-border/60 bg-bg/92 shadow-2xl backdrop-blur-md"
                       />
@@ -1114,7 +1158,7 @@ export function CharacterEditor({
                         type="button"
                         variant={voiceTesting ? "destructive" : "outline"}
                         size="icon"
-                        className="ce-voice-test-btn"
+                        className="h-8 w-8 rounded-full border-transparent bg-transparent p-0 shadow-none text-muted shrink-0 hover:text-txt hover:bg-white/10"
                         onClick={() => {
                           if (voiceTesting) {
                             handleStopTest();
@@ -1155,15 +1199,15 @@ export function CharacterEditor({
               </section>
 
               {/* Bio / About Me */}
-              <section className="ce-section ce-section--grow">
-                <div className="ce-section-header">
-                  <span className="ce-label">
+              <section className="flex flex-col gap-2 p-3 border border-border rounded-xl bg-card flex-1 min-h-0">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
                     {t("charactereditor.AboutMe", { defaultValue: "About Me" })}
                   </span>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="ce-regen-btn"
+                    className="h-6 px-2 text-[10px] font-bold text-[color:var(--champagne-gold)]"
                     onClick={() => void handleGenerate("bio")}
                     disabled={generating === "bio"}
                   >
@@ -1185,14 +1229,14 @@ export function CharacterEditor({
                   onChange={(
                     e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
                   ) => handleFieldEdit("bio", e.target.value)}
-                  className="ce-textarea ce-textarea--compact"
+                  className="rounded-lg border-border bg-white/[0.04] font-mono text-xs leading-relaxed text-txt px-3 py-2 resize-none flex-1 min-h-12 overflow-y-auto"
                 />
               </section>
 
               {/* System Prompt / Directions */}
-              <section className="ce-section ce-section--grow">
-                <div className="ce-section-header">
-                  <span className="ce-label">
+              <section className="flex flex-col gap-2 p-3 border border-border rounded-xl bg-card flex-1 min-h-0">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
                     {t("charactereditor.SystemPrompt", {
                       defaultValue: "System Prompt",
                     })}
@@ -1200,7 +1244,7 @@ export function CharacterEditor({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="ce-regen-btn"
+                    className="h-6 px-2 text-[10px] font-bold text-[color:var(--champagne-gold)]"
                     onClick={() => void handleGenerate("system")}
                     disabled={generating === "system"}
                   >
@@ -1219,25 +1263,26 @@ export function CharacterEditor({
                   onChange={(
                     e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
                   ) => handleFieldEdit("system", e.target.value)}
-                  className="ce-textarea ce-textarea--compact"
+                  className="rounded-lg border-border bg-white/[0.04] font-mono text-xs leading-relaxed text-txt px-3 py-2 resize-none flex-1 min-h-12 overflow-y-auto"
                 />
               </section>
             </div>
 
             {/* ── RIGHT PANEL ───────────────────────────────────────────── */}
             <div
-              className={`ce-panel ce-panel-right ${activePage === "identity" ? "ce-panel--hidden" : ""}`}
+              ref={rightPanelRef}
+              className={`flex flex-col flex-1 gap-3 min-h-0 overflow-y-auto pr-1 [scrollbar-gutter:stable] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-sm ${activePage === "identity" ? "hidden" : ""}`}
             >
               {/* Style Rules */}
               <section
-                className="ce-section ce-section--grow"
+                className="flex flex-col gap-2 p-3 border border-border rounded-xl bg-card flex-1 min-h-0"
                 style={{ display: rightTab === "style" ? undefined : "none" }}
               >
-                <div className="ce-section-header">
+                <div className="flex items-center justify-between">
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="ce-regen-btn"
+                    className="h-6 px-2 text-[10px] font-bold text-[color:var(--champagne-gold)]"
                     onClick={() => void handleGenerate("style", "replace")}
                     disabled={generating === "style"}
                   >
@@ -1246,23 +1291,23 @@ export function CharacterEditor({
                       : t("charactereditor.Regenerate")}
                   </Button>
                 </div>
-                <div className="ce-style-sections">
+                <div className="flex flex-col gap-3 min-h-0">
                   {STYLE_SECTION_KEYS.map((key) => {
                     const items = d.style?.[key] ?? [];
                     return (
                       <div
                         key={key}
-                        className="ce-style-group"
+                        className="flex flex-col gap-1.5"
                         data-testid={`style-section-${key}`}
                       >
-                        <div className="ce-style-entries">
+                        <div className="flex flex-col gap-1">
                           {items.length > 0 ? (
                             items.map((item, index) => (
                               <div
                                 key={`${key}:${item}`}
-                                className="ce-style-entry"
+                                className="group flex items-start gap-2 px-2.5 py-1.5 rounded-md border border-border bg-white/[0.02]"
                               >
-                                <span className="ce-style-entry-num">
+                                <span className="mt-0.5 shrink-0 text-[10px] font-bold text-accent">
                                   {index + 1}
                                 </span>
                                 <Textarea
@@ -1282,11 +1327,12 @@ export function CharacterEditor({
                                   onBlur={() =>
                                     handleCommitStyleEntry(key, index)
                                   }
-                                  className="ce-style-entry-input"
+                                  className="min-w-0 flex-1 resize-none border-none bg-transparent p-0 font-mono text-xs leading-normal text-txt [field-sizing:content] min-h-[1.5em] focus-visible:outline-none focus-visible:shadow-none"
                                 />
-                                <button
-                                  type="button"
-                                  className="ce-style-entry-remove"
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="mt-0.5 shrink-0 text-muted opacity-0 transition-opacity duration-150 p-0 h-auto w-auto hover:text-red-500 group-hover:opacity-100"
                                   onClick={() =>
                                     handleRemoveStyleEntry(key, index)
                                   }
@@ -1304,16 +1350,16 @@ export function CharacterEditor({
                                   >
                                     <path d="M2 2l6 6M8 2l-6 6" />
                                   </svg>
-                                </button>
+                                </Button>
                               </div>
                             ))
                           ) : (
-                            <div className="ce-style-empty">
+                            <div className="rounded-md border border-dashed border-border px-3 py-2 text-[11px] text-muted">
                               {STYLE_SECTION_EMPTY_STATES[key]}
                             </div>
                           )}
                         </div>
-                        <div className="ce-style-add">
+                        <div className="flex items-center gap-2">
                           <Input
                             type="text"
                             value={pendingStyleEntries[key]}
@@ -1331,12 +1377,12 @@ export function CharacterEditor({
                                 handleAddStyleEntry(key);
                               }
                             }}
-                            className="ce-input ce-input--sm"
+                            className="h-7 text-xs flex-1 min-w-0 rounded-lg border-border bg-white/[0.04] text-[13px] text-txt"
                           />
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="ce-regen-btn"
+                            className="h-6 px-2 text-[10px] font-bold text-[color:var(--champagne-gold)]"
                             onClick={() => handleAddStyleEntry(key)}
                             disabled={!pendingStyleEntries[key].trim()}
                           >
@@ -1351,13 +1397,13 @@ export function CharacterEditor({
 
               {/* Chat Examples */}
               <section
-                className="ce-section ce-section--grow"
+                className="flex flex-col gap-2 p-3 border border-border rounded-xl bg-card flex-1 min-h-0"
                 style={{
                   display: rightTab === "examples" ? undefined : "none",
                 }}
               >
-                <div className="ce-section-header">
-                  <span className="ce-label">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
                     {t("charactereditor.ChatExamples", {
                       defaultValue: "Chat Examples",
                     })}
@@ -1365,7 +1411,7 @@ export function CharacterEditor({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="ce-regen-btn"
+                    className="h-6 px-2 text-[10px] font-bold text-[color:var(--champagne-gold)]"
                     onClick={() =>
                       void handleGenerate("chatExamples", "replace")
                     }
@@ -1378,19 +1424,20 @@ export function CharacterEditor({
                         })}
                   </Button>
                 </div>
-                <div className="ce-examples-list">
+                <div className="flex flex-col gap-1.5 overflow-y-auto min-h-0">
                   {normalizedMessageExamples.map((convo, ci) => (
                     // biome-ignore lint/suspicious/noArrayIndexKey: order is static in designer
-                    <div key={`convo-${ci}`} className="ce-example-convo">
-                      <div className="ce-example-convo-header">
-                        <span className="ce-example-convo-label">
+                    <div key={`convo-${ci}`} className="rounded-lg border border-border p-2.5">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted">
                           {t("charactereditor.ConversationN", {
                             defaultValue: `Conversation ${ci + 1}`,
                           }).replace("{n}", String(ci + 1))}
                         </span>
-                        <button
-                          type="button"
-                          className="ce-style-entry-remove"
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="mt-0.5 shrink-0 text-muted opacity-0 transition-opacity duration-150 p-0 h-auto w-auto hover:text-red-500 group-hover:opacity-100"
                           onClick={() => {
                             const updated = [...normalizedMessageExamples];
                             updated.splice(ci, 1);
@@ -1409,17 +1456,17 @@ export function CharacterEditor({
                           >
                             <path d="M2 2l6 6M8 2l-6 6" />
                           </svg>
-                        </button>
+                        </Button>
                       </div>
-                      <div className="ce-example-messages">
+                      <div className="flex flex-col gap-1">
                         {convo.examples.map((msg, mi) => (
                           // biome-ignore lint/suspicious/noArrayIndexKey: order is static in designer
                           <div
                             key={`msg-${ci}-${mi}`}
-                            className="ce-example-msg"
+                            className="flex items-center gap-2"
                           >
                             <span
-                              className={`ce-example-msg-role ${msg.name === "{{user1}}" ? "" : "ce-example-msg-role--agent"}`}
+                              className={`w-10 shrink-0 text-right text-[9px] font-bold uppercase tracking-[0.1em] text-muted${msg.name === "{{user1}}" ? "" : " text-accent"}`}
                             >
                               {msg.name === "{{user1}}" ? "user" : "agent"}
                             </span>
@@ -1438,7 +1485,7 @@ export function CharacterEditor({
                                 updated[ci] = convoClone;
                                 handleFieldEdit("messageExamples", updated);
                               }}
-                              className="ce-example-msg-input"
+                              className="h-7 flex-1 rounded-md border border-border bg-white/[0.03] px-2 font-mono text-[11px] text-txt outline-none focus:border-accent"
                             />
                           </div>
                         ))}
@@ -1446,7 +1493,7 @@ export function CharacterEditor({
                     </div>
                   ))}
                   {normalizedMessageExamples.length === 0 && (
-                    <div className="ce-style-empty">
+                    <div className="rounded-md border border-dashed border-border px-3 py-2 text-[11px] text-muted">
                       {t("charactereditor.NoChatExamples", {
                         defaultValue: "No chat examples yet.",
                       })}
@@ -1457,13 +1504,13 @@ export function CharacterEditor({
 
               {/* Post Examples */}
               <section
-                className="ce-section ce-section--grow"
+                className="flex flex-col gap-2 p-3 border border-border rounded-xl bg-card flex-1 min-h-0"
                 style={{
                   display: rightTab === "examples" ? undefined : "none",
                 }}
               >
-                <div className="ce-section-header">
-                  <span className="ce-label">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
                     {t("charactereditor.PostExamples", {
                       defaultValue: "Post Examples",
                     })}
@@ -1471,7 +1518,7 @@ export function CharacterEditor({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="ce-regen-btn"
+                    className="h-6 px-2 text-[10px] font-bold text-[color:var(--champagne-gold)]"
                     onClick={() =>
                       void handleGenerate("postExamples", "replace")
                     }
@@ -1482,10 +1529,10 @@ export function CharacterEditor({
                       : t("charactereditor.Generate")}
                   </Button>
                 </div>
-                <div className="ce-examples-list">
+                <div className="flex flex-col gap-1.5 overflow-y-auto min-h-0">
                   {(d.postExamples ?? []).map((post, pi) => (
                     // biome-ignore lint/suspicious/noArrayIndexKey: order is static in designer
-                    <div key={`post-${pi}`} className="ce-example-post">
+                    <div key={`post-${pi}`} className="flex items-center gap-1.5">
                       <input
                         type="text"
                         value={post}
@@ -1494,11 +1541,12 @@ export function CharacterEditor({
                           updated[pi] = e.target.value;
                           handleFieldEdit("postExamples", updated);
                         }}
-                        className="ce-example-msg-input"
+                        className="h-7 flex-1 rounded-md border border-border bg-white/[0.03] px-2 font-mono text-[11px] text-txt outline-none focus:border-accent"
                       />
-                      <button
-                        type="button"
-                        className="ce-style-entry-remove"
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="mt-0.5 shrink-0 text-muted opacity-0 transition-opacity duration-150 p-0 h-auto w-auto hover:text-red-500 group-hover:opacity-100"
                         onClick={() => {
                           const updated = [...(d.postExamples ?? [])];
                           updated.splice(pi, 1);
@@ -1517,19 +1565,19 @@ export function CharacterEditor({
                         >
                           <path d="M2 2l6 6M8 2l-6 6" />
                         </svg>
-                      </button>
+                      </Button>
                     </div>
                   ))}
                   {(d.postExamples ?? []).length === 0 && (
-                    <div className="ce-style-empty">
+                    <div className="rounded-md border border-dashed border-border px-3 py-2 text-[11px] text-muted">
                       {t("charactereditor.NoPostExamples", {
                         defaultValue: "No post examples yet.",
                       })}
                     </div>
                   )}
-                  <button
-                    type="button"
-                    className="ce-add-post-btn"
+                  <Button
+                    variant="ghost"
+                    className="text-[10px] font-bold text-accent p-0 h-auto py-1 text-left hover:underline"
                     onClick={() => {
                       const updated = [...(d.postExamples ?? []), ""];
                       handleFieldEdit("postExamples", updated);
@@ -1537,33 +1585,34 @@ export function CharacterEditor({
                   >
                     +{" "}
                     {t("charactereditor.AddPost", { defaultValue: "Add Post" })}
-                  </button>
+                  </Button>
                 </div>
               </section>
             </div>
+          </div>
           </div>
         )}
       </div>
 
       {/* ── Footer ─────────────────────────────────────────────────── */}
-      <div className="ce-footer">
+      <div className="flex flex-col gap-2 pt-2 shrink-0 pointer-events-auto">
         {/* Status messages */}
         {(characterSaveSuccess || combinedSaveError || generateError) && (
-          <div className="ce-footer-status">
+          <div className="flex flex-wrap items-center justify-center gap-2">
             {characterSaveSuccess && (
-              <span className="ce-status-success">{characterSaveSuccess}</span>
+              <span className="rounded-lg border border-green-400/20 bg-green-400/10 px-3 py-1 text-xs font-bold text-green-400">{characterSaveSuccess}</span>
             )}
             {combinedSaveError && (
-              <span className="ce-status-error">{combinedSaveError}</span>
+              <span className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1 text-xs font-medium text-red-500">{combinedSaveError}</span>
             )}
             {generateError && (
-              <span className="ce-status-error">{generateError}</span>
+              <span className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1 text-xs font-medium text-red-500">{generateError}</span>
             )}
           </div>
         )}
 
-        <div className="ce-footer-actions">
-          <div className="ce-footer-actions-left">
+        <div className="relative flex items-center justify-center min-h-9 max-md:flex max-md:flex-wrap max-md:justify-center max-md:gap-2">
+          <div className="absolute left-0 flex items-center gap-2">
             {customizing && (
               <>
                 <input
@@ -1584,7 +1633,8 @@ export function CharacterEditor({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="ce-save-btn ce-save-btn--idle"
+                  className="h-9 rounded-xl px-6 text-[13px] font-bold tracking-[0.05em] transition-all duration-200 disabled:opacity-50"
+                  style={idleSaveBtnStyle}
                   onClick={() =>
                     document.getElementById("ce-vrm-upload")?.click()
                   }
@@ -1603,7 +1653,8 @@ export function CharacterEditor({
           {/* Save Character — centered; transparent when nothing to save */}
           <Button
             size="sm"
-            className={`ce-save-btn ${!hasPendingChanges ? "ce-save-btn--idle" : ""}`}
+            className="h-9 rounded-xl px-6 text-[13px] font-bold tracking-[0.05em] transition-all duration-200 disabled:opacity-50"
+            style={hasPendingChanges ? goldGradientStyle : idleSaveBtnStyle}
             disabled={characterSaving || voiceSaving || !hasPendingChanges}
             onClick={() => void handleSaveAll()}
           >
@@ -1612,13 +1663,14 @@ export function CharacterEditor({
               : t("charactereditor.Save", { defaultValue: "Save" })}
           </Button>
 
-          <div className="ce-footer-actions-right">
+          <div className="absolute right-0 flex items-center gap-2">
             {/* Toggle between Customize and Select — always present, just text changes */}
             <Button
               type="button"
               variant="default"
               size="sm"
-              className="ce-save-btn ce-save-btn--secondary"
+              className="h-9 rounded-xl px-6 text-[13px] font-bold tracking-[0.05em] transition-all duration-200 disabled:opacity-50"
+              style={goldGradientStyle}
               onClick={() => {
                 if (customizing) {
                   setCustomizing(false);

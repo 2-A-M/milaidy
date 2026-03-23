@@ -1,17 +1,9 @@
 import fs from "node:fs";
-/**
- * RPC Handler Registration for Electrobun
- *
- * Maps each RPC request method from MiladyRPCSchema.bun.requests
- * to the corresponding native module method. This is the Bun-side
- * equivalent of main-process request handler registration.
- *
- * Called once during app startup after the BrowserView is created.
- */
 
 import { Utils } from "electrobun/bun";
 import { setAgentReady } from "./agent-ready-state";
 import { showBackgroundNoticeOnce } from "./background-notice";
+import { postCloudDisconnectFromMain } from "./cloud-disconnect-from-main";
 import { getAgentManager } from "./native/agent";
 import { getCameraManager } from "./native/camera";
 import { getCanvasManager } from "./native/canvas";
@@ -108,22 +100,61 @@ export function registerRpcHandlers(
       return status;
     },
     agentRestartClearLocalDb: async () => {
-      console.log("[RPC][reset] agentRestartClearLocalDb invoked");
-      try {
-        const status = await agent.restartClearingLocalDb();
-        console.log("[RPC][reset] agentRestartClearLocalDb done", {
-          state: status.state,
-          port: status.port,
-        });
-        setAgentReady(status.state === "running");
-        return status;
-      } catch (err) {
-        console.error("[RPC][reset] agentRestartClearLocalDb failed", err);
-        throw err;
-      }
+      const status = await agent.restartClearingLocalDb();
+      setAgentReady(status.state === "running");
+      return status;
     },
     agentStatus: async () => agent.getStatus(),
     agentInspectExistingInstall: async () => agent.inspectExistingInstall(),
+    /** Renderer `fetch` after native dialogs can stall; main POST matches menu reset pattern. */
+    agentPostCloudDisconnect: async (
+      params?: { apiBase?: string; bearerToken?: string } | null,
+    ) => {
+      try {
+        return await postCloudDisconnectFromMain({
+          apiBaseOverride: params?.apiBase ?? null,
+          bearerTokenOverride: params?.bearerToken ?? null,
+        });
+      } catch (err) {
+        console.error("[RPC] agentPostCloudDisconnect failed", err);
+        throw err;
+      }
+    },
+    /** Native confirm + main-process POST (renderer bridge/fetch can stall after a sheet). */
+    agentCloudDisconnectWithConfirm: async (
+      params?: { apiBase?: string; bearerToken?: string } | null,
+    ) => {
+      const box = await desktop.showMessageBox({
+        type: "warning",
+        title: "Disconnect from Eliza Cloud",
+        message: "The agent will need a local AI provider to continue working.",
+        buttons: ["Disconnect", "Cancel"],
+        defaultId: 0,
+        cancelId: 1,
+      });
+      const raw =
+        box && typeof box === "object" && "response" in box
+          ? (box as { response: unknown }).response
+          : box;
+      const response =
+        typeof raw === "number" && Number.isFinite(raw)
+          ? raw
+          : typeof raw === "bigint"
+            ? Number(raw)
+            : 1;
+      if (response !== 0) {
+        return { cancelled: true as const };
+      }
+      try {
+        return await postCloudDisconnectFromMain({
+          apiBaseOverride: params?.apiBase ?? null,
+          bearerTokenOverride: params?.bearerToken ?? null,
+        });
+      } catch (err) {
+        console.error("[RPC] agentCloudDisconnectWithConfirm failed", err);
+        throw err;
+      }
+    },
 
     // ---- Desktop: Tray ----
     desktopCreateTray: async (
@@ -248,11 +279,15 @@ export function registerRpcHandlers(
         | "plugins"
         | "connectors"
         | "cloud";
+      browse?: string;
     }) => {
       if (!isDetachedSurface(params.surface)) {
         return;
       }
-      desktop.openSurfaceWindow(params.surface);
+      desktop.openSurfaceWindow(
+        params.surface,
+        params.surface === "browser" ? params.browse : undefined,
+      );
     },
 
     // ---- Desktop: Screen ----
@@ -537,6 +572,4 @@ export function registerRpcHandlers(
     ) => gpuWindow.getViewNativeHandle(params),
     gpuViewList: async () => gpuWindow.listViews(),
   });
-
-  console.log("[RPC] All handlers registered");
 }

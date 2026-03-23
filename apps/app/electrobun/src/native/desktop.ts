@@ -1,26 +1,3 @@
-/**
- * Desktop Native Module for Electrobun
- *
- * Implements the desktop manager on top of Electrobun APIs:
- * - System tray management (Tray)
- * - Global keyboard shortcuts (GlobalShortcut)
- * - Window management (BrowserWindow)
- * - Native notifications (Utils.showNotification)
- * - Clipboard operations (Utils.clipboard*)
- * - Shell operations (Utils.openExternal, Utils.showItemInFolder)
- * - App lifecycle (Utils.quit)
- * - Path resolution (Utils.paths)
- *
- * Key differences from the prior desktop runtime:
- * - No ipcMain — methods are called directly from rpc-handlers.ts
- * - Uses sendToWebview callback instead of mainWindow.webContents.send()
- * - No powerMonitor — power state read via platform CLI tools
- * - No nativeImage — tray icons use file paths directly
- * - No setOpacity on BrowserWindow — no-op
- * - No hide() on BrowserWindow — uses minimize() as fallback
- * - No app.setLoginItemSettings — stubbed
- */
-
 import * as fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -67,11 +44,11 @@ import {
   makeKeyAndOrderFront,
   orderOut,
 } from "./mac-window-effects";
+import {
+  linuxSysfsOnBattery,
+  parseWindowsPowerLineOutput,
+} from "./power-state";
 import { checkWebGpuSupport } from "./webgpu-browser-support";
-
-// ============================================================================
-// Types
-// ============================================================================
 
 type SendToWebview = (message: string, payload?: unknown) => void;
 
@@ -103,10 +80,6 @@ interface ElectrobunEventTarget {
   removeListener?: (event: string, handler: ElectrobunEventHandler) => void;
 }
 
-// ============================================================================
-// Path name mapping: legacy desktop path names -> Utils.paths equivalents
-// ============================================================================
-
 const PATH_NAME_MAP: Record<string, string | (() => string)> = {
   home: Utils.paths.home,
   appData: Utils.paths.appData,
@@ -136,17 +109,6 @@ export function resetDesktopManagerForTesting(): void {
   nativeContextMenuEventsInstalled = false;
 }
 
-// ============================================================================
-// DesktopManager
-// ============================================================================
-
-/**
- * Desktop Manager — handles all native desktop features for Electrobun.
- *
- * This implementation does not register IPC handlers.
- * Methods are called directly from rpc-handlers.ts. Push events to the
- * webview are sent via the sendToWebview callback.
- */
 export class DesktopManager {
   private mainWindow: BrowserWindow | null = null;
   private tray: Tray | null = null;
@@ -172,6 +134,7 @@ export class DesktopManager {
           | "plugins"
           | "connectors"
           | "cloud",
+        browse?: string,
       ) => void)
     | null = null;
   private openExternalHandler:
@@ -193,9 +156,6 @@ export class DesktopManager {
 
   // MARK: - Configuration
 
-  /**
-   * Set the main BrowserWindow reference and wire up window events.
-   */
   setMainWindow(window: BrowserWindow): void {
     if (this.mainWindow === window) {
       return;
@@ -206,23 +166,14 @@ export class DesktopManager {
     this.setupWindowEvents();
   }
 
-  /**
-   * Set the callback used to push messages to the webview renderer.
-   */
   setSendToWebview(fn: SendToWebview): void {
     this.sendToWebview = fn;
   }
 
-  /**
-   * Set the callback used to open the settings window from menus.
-   */
   setOpenSettingsCallback(cb: (tabHint?: string) => void): void {
     this.openSettingsCallback = cb;
   }
 
-  /**
-   * Set the callback used to open detached surface windows from RPC or menus.
-   */
   setOpenSurfaceWindowCallback(
     cb: (
       surface:
@@ -233,6 +184,7 @@ export class DesktopManager {
         | "plugins"
         | "connectors"
         | "cloud",
+      browse?: string,
     ) => void,
   ): void {
     this.openSurfaceWindowCallback = cb;
@@ -247,16 +199,10 @@ export class DesktopManager {
     this.openExternalHandler = cb;
   }
 
-  /**
-   * Open the settings window via the registered callback.
-   */
   openSettings(tabHint?: string): void {
     this.openSettingsCallback?.(tabHint);
   }
 
-  /**
-   * Open a detached surface window via the registered callback.
-   */
   openSurfaceWindow(
     surface:
       | "chat"
@@ -266,8 +212,9 @@ export class DesktopManager {
       | "plugins"
       | "connectors"
       | "cloud",
+    browse?: string,
   ): void {
-    this.openSurfaceWindowCallback?.(surface);
+    this.openSurfaceWindowCallback?.(surface, browse);
   }
 
   private getWindow(): BrowserWindow {
@@ -324,22 +271,22 @@ export class DesktopManager {
     }
 
     if (action === "ask-agent") {
-      this.send("contextMenu:askAgent", { text });
+      this.send("contextMenuAskAgent", { text });
       return;
     }
 
     if (action === "quote-in-chat") {
-      this.send("contextMenu:quoteInChat", { text });
+      this.send("contextMenuQuoteInChat", { text });
       return;
     }
 
     if (action === "create-skill") {
-      this.send("contextMenu:createSkill", { text });
+      this.send("contextMenuCreateSkill", { text });
       return;
     }
 
     if (action === "save-as-command") {
-      this.send("contextMenu:saveAsCommand", { text });
+      this.send("contextMenuSaveAsCommand", { text });
     }
   }
 
@@ -1057,35 +1004,33 @@ X-GNOME-Autostart-enabled=true
         return { onBattery, idleState: "unknown", idleTime: 0 };
       }
       if (process.platform === "linux") {
-        const batteryDir = "/sys/class/power_supply";
-        const entries = fs.readdirSync(batteryDir);
-        const bat = entries.find((e) => e.startsWith("BAT"));
-        if (bat) {
-          const statusText = fs
-            .readFileSync(path.join(batteryDir, bat, "status"), "utf8")
-            .trim();
-          return {
-            onBattery: statusText === "Discharging",
-            idleState: "unknown",
-            idleTime: 0,
-          };
-        }
+        return {
+          onBattery: linuxSysfsOnBattery(),
+          idleState: "unknown",
+          idleTime: 0,
+        };
       }
       if (process.platform === "win32") {
         const proc = Bun.spawn(
           [
             "powershell",
             "-NoProfile",
+            "-NoLogo",
             "-Command",
-            "(Get-WmiObject -Class Win32_Battery).BatteryStatus",
+            "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SystemInformation]::PowerStatus.PowerLineStatus.ToString()",
           ],
           { stdout: "pipe", stderr: "ignore" },
         );
         const text = await new Response(proc.stdout).text();
         await proc.exited;
-        // BatteryStatus 1 = Discharging (on battery), 2 = AC, 6 = Charging
-        const status = Number.parseInt(text.trim(), 10);
-        return { onBattery: status === 1, idleState: "unknown", idleTime: 0 };
+        const parsed = parseWindowsPowerLineOutput(text);
+        if (parsed.known) {
+          return {
+            onBattery: parsed.onBattery,
+            idleState: "unknown",
+            idleTime: 0,
+          };
+        }
       }
     } catch {
       // Fall through to stub below
@@ -1823,10 +1768,6 @@ X-GNOME-Autostart-enabled=true
     this.sendToWebview = null;
   }
 }
-
-// ============================================================================
-// Singleton
-// ============================================================================
 
 let desktopManager: DesktopManager | null = null;
 

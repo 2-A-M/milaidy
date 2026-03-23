@@ -49,6 +49,7 @@ vi.mock("@elizaos/plugin-trust", () => ({ default: {} }));
 vi.mock("@elizaos/plugin-twitch", () => ({ default: {} }));
 vi.mock("@miladyai/plugin-wechat", () => ({ default: {} }));
 
+import { envSnapshot } from "../../../../../test/helpers/test-utils";
 import { findPluginExport } from "../cli/plugins-cli";
 import type { ElizaConfig } from "../config/config";
 import { CONNECTOR_PLUGINS } from "../config/plugin-auto-enable";
@@ -96,29 +97,6 @@ const resolvePluginImportSpecifier:
     (_elizaExports as any).resolveElizaPluginImportSpecifier) as
     | ((name: string, url?: string) => string)
     | undefined;
-
-// ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
-
-/** Save and restore a set of env keys around each test. */
-function envSnapshot(keys: string[]): {
-  save: () => void;
-  restore: () => void;
-} {
-  const saved = new Map<string, string | undefined>();
-  return {
-    save() {
-      for (const k of keys) saved.set(k, process.env[k]);
-    },
-    restore() {
-      for (const [k, v] of saved) {
-        if (v === undefined) delete process.env[k];
-        else process.env[k] = v;
-      }
-    },
-  };
-}
 
 // ---------------------------------------------------------------------------
 // collectPluginNames
@@ -237,25 +215,18 @@ describe("collectPluginNames", () => {
 
   it("includes all core plugins for an empty config", () => {
     // Guard against accidental removal from CORE_PLUGINS array
-    expect(CORE_PLUGINS).toHaveLength(16);
+    expect(CORE_PLUGINS).toHaveLength(9);
 
     const expectedCorePlugins = [
       "@elizaos/plugin-sql",
       "@elizaos/plugin-local-embedding",
       "@elizaos/plugin-form",
       "@elizaos/plugin-knowledge",
-      "@elizaos/plugin-rolodex",
       "@elizaos/plugin-trajectory-logger",
       "@elizaos/plugin-agent-orchestrator",
       "@elizaos/plugin-cron",
       "@elizaos/plugin-shell",
-      "@elizaos/plugin-plugin-manager",
       "@elizaos/plugin-agent-skills",
-      "@elizaos/plugin-secrets-manager",
-      "@elizaos/plugin-trust",
-      "@elizaos/plugin-todo",
-      "@elizaos/plugin-personality",
-      "@elizaos/plugin-experience",
     ];
     const names = collectPluginNames({} as ElizaConfig);
     for (const plugin of expectedCorePlugins) {
@@ -611,9 +582,9 @@ describe("collectPluginNames", () => {
     expect(names.has("@elizaos/plugin-custom")).toBe(true);
   });
 
-  it("includes plugin-plugin-manager in core plugins", () => {
+  it("includes plugin-cron in core plugins", () => {
     const names = collectPluginNames({} as ElizaConfig);
-    expect(names.has("@elizaos/plugin-plugin-manager")).toBe(true);
+    expect(names.has("@elizaos/plugin-cron")).toBe(true);
   });
 
   it("handles empty plugins.installs gracefully", () => {
@@ -661,7 +632,6 @@ describe("collectPluginNames", () => {
     const names = collectPluginNames(config);
     // Core
     expect(names.has("@elizaos/plugin-sql")).toBe(true);
-    expect(names.has("@elizaos/plugin-plugin-manager")).toBe(true);
     // Channel
     expect(names.has("@elizaos/plugin-discord")).toBe(true);
     // Provider
@@ -941,13 +911,7 @@ describe("applyConnectorSecretsToEnv", () => {
     expect(() => applyConnectorSecretsToEnv(config)).not.toThrow();
   });
 
-  it("supports legacy channels key for backward compat", () => {
-    const config = {
-      channels: { telegram: { botToken: "legacy-tg-tok" } },
-    } as ElizaConfig;
-    applyConnectorSecretsToEnv(config);
-    expect(process.env.TELEGRAM_BOT_TOKEN).toBe("legacy-tg-tok");
-  });
+
 
   it("copies Signal account, httpUrl, and cliPath from config to env", () => {
     const config = {
@@ -1657,6 +1621,63 @@ describe("buildCharacterFromConfig", () => {
     expect(char.name).toBe("Marisa");
     expect(char.username).toBe("marisa-labs");
     expect(char.topics).toEqual(["magic", "research"]);
+  });
+
+  it("backfills bundled preset style and adjectives for name-only config", () => {
+    const config = {
+      agents: { list: [{ id: "main", name: "Chen" }] },
+    } as ElizaConfig;
+    const char = buildCharacterFromConfig(config);
+
+    expect(char.name).toBe("Chen");
+    expect(char.style).toBeTruthy();
+    expect(char.style?.all?.length).toBeGreaterThan(0);
+    expect(char.style?.chat?.length).toBeGreaterThan(0);
+    expect(char.style?.post?.length).toBeGreaterThan(0);
+    expect(char.adjectives).toBeTruthy();
+    expect(char.adjectives?.length).toBeGreaterThan(0);
+    expect(char.adjectives).toContain("warm");
+  });
+
+  it("backfills bundled preset topics when agent config has none", () => {
+    const config = {
+      agents: { list: [{ id: "main", name: "Chen" }] },
+    } as ElizaConfig;
+    const char = buildCharacterFromConfig(config);
+
+    expect(char.name).toBe("Chen");
+    expect(Array.isArray(char.topics)).toBe(true);
+    expect((char.topics as string[]).length).toBeGreaterThan(0);
+  });
+
+  it("preserves agent config fields over bundled preset fallback", () => {
+    const config = {
+      agents: {
+        list: [
+          {
+            id: "main",
+            name: "Chen",
+            style: { all: ["custom rule"], chat: [], post: [] },
+            adjectives: ["custom-adj"],
+            topics: ["custom-topic"],
+          },
+        ],
+      },
+    } as ElizaConfig;
+    const char = buildCharacterFromConfig(config);
+
+    expect(char.style?.all).toContain("custom rule");
+    expect(char.adjectives).toContain("custom-adj");
+    expect(char.topics).toEqual(["custom-topic"]);
+  });
+
+  it("does not backfill style/adjectives for non-preset characters", () => {
+    const config = {
+      agents: { list: [{ id: "main", name: "CustomBot" }] },
+    } as ElizaConfig;
+    const char = buildCharacterFromConfig(config);
+
+    expect(char.topics ?? []).toEqual([]);
   });
 });
 

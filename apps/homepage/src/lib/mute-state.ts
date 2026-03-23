@@ -5,7 +5,11 @@ function getMutedSet(): Set<string> {
     const raw = localStorage.getItem(MUTE_KEY);
     if (!raw) return new Set();
     return new Set(JSON.parse(raw));
-  } catch {
+  } catch (err) {
+    console.warn(
+      "[mute-state] Failed to load muted agents from localStorage:",
+      err,
+    );
     return new Set();
   }
 }

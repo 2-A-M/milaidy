@@ -1,10 +1,3 @@
-/**
- * Milady Desktop App — Electrobun Main Entry
- *
- * Creates the main BrowserWindow, wires up RPC handlers,
- * sets up system tray, application menu, and starts the agent.
- */
-
 import fs from "node:fs";
 import { createServer as createNetServer } from "node:net";
 import os from "node:os";
@@ -21,6 +14,7 @@ import {
   pushApiBaseToRenderer,
   resolveDesktopRuntimeMode,
   resolveInitialApiBase,
+  resolveRendererFacingApiBase,
 } from "./api-base";
 import {
   buildApplicationMenu,
@@ -49,7 +43,7 @@ import { getPermissionManager } from "./native/permissions";
 import { checkWebGpuSupport } from "./native/webgpu-browser-support";
 import { readBuiltPreloadScript } from "./preload-validation";
 import { registerRpcHandlers } from "./rpc-handlers";
-import { PUSH_CHANNEL_TO_RPC_MESSAGE } from "./rpc-schema";
+import { startScreenshotDevServer } from "./screenshot-dev-server";
 import {
   isDetachedSurface,
   type ManagedWindowLike,
@@ -83,10 +77,6 @@ let heartbeatMenuSnapshot: HeartbeatMenuSnapshot =
   EMPTY_HEARTBEAT_MENU_SNAPSHOT;
 let heartbeatMenuRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
-// ============================================================================
-// App Menu
-// ============================================================================
-
 import {
   isAgentReady,
   onAgentReadyChange,
@@ -108,7 +98,6 @@ function setupApplicationMenu(): void {
   );
 }
 
-// Refresh the application menu whenever agent readiness changes.
 onAgentReadyChange(() => setupApplicationMenu());
 
 function summarizeDesktopActionError(error: unknown, fallback: string): string {
@@ -258,7 +247,10 @@ async function resetMiladyFromApplicationMenu(): Promise<void> {
         if (currentWindow) {
           pushApiBaseToRenderer(
             currentWindow,
-            `http://127.0.0.1:${port}`,
+            resolveRendererFacingApiBase(
+              process.env as Record<string, string | undefined>,
+              port,
+            ),
             apiToken,
           );
         }
@@ -394,13 +386,6 @@ function startHeartbeatMenuRefresh(): void {
   }, HEARTBEAT_MENU_REFRESH_MS);
 }
 
-// ============================================================================
-// macOS Native Window Effects (vibrancy, shadow, traffic lights, drag + resize)
-// ============================================================================
-// hiddenInset removes the title bar; WKWebView fills the client area. Native
-// NSViews above the web view handle move (top strip) and inner-edge resize
-// (right/bottom/BR). See docs/guides/electrobun-mac-window-chrome.md (WHYs).
-
 const MAC_TRAFFIC_LIGHTS_X = 14;
 const MAC_TRAFFIC_LIGHTS_Y = 12;
 /** Left inset of the drag strip so it clears the traffic lights. */
@@ -464,13 +449,7 @@ function applyMacOSWindowEffects(win: BrowserWindow): void {
   } catch {
     // webview may not accept listeners yet in some embed paths
   }
-
-  console.log("[MacEffects] Native macOS window effects applied");
 }
-
-// ============================================================================
-// Window State Persistence
-// ============================================================================
 
 interface WindowState {
   x: number;
@@ -491,12 +470,17 @@ function loadWindowState(statePath: string): WindowState {
     if (fs.existsSync(statePath)) {
       const data = JSON.parse(fs.readFileSync(statePath, "utf8"));
       if (typeof data.width === "number" && typeof data.height === "number") {
-        return { ...DEFAULT_WINDOW_STATE, ...data };
+        const state = { ...DEFAULT_WINDOW_STATE, ...data };
+        // Discard state saved while the window was minimized.  On Windows,
+        // minimized windows report position (-32000, -32000) and a tiny
+        // size, which makes the window invisible on next launch.
+        if (state.width < 200 || state.height < 200 || state.x < -16000) {
+          return DEFAULT_WINDOW_STATE;
+        }
+        return state;
       }
     }
-  } catch {
-    // Ignore parse/read errors — return default
-  }
+  } catch {}
   return DEFAULT_WINDOW_STATE;
 }
 
@@ -508,6 +492,10 @@ function scheduleStateSave(statePath: string, win: BrowserWindow): void {
     try {
       const { x, y } = win.getPosition();
       const { width, height } = win.getSize();
+      // Skip saving when the window is minimized — Windows reports
+      // position (-32000, -32000) and a collapsed size, which would make
+      // the window invisible on next launch.
+      if (width < 200 || height < 200 || x < -16000) return;
       const dir = path.dirname(statePath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(
@@ -515,15 +503,9 @@ function scheduleStateSave(statePath: string, win: BrowserWindow): void {
         JSON.stringify({ x, y, width, height }),
         "utf8",
       );
-    } catch {
-      // Ignore save errors
-    }
+    } catch {}
   }, 500);
 }
-
-// ============================================================================
-// Main Window
-// ============================================================================
 
 let currentWindow: BrowserWindow | null = null;
 let currentSendToWebview: SendToWebview | null = null;
@@ -545,10 +527,6 @@ function sendToActiveRenderer(message: string, payload?: unknown): void {
     );
   }
 }
-
-// ============================================================================
-// Renderer Static Server
-// ============================================================================
 
 /**
  * Serve the renderer dist over HTTP so WKWebView can load it without
@@ -824,7 +802,7 @@ async function ensureBackgroundWindow(): Promise<void> {
     const replacementWindow = attachMainWindow(await createMainWindow());
     try {
       replacementWindow.minimize();
-      console.log("[Main] Recreated minimized window after close");
+      console.log("[Main] Recreated minimized background window");
       showBackgroundRunNoticeOnce();
     } catch (err) {
       console.warn("[Main] Failed to minimize background window:", err);
@@ -850,10 +828,6 @@ function showBackgroundRunNoticeOnce(): void {
     console.warn("[Main] Failed to persist background notice marker:", error);
   }
 }
-
-// ============================================================================
-// Settings Window
-// ============================================================================
 
 async function createSettingsWindow(tabHint?: string): Promise<void> {
   if (!surfaceWindowManager) return;
@@ -1004,11 +978,6 @@ function toggleFocusedWindowDevTools(): void {
   });
 }
 
-// ============================================================================
-// RPC + Native Module Wiring
-// ============================================================================
-
-// Type alias for the untyped rpc send proxy (used at runtime for push messages)
 type RpcSendProxy = Record<string, ((payload: unknown) => void) | undefined>;
 
 /**
@@ -1031,17 +1000,11 @@ type ElectrobunRpcInstance = {
 function wireRpcAndModules(
   win: BrowserWindow,
 ): (message: string, payload?: unknown) => void {
-  // Access the rpc instance from the webview (set during window creation)
   const rpc = win.webview.rpc as ElectrobunRpcInstance | undefined;
 
-  // Create the sendToWebview callback that native modules use to push events.
-  // Uses typed RPC push messages instead of JS evaluation.
   const sendToWebview = (message: string, payload?: unknown): void => {
-    // Resolve via map (legacy colon-separated format) or use message directly
-    // as the RPC method name (Electrobun camelCase format).
-    const rpcMessage = PUSH_CHANNEL_TO_RPC_MESSAGE[message] ?? message;
     if (rpc?.send) {
-      const sender = rpc?.send?.[rpcMessage];
+      const sender = rpc?.send?.[message];
       if (sender) {
         sender(payload ?? null);
         return;
@@ -1050,10 +1013,7 @@ function wireRpcAndModules(
     console.warn(`[sendToWebview] No RPC method for message: ${message}`);
   };
 
-  // Initialize native modules with window + sendToWebview
   initializeNativeModules(win, sendToWebview);
-
-  // Register RPC handlers
   registerRpcHandlers(rpc, sendToWebview);
 
   return sendToWebview;
@@ -1068,9 +1028,8 @@ function wireSettingsRpc(win: BrowserWindow): void {
   const rpc = win.webview.rpc as unknown as ElectrobunRpcInstance | undefined;
 
   const sendToWebview = (message: string, payload?: unknown): void => {
-    const rpcMessage = PUSH_CHANNEL_TO_RPC_MESSAGE[message] ?? message;
     if (rpc?.send) {
-      const sender = rpc?.send?.[rpcMessage];
+      const sender = rpc?.send?.[message];
       if (sender) {
         sender(payload ?? null);
         return;
@@ -1085,10 +1044,6 @@ function wireSettingsRpc(win: BrowserWindow): void {
   // handler registry but does not touch native module singletons.
   registerRpcHandlers(rpc, sendToWebview);
 }
-
-// ============================================================================
-// API Base Injection
-// ============================================================================
 
 function injectApiBase(win: BrowserWindow): void {
   const runtimeResolution = resolveDesktopRuntimeMode(
@@ -1118,13 +1073,16 @@ function injectApiBase(win: BrowserWindow): void {
   const port =
     agent.getPort() ?? (Number(process.env.MILADY_PORT) || DEFAULT_PORT);
   const apiToken = configureDesktopLocalApiAuth();
-  pushApiBaseToRenderer(win, `http://127.0.0.1:${port}`, apiToken);
+  pushApiBaseToRenderer(
+    win,
+    resolveRendererFacingApiBase(
+      process.env as Record<string, string | undefined>,
+      port,
+    ),
+    apiToken,
+  );
   setAgentReady(true);
 }
-
-// ============================================================================
-// Agent Startup
-// ============================================================================
 
 /**
  * Push real OS permission states into the agent REST API so the renderer's
@@ -1166,7 +1124,14 @@ async function _startAgent(win: BrowserWindow): Promise<void> {
     const status = await agent.start();
 
     if (status.state === "running" && status.port) {
-      pushApiBaseToRenderer(win, `http://127.0.0.1:${status.port}`, apiToken);
+      pushApiBaseToRenderer(
+        win,
+        resolveRendererFacingApiBase(
+          process.env as Record<string, string | undefined>,
+          status.port,
+        ),
+        apiToken,
+      );
       setAgentReady(true);
       // Sync real OS permission states to the REST API so the renderer
       // can display them and capability toggles can unlock.
@@ -1178,10 +1143,6 @@ async function _startAgent(win: BrowserWindow): Promise<void> {
     console.error("[Main] Agent start failed:", err);
   }
 }
-
-// ============================================================================
-// Auto-Updater
-// ============================================================================
 
 async function setupUpdater(): Promise<void> {
   const runUpdateCheck = async (notifyOnNoUpdate = false): Promise<void> => {
@@ -1327,21 +1288,11 @@ async function setupUpdater(): Promise<void> {
   }
 }
 
-// ============================================================================
-// Deep Link Handling
-// ============================================================================
-
 function setupDeepLinks(): void {
-  // Electrobun handles urlSchemes from config automatically.
-  // Listen for open-url events to route deep links to the renderer.
   Electrobun.events.on("open-url", (url: string) => {
     sendToActiveRenderer("shareTargetReceived", { url });
   });
 }
-
-// ============================================================================
-// Shutdown
-// ============================================================================
 
 function setupShutdown(cleanupFns: Array<() => void>): void {
   Electrobun.events.on("before-quit", () => {
@@ -1353,10 +1304,6 @@ function setupShutdown(cleanupFns: Array<() => void>): void {
     disposeNativeModules();
   });
 }
-
-// ============================================================================
-// Bootstrap
-// ============================================================================
 
 /**
  * Load repo-root and ~/.eliza/.env into `process.env` (non-destructive) so the
@@ -1412,8 +1359,13 @@ function initializeBundledWebGPU(): void {
 
 /**
  * Check WebGPU availability in the webview browser and push status to renderer.
- * On macOS 26+ with native renderer, WebGPU is available via WKWebView.
- * On Linux/Windows with CEF, upstream Electrobun support is needed.
+ *
+ * **WHY not inline `os.release() - 9`:** that was wrong on macOS 26 (Darwin 25);
+ * see `checkWebGpuSupport` / `getMacOSMajorVersion` in `webgpu-browser-support.ts`
+ * and `docs/apps/electrobun-darwin-macos-webgpu-version.md`.
+ *
+ * On macOS 26+ with native renderer, WebGPU is expected via WKWebView.
+ * On Linux/Windows with CEF, upstream Electrobun flag support is still needed.
  */
 function checkWebGpuBrowserSupport(): void {
   if (!BROWSER_SURFACE_ENABLED) {
@@ -1454,7 +1406,7 @@ function checkWebGpuBrowserSupport(): void {
 
 async function main(): Promise<void> {
   await loadMiladyEnvFilesForMain();
-  console.log("[Main] Starting Milady (Electrobun)...");
+  console.log("[Main] Starting Milady (Electrobun)");
   const normalizedModuleDir = import.meta.dir.replaceAll("\\", "/");
   const runtimeResolution = resolveDesktopRuntimeMode(
     process.env as Record<string, string | undefined>,
@@ -1468,14 +1420,70 @@ async function main(): Promise<void> {
   console.log(
     `[Env] desktopRuntimeMode=${runtimeResolution.mode} externalApi=${runtimeResolution.externalApi.base ?? "none"}`,
   );
+  // On Windows (CEF renderer), clear stale CEF profile data when the app
+  // version changes.  A leftover Partitions/default profile from a previous
+  // install causes "Cannot create profile at path" errors that cascade into
+  // GPU process crashes, rendering the UI unusable.  Clearing the CEF cache
+  // is safe — it only contains browser session state (cookies, caches,
+  // LevelDB stores) that CEF recreates on next launch.
+  if (process.platform === "win32") {
+    try {
+      const cefDir = path.join(Utils.paths.userData, "CEF");
+      const cefVersionMarker = path.join(cefDir, ".milady-version");
+      let currentVersion = "unknown";
+      try {
+        const pkgPath = path.join(import.meta.dir, "..", "package.json");
+        currentVersion =
+          JSON.parse(fs.readFileSync(pkgPath, "utf-8")).version ?? "unknown";
+      } catch {
+        // Fallback — version marker will still trigger cleanup on next real version.
+      }
+      let previousVersion: string | null = null;
+      try {
+        previousVersion = fs.readFileSync(cefVersionMarker, "utf-8").trim();
+      } catch {
+        // No marker — first run or pre-fix install.
+      }
+      if (previousVersion !== currentVersion && fs.existsSync(cefDir)) {
+        console.log(
+          `[Main] CEF version mismatch (${previousVersion ?? "none"} → ${currentVersion}), clearing stale CEF profile`,
+        );
+        // Remove everything except the version marker we're about to write.
+        for (const entry of fs.readdirSync(cefDir)) {
+          if (entry === ".milady-version") continue;
+          const entryPath = path.join(cefDir, entry);
+          try {
+            fs.rmSync(entryPath, { recursive: true, force: true });
+          } catch (err) {
+            console.warn(`[Main] Could not remove ${entryPath}:`, err);
+          }
+        }
+      }
+      // Write/update version marker so we don't clear again on next launch.
+      fs.mkdirSync(cefDir, { recursive: true });
+      fs.writeFileSync(cefVersionMarker, currentVersion);
+    } catch (err) {
+      console.warn("[Main] CEF profile cleanup failed (non-fatal):", err);
+    }
+  }
+
   initializeBundledWebGPU();
   checkWebGpuBrowserSupport();
   const cleanupFns: Array<() => void> = [];
 
+  // WHY push API base on every status tick with a port: embedded startup can
+  // settle on a different loopback port than env/static HTML (allocation + stdout).
+  // Detached surfaces must not keep a stale __MILADY_API_BASE__ while the main
+  // window was already updated—menu reset, chat, and settings each own a webview.
   cleanupFns.push(
     getAgentManager().onStatusChange((status) => {
-      if (currentWindow && status.port) {
-        injectApiBase(currentWindow);
+      if (status.port) {
+        if (currentWindow) {
+          injectApiBase(currentWindow);
+        }
+        surfaceWindowManager?.forEachWindow((w) => {
+          injectApiBase(w as BrowserWindow);
+        });
       }
       void refreshHeartbeatMenuSnapshot();
     }),
@@ -1501,6 +1509,10 @@ async function main(): Promise<void> {
   });
   // Set up app menu after the window (and its message loop) exists.
   setupApplicationMenu();
+  const stopScreenshotDevServer = startScreenshotDevServer();
+  if (stopScreenshotDevServer) {
+    cleanupFns.push(stopScreenshotDevServer);
+  }
   startHeartbeatMenuRefresh();
   cleanupFns.push(() => {
     if (heartbeatMenuRefreshTimer) {
@@ -1513,11 +1525,11 @@ async function main(): Promise<void> {
   getDesktopManager().setOpenSettingsCallback((tabHint) => {
     void createSettingsWindow(tabHint);
   });
-  getDesktopManager().setOpenSurfaceWindowCallback((surface) => {
+  getDesktopManager().setOpenSurfaceWindowCallback((surface, browse) => {
     if (!surfaceWindowManager) {
       return;
     }
-    void surfaceWindowManager.openSurfaceWindow(surface);
+    void surfaceWindowManager.openSurfaceWindow(surface, browse);
   });
 
   // If launched with --hidden (e.g. auto-launch with openAsHidden), minimize immediately.
@@ -1532,10 +1544,8 @@ async function main(): Promise<void> {
     }
   }
 
-  // Set up deep link handling
   setupDeepLinks();
 
-  // Set up system tray with default icon
   const desktop = getDesktopManager();
   try {
     await desktop.createTray({
@@ -1618,13 +1628,8 @@ async function main(): Promise<void> {
     }
   }
 
-  // Check for updates
   void setupUpdater();
-
-  // Set up clean shutdown
   setupShutdown(cleanupFns);
-
-  console.log("[Main] Milady started successfully");
 }
 
 main().catch((err) => {

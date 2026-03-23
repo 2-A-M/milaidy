@@ -4,7 +4,7 @@
  * Renders a unified plugin list with searchable/filterable cards and per-plugin settings.
  */
 
-import { Button, Input } from "@miladyai/ui";
+import { Button, Input, Switch } from "@miladyai/ui";
 import type { LucideIcon } from "lucide-react";
 import {
   Binary,
@@ -140,6 +140,9 @@ const ALWAYS_ON_PLUGIN_IDS = new Set([
   "vision",
   "computeruse",
 ]);
+
+/** Keys to hide when Telegram "Allow all chats" mode is active. */
+const TELEGRAM_ALLOW_ALL_HIDDEN = new Set(["TELEGRAM_ALLOWED_CHATS"]);
 
 /* ── Helpers ────────────────────────────────────────────────────────── */
 
@@ -495,7 +498,106 @@ export function paramsToSchema(
   };
 }
 
-/* ── PluginConfigForm bridge ─────────────────────────────────────────── */
+/* ── Telegram chat mode ─────────────────────────────────────────────── */
+
+/**
+ * Hook that manages the "allow all / specific chats" toggle state.
+ * Mode is explicit (not derived from field value) so clearing the field
+ * doesn't flip the toggle. Returns the mode, a toggle handler, and
+ * hiddenKeys for PluginConfigForm.
+ */
+function useTelegramChatMode(
+  plugin: PluginInfo,
+  pluginConfigs: Record<string, Record<string, string>>,
+  onParamChange: (pluginId: string, paramKey: string, value: string) => void,
+) {
+  const localValue = pluginConfigs.telegram?.TELEGRAM_ALLOWED_CHATS;
+  const serverValue =
+    plugin.parameters?.find((p) => p.key === "TELEGRAM_ALLOWED_CHATS")
+      ?.currentValue ?? "";
+  const currentValue = localValue ?? serverValue;
+
+  // Explicit mode state — initialized from current value, then user-controlled
+  const [allowAll, setAllowAll] = useState(() => !currentValue.trim());
+
+  // Stash the last non-empty value so toggling back restores it
+  const stashedChats = useRef(currentValue);
+  if (currentValue.trim()) {
+    stashedChats.current = currentValue;
+  }
+
+  const toggle = useCallback(
+    (next: boolean) => {
+      setAllowAll(next);
+      if (next) {
+        onParamChange("telegram", "TELEGRAM_ALLOWED_CHATS", "");
+      } else {
+        const restore = stashedChats.current?.trim() || "[]";
+        onParamChange("telegram", "TELEGRAM_ALLOWED_CHATS", restore);
+      }
+    },
+    [onParamChange],
+  );
+
+  return {
+    allowAll,
+    toggle,
+    hiddenKeys: allowAll ? TELEGRAM_ALLOW_ALL_HIDDEN : undefined,
+  };
+}
+
+function TelegramChatModeToggle({
+  allowAll,
+  onToggle,
+}: {
+  allowAll: boolean;
+  onToggle: (next: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--card,rgba(255,255,255,0.03))] px-4 py-3 mb-4">
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[13px] font-semibold text-[var(--text)]">
+          {allowAll ? "Allow all chats" : "Allow only specific chats"}
+        </span>
+        <span className="text-[11px] text-[var(--muted)]">
+          {allowAll
+            ? "Bot will respond in any chat"
+            : "Bot will only respond in listed chat IDs"}
+        </span>
+      </div>
+      <Switch checked={allowAll} onCheckedChange={onToggle} />
+    </div>
+  );
+}
+
+/** Wraps PluginConfigForm with the Telegram chat mode toggle + hidden keys. */
+function TelegramPluginConfig({
+  plugin,
+  pluginConfigs,
+  onParamChange,
+}: {
+  plugin: PluginInfo;
+  pluginConfigs: Record<string, Record<string, string>>;
+  onParamChange: (pluginId: string, paramKey: string, value: string) => void;
+}) {
+  const { allowAll, toggle, hiddenKeys } = useTelegramChatMode(
+    plugin,
+    pluginConfigs,
+    onParamChange,
+  );
+
+  return (
+    <>
+      <TelegramChatModeToggle allowAll={allowAll} onToggle={toggle} />
+      <PluginConfigForm
+        plugin={plugin}
+        pluginConfigs={pluginConfigs}
+        onParamChange={onParamChange}
+        hiddenKeys={hiddenKeys}
+      />
+    </>
+  );
+}
 
 /* ── WhatsApp auth mode toggle ──────────────────────────────────────── */
 
@@ -604,6 +706,8 @@ function WhatsAppPluginConfig({
   );
 }
 
+/* ── PluginConfigForm bridge ─────────────────────────────────────────── */
+
 function PluginConfigForm({
   plugin,
   pluginConfigs,
@@ -623,7 +727,7 @@ function PluginConfigForm({
 
   // Merge server-provided configUiHints over auto-generated hints.
   // Server hints take priority (override auto-generated ones).
-  // Also apply hiddenKeys from parent (e.g. WhatsApp auth mode toggle).
+  // Also apply hiddenKeys from parent (e.g. Telegram chat mode toggle).
   const hints = useMemo(() => {
     const merged: Record<string, ConfigUiHint> = { ...autoHints };
     const serverHints = plugin.configUiHints;
@@ -990,7 +1094,12 @@ function subgroupForPlugin(plugin: PluginInfo): string {
 }
 
 type StatusFilter = "all" | "enabled" | "disabled";
-type PluginsViewMode = "all" | "connectors" | "streaming" | "social";
+type PluginsViewMode =
+  | "all"
+  | "all-social"
+  | "connectors"
+  | "streaming"
+  | "social";
 type SubgroupTag = { id: string; label: string; count: number };
 
 function comparePlugins(left: PluginInfo, right: PluginInfo): number {
@@ -1203,9 +1312,9 @@ function PluginListView({ label, mode = "all", inModal }: PluginListViewProps) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const dragRef = useRef<string | null>(null);
-  const isSocialMode = mode === "social";
+  const isSocialMode = mode === "social" || mode === "all-social";
   const isConnectorLikeMode = mode === "connectors" || mode === "social";
-  const resultLabel = isSocialMode ? "connectors" : label.toLowerCase();
+  const resultLabel = mode === "social" ? "connectors" : label.toLowerCase();
   const searchPlaceholder = isSocialMode
     ? "Search..."
     : `Search ${label.toLowerCase()}...`;
@@ -1309,12 +1418,12 @@ function PluginListView({ label, mode = "all", inModal }: PluginListViewProps) {
       if (options?.sidebar) {
         const Icon = SUBGROUP_NAV_ICONS[tag.id] ?? Package;
         return (
-          <button
+          <Button
             key={tag.id}
-            type="button"
+            variant="ghost"
             onClick={() => setSubgroupFilter(tag.id)}
             aria-current={isActive ? "page" : undefined}
-            className={`group w-full flex items-center gap-2.5 text-left px-3 py-2 relative font-mono text-[11px] tracking-wide transition-all duration-150 ${
+            className={`group w-full flex items-center gap-2.5 text-left px-3 py-2 h-auto relative font-mono text-[11px] tracking-wide rounded-none transition-all duration-150 ${
               isActive
                 ? "text-txt bg-surface"
                 : "text-muted hover:text-txt hover:bg-surface/50"
@@ -1336,7 +1445,7 @@ function PluginListView({ label, mode = "all", inModal }: PluginListViewProps) {
             >
               {tag.count}
             </span>
-          </button>
+          </Button>
         );
       }
 
@@ -1632,11 +1741,21 @@ function PluginListView({ label, mode = "all", inModal }: PluginListViewProps) {
   const renderPluginCard = (p: PluginInfo) => {
     const hasParams = p.parameters && p.parameters.length > 0;
     const isOpen = pluginSettingsOpen.has(p.id);
+    const requiredParams = hasParams
+      ? p.parameters.filter((param: PluginParamDef) => param.required)
+      : [];
+    const requiredSetCount = requiredParams.filter(
+      (param: PluginParamDef) => param.isSet,
+    ).length;
     const setCount = hasParams
       ? p.parameters.filter((param: PluginParamDef) => param.isSet).length
       : 0;
     const totalCount = hasParams ? p.parameters.length : 0;
-    const allParamsSet = !hasParams || setCount === totalCount;
+    const allParamsSet =
+      !hasParams ||
+      (requiredParams.length > 0
+        ? requiredSetCount === requiredParams.length
+        : setCount === totalCount);
     const isShowcase = p.id === "__ui-showcase__";
     const categoryLabel = isShowcase
       ? "showcase"
@@ -1716,10 +1835,11 @@ function PluginListView({ label, mode = "all", inModal }: PluginListViewProps) {
               {t("pluginsview.DEMO")}
             </span>
           ) : (
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
               data-plugin-toggle={p.id}
-              className={`text-[10px] font-bold tracking-wider px-2.5 py-[2px] border transition-colors duration-150 shrink-0 ${
+              className={`text-[10px] font-bold tracking-wider px-2.5 py-[2px] h-auto rounded-none border transition-colors duration-150 shrink-0 ${
                 p.enabled
                   ? "bg-accent text-accent-fg border-accent"
                   : "bg-transparent text-muted border-border hover:text-txt"
@@ -1735,7 +1855,7 @@ function PluginListView({ label, mode = "all", inModal }: PluginListViewProps) {
               disabled={toggleDisabled}
             >
               {isToggleBusy ? "APPLYING" : p.enabled ? "ON" : "OFF"}
-            </button>
+            </Button>
           )}
         </div>
 
@@ -2109,9 +2229,9 @@ function PluginListView({ label, mode = "all", inModal }: PluginListViewProps) {
                           : "border-transparent bg-transparent text-muted hover:border-border/60 hover:bg-card/55 hover:text-txt"
                       }`}
                     >
-                      <button
-                        type="button"
-                        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                      <Button
+                        variant="ghost"
+                        className="flex min-w-0 flex-1 items-center gap-3 text-left h-auto p-0 rounded-none"
                         onClick={() => handleConnectorSelect(plugin.id)}
                         aria-current={isSelected ? "page" : undefined}
                       >
@@ -2131,10 +2251,11 @@ function PluginListView({ label, mode = "all", inModal }: PluginListViewProps) {
                         <span className="min-w-0 flex-1 truncate text-sm font-semibold leading-none">
                           {plugin.name}
                         </span>
-                      </button>
-                      <button
-                        type="button"
-                        className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold tracking-[0.16em] transition-colors ${
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={`shrink-0 rounded-full border px-2.5 py-1 h-auto text-[10px] font-bold tracking-[0.16em] transition-colors ${
                           plugin.enabled
                             ? "border-accent bg-accent text-accent-fg"
                             : "border-border bg-transparent text-muted hover:border-accent/40 hover:text-txt"
@@ -2149,7 +2270,7 @@ function PluginListView({ label, mode = "all", inModal }: PluginListViewProps) {
                         disabled={toggleDisabled}
                       >
                         {isToggleBusy ? "..." : plugin.enabled ? "ON" : "OFF"}
-                      </button>
+                      </Button>
                       <span
                         className={`shrink-0 text-muted transition-transform ${
                           isExpanded ? "rotate-90" : ""
@@ -2230,11 +2351,21 @@ function PluginListView({ label, mode = "all", inModal }: PluginListViewProps) {
                     plugin.id !== "__ui-showcase__";
                   const isExpanded = connectorExpandedIds.has(plugin.id);
                   const isSelected = connectorSelectedId === plugin.id;
+                  const requiredParams = hasParams
+                    ? plugin.parameters.filter((param) => param.required)
+                    : [];
+                  const requiredSetCount = requiredParams.filter(
+                    (param) => param.isSet,
+                  ).length;
                   const setCount = hasParams
                     ? plugin.parameters.filter((param) => param.isSet).length
                     : 0;
                   const totalCount = hasParams ? plugin.parameters.length : 0;
-                  const allParamsSet = !hasParams || setCount === totalCount;
+                  const allParamsSet =
+                    !hasParams ||
+                    (requiredParams.length > 0
+                      ? requiredSetCount === requiredParams.length
+                      : setCount === totalCount);
                   const isToggleBusy = togglingPlugins.has(plugin.id);
                   const toggleDisabled =
                     isToggleBusy || (hasPluginToggleInFlight && !isToggleBusy);
@@ -2257,10 +2388,10 @@ function PluginListView({ label, mode = "all", inModal }: PluginListViewProps) {
                       }`}
                     >
                       <div className="flex items-start gap-3 px-4 py-4 sm:px-5">
-                        <button
-                          type="button"
+                        <Button
+                          variant="ghost"
                           data-testid={`connector-header-${plugin.id}`}
-                          className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                          className="flex min-w-0 flex-1 items-start gap-3 text-left h-auto p-0 rounded-none"
                           onClick={() =>
                             handleConnectorSectionToggle(plugin.id)
                           }
@@ -2322,12 +2453,13 @@ function PluginListView({ label, mode = "all", inModal }: PluginListViewProps) {
                               )}
                             </span>
                           </span>
-                        </button>
+                        </Button>
 
                         <div className="flex shrink-0 items-center gap-2">
-                          <button
-                            type="button"
-                            className={`rounded-full border px-3 py-1.5 text-[10px] font-bold tracking-[0.16em] transition-colors ${
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className={`rounded-full border px-3 py-1.5 h-auto text-[10px] font-bold tracking-[0.16em] transition-colors ${
                               plugin.enabled
                                 ? "border-accent bg-accent text-accent-fg"
                                 : "border-border bg-transparent text-muted hover:border-accent/40 hover:text-txt"
@@ -2349,10 +2481,11 @@ function PluginListView({ label, mode = "all", inModal }: PluginListViewProps) {
                               : plugin.enabled
                                 ? "ON"
                                 : "OFF"}
-                          </button>
-                          <button
-                            type="button"
-                            className={`flex items-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className={`flex items-center gap-1 rounded-full border px-3 py-1.5 h-auto text-[11px] font-semibold transition-colors ${
                               isExpanded
                                 ? "border-accent/40 bg-accent/10 text-txt"
                                 : "border-border/50 text-muted hover:border-accent/40 hover:text-txt"
@@ -2369,7 +2502,7 @@ function PluginListView({ label, mode = "all", inModal }: PluginListViewProps) {
                                 isExpanded ? "rotate-90" : ""
                               }`}
                             />
-                          </button>
+                          </Button>
                         </div>
                       </div>
 
@@ -2454,7 +2587,13 @@ function PluginListView({ label, mode = "all", inModal }: PluginListViewProps) {
 
                           {hasParams ? (
                             <div className="space-y-4">
-                              {plugin.id === "whatsapp" ? (
+                              {plugin.id === "telegram" ? (
+                                <TelegramPluginConfig
+                                  plugin={plugin}
+                                  pluginConfigs={pluginConfigs}
+                                  onParamChange={handleParamChange}
+                                />
+                              ) : plugin.id === "whatsapp" ? (
                                 <WhatsAppPluginConfig
                                   plugin={plugin}
                                   pluginConfigs={pluginConfigs}
@@ -3070,7 +3209,13 @@ function PluginListView({ label, mode = "all", inModal }: PluginListViewProps) {
                   )}
 
                   <div className="px-5 py-3">
-                    {p.id === "whatsapp" ? (
+                    {p.id === "telegram" ? (
+                      <TelegramPluginConfig
+                        plugin={p}
+                        pluginConfigs={pluginConfigs}
+                        onParamChange={handleParamChange}
+                      />
+                    ) : p.id === "whatsapp" ? (
                       <WhatsAppPluginConfig
                         plugin={p}
                         pluginConfigs={pluginConfigs}
@@ -3275,6 +3420,8 @@ export function PluginsView({
         ? "Connectors"
         : mode === "streaming"
           ? "Streaming"
-          : "Plugins";
+          : mode === "all-social"
+            ? "Plugins"
+            : "Plugins";
   return <PluginListView label={label} mode={mode} inModal={inModal} />;
 }

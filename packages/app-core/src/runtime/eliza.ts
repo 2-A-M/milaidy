@@ -23,11 +23,21 @@ import {
   startEliza as upstreamStartEliza,
 } from "@elizaos/agent/runtime/eliza";
 import {
-  syncElizaEnvToMilady,
-  syncMiladyEnvToEliza,
-} from "../config/brand-env.js";
+  getBootConfig,
+  syncBrandEnvToEliza,
+  syncElizaEnvToBrand,
+} from "../config/boot-config.js";
+
+function syncMiladyEnvToEliza(): void {
+  const aliases = getBootConfig().envAliases;
+  if (aliases) syncBrandEnvToEliza(aliases);
+}
+
+function syncElizaEnvToMilady(): void {
+  const aliases = getBootConfig().envAliases;
+  if (aliases) syncElizaEnvToBrand(aliases);
+}
 import { loadElizaConfig } from "../config/config.js";
-import { ensurePluginManagerAllowed } from "./plugin-manager-guard.js";
 import { STYLE_PRESETS } from "../onboarding-presets.js";
 import { normalizeCharacterMessageExamples } from "../utils/character-message-examples";
 import { ensureRuntimeSqlCompatibility } from "../utils/sql-compat";
@@ -53,12 +63,6 @@ const INTERNAL_CHANNEL_PLUGIN_OVERRIDES = {
   whatsapp: "@elizaos/plugin-whatsapp",
   wechat: "@miladyai/plugin-wechat",
 } as const;
-const LEGACY_INTERNAL_CHANNEL_PLUGIN_NAMES = new Map<string, string>(
-  Object.entries({
-    "@miladyai/plugin-signal": INTERNAL_CHANNEL_PLUGIN_OVERRIDES.signal,
-    "@miladyai/plugin-whatsapp": INTERNAL_CHANNEL_PLUGIN_OVERRIDES.whatsapp,
-  }),
-);
 
 /** Swarm / PTY paths call TEXT_TO_SPEECH; Edge TTS supplies that model with no API key. */
 const AGENT_ORCHESTRATOR_PLUGIN = "@elizaos/plugin-agent-orchestrator";
@@ -162,15 +166,6 @@ export function collectPluginNames(
   syncBrandEnvAliases();
   const [config] = args;
   const result = upstreamCollectPluginNames(...args);
-  for (const [
-    legacyName,
-    normalizedName,
-  ] of LEGACY_INTERNAL_CHANNEL_PLUGIN_NAMES) {
-    if (result.has(legacyName)) {
-      result.delete(legacyName);
-      result.add(normalizedName);
-    }
-  }
   if (
     result.has(AGENT_ORCHESTRATOR_PLUGIN) &&
     !isMiladyEdgeTtsDisabled(config) &&
@@ -280,6 +275,34 @@ export function buildCharacterFromConfig(
     );
   }
   if (bundledPreset) {
+    // The upstream buildCharacterFromConfig may use its own preset data
+    // which can differ from the Milady presets. Backfill all Milady preset
+    // fields so character data is complete even when the Bun body replay
+    // drops fields during onboarding.
+    if (!agentEntry?.style && !character.style && bundledPreset.style) {
+      // Plain style arrays match runtime usage; upstream `StyleGuides` is a protobuf
+      // shape with `$typeName` that we do not construct here.
+      character.style = {
+        all: [...bundledPreset.style.all],
+        chat: [...bundledPreset.style.chat],
+        post: [...bundledPreset.style.post],
+      } as unknown as NonNullable<(typeof character)["style"]>;
+    }
+    if (
+      !agentEntry?.adjectives &&
+      (!character.adjectives || character.adjectives.length === 0) &&
+      bundledPreset.adjectives.length > 0
+    ) {
+      character.adjectives = [...bundledPreset.adjectives];
+    }
+    if (
+      !agentEntry?.topics &&
+      (!Array.isArray(character.topics) || character.topics.length === 0) &&
+      Array.isArray(bundledPreset.topics) &&
+      bundledPreset.topics.length > 0
+    ) {
+      character.topics = [...bundledPreset.topics];
+    }
     if (
       !agentEntry?.postExamples &&
       (character.postExamples?.length ?? 0) === 0
@@ -696,10 +719,6 @@ export async function bootElizaRuntime(
       process.env.EMBEDDING_DIMENSION = "384";
     }
 
-    // Called in both bootElizaRuntime and startEliza because they are
-    // independent entry points — CLI uses startEliza, desktop uses boot.
-    ensurePluginManagerAllowed();
-
     const runtime = await upstreamBootElizaRuntime(opts);
     return runtime ? await repairRuntimeAfterBoot(runtime) : runtime;
   } finally {
@@ -725,9 +744,6 @@ export async function startEliza(
     if (!process.env.EMBEDDING_DIMENSION) {
       process.env.EMBEDDING_DIMENSION = "384";
     }
-
-    // See comment in bootElizaRuntime — both entry points need this call.
-    ensurePluginManagerAllowed();
 
     if (options?.serverOnly) {
       let currentRuntime =
@@ -775,6 +791,14 @@ export async function startEliza(
           return currentRuntime ?? null;
         },
       });
+
+      // WHY: `startApiServer` may bind a different port than requested (busy
+      // socket, upstream policy). Shells, scripts, and follow-up code reading
+      // env must match the real listener or health checks and user-facing URLs
+      // disagree with `GET /api/health`.
+      process.env.MILADY_PORT = String(actualApiPort);
+      process.env.MILADY_API_PORT = String(actualApiPort);
+      process.env.ELIZA_PORT = String(actualApiPort);
 
       logger.info(
         `[milady] API server listening on http://localhost:${actualApiPort}`,

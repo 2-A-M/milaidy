@@ -5,9 +5,24 @@ import {
   type UiLanguage,
 } from "../i18n";
 import type { Tab } from "../navigation";
-import type { OnboardingStep } from "./types";
+import type {
+  CompanionHalfFramerateMode,
+  CompanionVrmPowerMode,
+  OnboardingStep,
+} from "./types";
 import type { UiShellMode, UiTheme } from "./ui-preferences";
 import { normalizeAvatarIndex } from "./vrm";
+
+/* ── Shared localStorage helper ──────────────────────────────────────── */
+
+function tryLocalStorage<T>(fn: () => T, fallback: T): T {
+  try {
+    return fn();
+  } catch (err) {
+    console.warn("[persistence] localStorage operation failed:", err);
+    return fallback;
+  }
+}
 
 /* ── Theme persistence ────────────────────────────────────────────────── */
 
@@ -22,16 +37,133 @@ function normalizeUiTheme(value: unknown): UiTheme {
 export { normalizeUiTheme };
 
 export function loadUiTheme(): UiTheme {
-  try {
-    return normalizeUiTheme(localStorage.getItem(UI_THEME_STORAGE_KEY));
-  } catch {
-    return "dark";
-  }
+  return tryLocalStorage(
+    () => normalizeUiTheme(localStorage.getItem(UI_THEME_STORAGE_KEY)),
+    "dark",
+  );
 }
 
 export function saveUiTheme(theme: UiTheme): void {
-  try {
+  tryLocalStorage(() => {
     localStorage.setItem(UI_THEME_STORAGE_KEY, normalizeUiTheme(theme));
+  }, undefined);
+}
+
+const COMPANION_VRM_POWER_STORAGE_KEY = "eliza:companion-vrm-power";
+/** Legacy; migrated into `eliza:companion-vrm-power` on first read. */
+const LEGACY_COMPANION_EFFICIENCY_KEY = "eliza:companion-efficiency";
+/** Legacy; migrated into `eliza:companion-vrm-power` on first read. */
+const LEGACY_COMPANION_QUALITY_ON_BATTERY_KEY =
+  "eliza:companion-quality-on-battery";
+
+export function normalizeCompanionVrmPowerMode(
+  value: unknown,
+): CompanionVrmPowerMode {
+  return value === "quality" || value === "efficiency" ? value : "balanced";
+}
+
+/**
+ * Persisted 3D companion power preference. Migrates legacy boolean keys once.
+ */
+export function loadCompanionVrmPowerMode(): CompanionVrmPowerMode {
+  try {
+    const raw = localStorage.getItem(COMPANION_VRM_POWER_STORAGE_KEY);
+    if (raw === "quality" || raw === "balanced" || raw === "efficiency") {
+      return raw;
+    }
+    const legacyEffPresent =
+      localStorage.getItem(LEGACY_COMPANION_EFFICIENCY_KEY) != null;
+    const legacyQobPresent =
+      localStorage.getItem(LEGACY_COMPANION_QUALITY_ON_BATTERY_KEY) != null;
+    if (legacyEffPresent || legacyQobPresent) {
+      const effOn =
+        localStorage.getItem(LEGACY_COMPANION_EFFICIENCY_KEY) === "1";
+      const qobOn =
+        localStorage.getItem(LEGACY_COMPANION_QUALITY_ON_BATTERY_KEY) === "1";
+      const migrated: CompanionVrmPowerMode = effOn
+        ? "efficiency"
+        : qobOn
+          ? "quality"
+          : "balanced";
+      saveCompanionVrmPowerMode(migrated);
+      localStorage.removeItem(LEGACY_COMPANION_EFFICIENCY_KEY);
+      localStorage.removeItem(LEGACY_COMPANION_QUALITY_ON_BATTERY_KEY);
+      return migrated;
+    }
+    if (raw != null && raw !== "") {
+      saveCompanionVrmPowerMode("balanced");
+    }
+    return "balanced";
+  } catch {
+    return "balanced";
+  }
+}
+
+export function saveCompanionVrmPowerMode(mode: CompanionVrmPowerMode): void {
+  try {
+    const next = normalizeCompanionVrmPowerMode(mode);
+    localStorage.setItem(COMPANION_VRM_POWER_STORAGE_KEY, next);
+    localStorage.removeItem(LEGACY_COMPANION_EFFICIENCY_KEY);
+    localStorage.removeItem(LEGACY_COMPANION_QUALITY_ON_BATTERY_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+const COMPANION_ANIMATE_WHEN_HIDDEN_KEY = "eliza:companion-animate-when-hidden";
+
+/** When true, keep the VRM loop running when the document is hidden; world/splat is dropped. */
+export function loadCompanionAnimateWhenHidden(): boolean {
+  try {
+    return localStorage.getItem(COMPANION_ANIMATE_WHEN_HIDDEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function saveCompanionAnimateWhenHidden(enabled: boolean): void {
+  try {
+    localStorage.setItem(COMPANION_ANIMATE_WHEN_HIDDEN_KEY, enabled ? "1" : "0");
+  } catch {
+    // ignore
+  }
+}
+
+const COMPANION_HALF_FRAMERATE_STORAGE_KEY = "eliza:companion-half-framerate";
+
+const COMPANION_HALF_FRAMERATE_VALUES = new Set<CompanionHalfFramerateMode>([
+  "off",
+  "when_saving_power",
+  "always",
+]);
+
+export function normalizeCompanionHalfFramerateMode(
+  raw: string | null | undefined,
+): CompanionHalfFramerateMode {
+  if (raw && COMPANION_HALF_FRAMERATE_VALUES.has(raw as CompanionHalfFramerateMode)) {
+    return raw as CompanionHalfFramerateMode;
+  }
+  return "when_saving_power";
+}
+
+export function loadCompanionHalfFramerateMode(): CompanionHalfFramerateMode {
+  try {
+    return normalizeCompanionHalfFramerateMode(
+      localStorage.getItem(COMPANION_HALF_FRAMERATE_STORAGE_KEY),
+    );
+  } catch {
+    return "when_saving_power";
+  }
+}
+
+export function saveCompanionHalfFramerateMode(
+  mode: CompanionHalfFramerateMode,
+): void {
+  try {
+    localStorage.setItem(
+      COMPANION_HALF_FRAMERATE_STORAGE_KEY,
+      normalizeCompanionHalfFramerateMode(mode),
+    );
   } catch {
     // ignore
   }
@@ -91,46 +223,62 @@ function normalizeOnboardingStep(value: unknown): OnboardingStep | null {
 }
 
 export function loadPersistedOnboardingStep(): OnboardingStep | null {
-  try {
-    return normalizeOnboardingStep(
-      localStorage.getItem(ONBOARDING_STEP_STORAGE_KEY),
-    );
-  } catch {
-    return null;
-  }
+  return tryLocalStorage(
+    () =>
+      normalizeOnboardingStep(
+        localStorage.getItem(ONBOARDING_STEP_STORAGE_KEY),
+      ),
+    null,
+  );
 }
 
 export function saveOnboardingStep(step: OnboardingStep): void {
-  try {
+  tryLocalStorage(() => {
     localStorage.setItem(ONBOARDING_STEP_STORAGE_KEY, step);
-  } catch {
-    /* ignore */
-  }
+  }, undefined);
 }
 
 export function clearPersistedOnboardingStep(): void {
-  try {
+  tryLocalStorage(() => {
     localStorage.removeItem(ONBOARDING_STEP_STORAGE_KEY);
+  }, undefined);
+}
+
+/* ── Onboarding completion persistence ────────────────────────────────── */
+
+const ONBOARDING_COMPLETE_STORAGE_KEY = "eliza:onboarding-complete";
+
+export function loadPersistedOnboardingComplete(): boolean {
+  try {
+    return localStorage.getItem(ONBOARDING_COMPLETE_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function savePersistedOnboardingComplete(complete: boolean): void {
+  try {
+    if (complete) {
+      localStorage.setItem(ONBOARDING_COMPLETE_STORAGE_KEY, "1");
+    } else {
+      localStorage.removeItem(ONBOARDING_COMPLETE_STORAGE_KEY);
+    }
   } catch {
     /* ignore */
   }
 }
 
 export function loadUiLanguage(): UiLanguage {
-  try {
+  return tryLocalStorage(() => {
     const stored = localStorage.getItem(UI_LANGUAGE_STORAGE_KEY);
     return normalizeLanguage(stored ?? DEFAULT_UI_LANGUAGE);
-  } catch {
-    return DEFAULT_UI_LANGUAGE;
-  }
+  }, DEFAULT_UI_LANGUAGE);
 }
 
 export function saveUiLanguage(language: UiLanguage): void {
-  try {
+  tryLocalStorage(() => {
     localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, normalizeLanguage(language));
-  } catch {
-    // ignore
-  }
+  }, undefined);
 }
 
 function normalizeUiShellMode(mode: unknown): UiShellMode {
@@ -140,21 +288,19 @@ function normalizeUiShellMode(mode: unknown): UiShellMode {
 export { normalizeUiShellMode };
 
 export function loadUiShellMode(): UiShellMode {
-  try {
-    return normalizeUiShellMode(
-      localStorage.getItem(UI_SHELL_MODE_STORAGE_KEY),
-    );
-  } catch {
-    return "companion";
-  }
+  return tryLocalStorage(
+    () =>
+      normalizeUiShellMode(
+        localStorage.getItem(UI_SHELL_MODE_STORAGE_KEY),
+      ),
+    "companion",
+  );
 }
 
 export function saveUiShellMode(mode: UiShellMode): void {
-  try {
+  tryLocalStorage(() => {
     localStorage.setItem(UI_SHELL_MODE_STORAGE_KEY, normalizeUiShellMode(mode));
-  } catch {
-    // ignore
-  }
+  }, undefined);
 }
 
 function normalizeLastNativeTab(tab: unknown): Tab {
@@ -184,48 +330,42 @@ function normalizeLastNativeTab(tab: unknown): Tab {
 }
 
 export function loadLastNativeTab(): Tab {
-  try {
-    return normalizeLastNativeTab(
-      localStorage.getItem(LAST_NATIVE_TAB_STORAGE_KEY),
-    );
-  } catch {
-    return "chat";
-  }
+  return tryLocalStorage(
+    () =>
+      normalizeLastNativeTab(
+        localStorage.getItem(LAST_NATIVE_TAB_STORAGE_KEY),
+      ),
+    "chat",
+  );
 }
 
 export function saveLastNativeTab(tab: Tab): void {
-  try {
+  tryLocalStorage(() => {
     localStorage.setItem(
       LAST_NATIVE_TAB_STORAGE_KEY,
       normalizeLastNativeTab(tab),
     );
-  } catch {
-    // ignore
-  }
+  }, undefined);
 }
 
 /* ── Avatar persistence ───────────────────────────────────────────────── */
 const AVATAR_INDEX_KEY = "eliza_avatar_index";
 
 export function loadAvatarIndex(): number {
-  try {
+  return tryLocalStorage(() => {
     const stored = localStorage.getItem(AVATAR_INDEX_KEY);
     if (stored) {
       const n = parseInt(stored, 10);
       return normalizeAvatarIndex(n);
     }
-  } catch {
-    /* ignore */
-  }
-  return 1;
+    return 1;
+  }, 1);
 }
 
 export function saveAvatarIndex(index: number): void {
-  try {
+  tryLocalStorage(() => {
     localStorage.setItem(AVATAR_INDEX_KEY, String(normalizeAvatarIndex(index)));
-  } catch {
-    /* ignore */
-  }
+  }, undefined);
 }
 
 /* ── Chat UI persistence ──────────────────────────────────────────────── */
@@ -233,37 +373,29 @@ const CHAT_AVATAR_VISIBLE_KEY = "eliza:chat:avatarVisible";
 const CHAT_VOICE_MUTED_KEY = "eliza:chat:voiceMuted";
 
 export function loadChatAvatarVisible(): boolean {
-  try {
+  return tryLocalStorage(() => {
     const stored = localStorage.getItem(CHAT_AVATAR_VISIBLE_KEY);
     return stored === null ? true : stored === "true";
-  } catch {
-    return true;
-  }
+  }, true);
 }
 
 export function loadChatVoiceMuted(): boolean {
-  try {
+  return tryLocalStorage(() => {
     const stored = localStorage.getItem(CHAT_VOICE_MUTED_KEY);
     return stored === null ? false : stored === "true";
-  } catch {
-    return false;
-  }
+  }, false);
 }
 
 export function saveChatAvatarVisible(value: boolean): void {
-  try {
+  tryLocalStorage(() => {
     localStorage.setItem(CHAT_AVATAR_VISIBLE_KEY, String(value));
-  } catch {
-    /* ignore */
-  }
+  }, undefined);
 }
 
 export function saveChatVoiceMuted(value: boolean): void {
-  try {
+  tryLocalStorage(() => {
     localStorage.setItem(CHAT_VOICE_MUTED_KEY, String(value));
-  } catch {
-    /* ignore */
-  }
+  }, undefined);
 }
 
 /* ── Chat mode persistence ─────────────────────────────────────────────── */
@@ -272,62 +404,50 @@ const ACTIVE_CONVERSATION_ID_KEY = "eliza:chat:activeConversationId";
 const COMPANION_MESSAGE_CUTOFF_TS_KEY = "eliza:chat:companionMessageCutoffTs";
 
 export function loadChatMode(): ConversationMode {
-  try {
+  return tryLocalStorage(() => {
     const stored = localStorage.getItem(CHAT_MODE_KEY);
     return stored === "power" ? "power" : "simple";
-  } catch {
-    return "simple";
-  }
+  }, "simple");
 }
 
 export function saveChatMode(value: ConversationMode): void {
-  try {
+  tryLocalStorage(() => {
     localStorage.setItem(CHAT_MODE_KEY, value);
-  } catch {
-    /* ignore */
-  }
+  }, undefined);
 }
 
 export function loadActiveConversationId(): string | null {
-  try {
+  return tryLocalStorage(() => {
     const stored = localStorage.getItem(ACTIVE_CONVERSATION_ID_KEY)?.trim();
     return stored ? stored : null;
-  } catch {
-    return null;
-  }
+  }, null);
 }
 
 export function saveActiveConversationId(value: string | null): void {
-  try {
+  tryLocalStorage(() => {
     if (value?.trim()) {
       localStorage.setItem(ACTIVE_CONVERSATION_ID_KEY, value);
       return;
     }
     localStorage.removeItem(ACTIVE_CONVERSATION_ID_KEY);
-  } catch {
-    /* ignore */
-  }
+  }, undefined);
 }
 
 export function loadCompanionMessageCutoffTs(): number {
-  try {
+  return tryLocalStorage(() => {
     const stored = localStorage.getItem(COMPANION_MESSAGE_CUTOFF_TS_KEY);
     const parsed = stored ? Number.parseInt(stored, 10) : Number.NaN;
     return Number.isFinite(parsed) && parsed > 0 ? parsed : Date.now();
-  } catch {
-    return Date.now();
-  }
+  }, Date.now());
 }
 
 export function saveCompanionMessageCutoffTs(value: number): void {
-  try {
+  tryLocalStorage(() => {
     localStorage.setItem(
       COMPANION_MESSAGE_CUTOFF_TS_KEY,
       String(Math.max(0, Math.trunc(value))),
     );
-  } catch {
-    /* ignore */
-  }
+  }, undefined);
 }
 
 /* ── Connection mode persistence ──────────────────────────────────────── */
@@ -352,7 +472,7 @@ export interface PersistedConnectionMode {
 const CONNECTION_MODE_STORAGE_KEY = "eliza:connection-mode";
 
 export function loadPersistedConnectionMode(): PersistedConnectionMode | null {
-  try {
+  return tryLocalStorage(() => {
     const stored = localStorage.getItem(CONNECTION_MODE_STORAGE_KEY);
     if (!stored) return null;
     const parsed = JSON.parse(stored);
@@ -366,25 +486,19 @@ export function loadPersistedConnectionMode(): PersistedConnectionMode | null {
       return parsed as PersistedConnectionMode;
     }
     return null;
-  } catch {
-    return null;
-  }
+  }, null);
 }
 
 export function savePersistedConnectionMode(
   mode: PersistedConnectionMode,
 ): void {
-  try {
+  tryLocalStorage(() => {
     localStorage.setItem(CONNECTION_MODE_STORAGE_KEY, JSON.stringify(mode));
-  } catch {
-    /* ignore */
-  }
+  }, undefined);
 }
 
 export function clearPersistedConnectionMode(): void {
-  try {
+  tryLocalStorage(() => {
     localStorage.removeItem(CONNECTION_MODE_STORAGE_KEY);
-  } catch {
-    /* ignore */
-  }
+  }, undefined);
 }

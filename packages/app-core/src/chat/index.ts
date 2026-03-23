@@ -1,8 +1,6 @@
 /**
  * Chat command utilities — slash command parsing, saved command management,
  * and the typed command registry.
- *
- * Migrated from apps/app/src/chat-commands.ts and command-registry.ts.
  */
 
 import type { Tab } from "../navigation";
@@ -153,7 +151,10 @@ export interface BuildCommandsArgs {
   desktopRuntime: boolean;
   focusDesktopMainWindow: () => void;
   openDesktopSettingsWindow: (tabHint?: string) => void;
-  openDesktopSurfaceWindow: (surface: DesktopWorkspaceSurface) => void;
+  openDesktopSurfaceWindow: (
+    surface: DesktopWorkspaceSurface,
+    options?: { browse?: string },
+  ) => void;
 }
 
 export const DESKTOP_COMMAND_CLICK_AUDIT: readonly DesktopClickAuditItem[] = [

@@ -4,12 +4,12 @@
  * Children access state and actions through the useApp() hook.
  */
 
-import type { OnboardingConnection } from "@elizaos/agent/contracts/onboarding";
 import { ONBOARDING_PROVIDER_CATALOG } from "@elizaos/agent/contracts/onboarding";
 import {
   type ReactNode,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -74,8 +74,6 @@ import {
   type WorkbenchOverview,
 } from "../api";
 import {
-  type AutonomyEventStore,
-  type AutonomyRunHealthMap,
   buildAutonomyGapReplayRequests,
   hasPendingAutonomyGaps,
   markPendingAutonomyGapsPartial,
@@ -85,6 +83,7 @@ import {
   getBackendStartupTimeoutMs,
   inspectExistingElizaInstall,
   invokeDesktopBridgeRequest,
+  invokeDesktopBridgeRequestWithTimeout,
   isElectrobunRuntime,
   scanProviderCredentials,
 } from "../bridge";
@@ -95,20 +94,11 @@ import {
   normalizeSlashCommandName,
 } from "../chat";
 import { mapServerTasksToSessions } from "../coding";
+import { getBootConfig, setBootConfig } from "../config/boot-config";
 import { BrandingContext, DEFAULT_BRANDING } from "../config/branding";
 import { type AppEmoteEventDetail, dispatchAppEmoteEvent } from "../events";
-import {
-  createTranslator,
-  normalizeLanguage,
-  t as translateText,
-  type UiLanguage,
-} from "../i18n";
-import {
-  COMPANION_ENABLED,
-  pathForTab,
-  type Tab,
-  tabFromPath,
-} from "../navigation";
+import type { UiLanguage } from "../i18n";
+import { COMPANION_ENABLED, pathForTab, type Tab, tabFromPath } from "../navigation";
 import {
   canRevertOnboardingTo,
   getFlaminaTopicForOnboardingStep,
@@ -122,6 +112,7 @@ import {
   copyTextToClipboard,
   openExternalUrl,
   resolveApiUrl,
+  yieldMiladyHttpAfterNativeMessageBox,
 } from "../utils";
 import {
   computeAgentDeadlineExtensions,
@@ -130,7 +121,6 @@ import {
 import { completeResetLocalStateAfterServerWipe as runCompleteResetLocalStateAfterServerWipe } from "./complete-reset-local-state-after-wipe";
 import { handleResetAppliedFromMainCore } from "./handle-reset-applied-from-main";
 import {
-  type ActionNotice,
   AGENT_TRANSFER_MIN_PASSWORD_LENGTH,
   AppContext,
   type AppContextValue,
@@ -138,6 +128,8 @@ import {
   applyUiTheme,
   asApiLikeError,
   type ChatTurnUsage,
+  type CompanionHalfFramerateMode,
+  type CompanionVrmPowerMode,
   clearPersistedConnectionMode,
   clearPersistedOnboardingStep,
   deriveOnboardingResumeConnection,
@@ -147,21 +139,23 @@ import {
   type GamePostMessageAuthPayload,
   inferOnboardingResumeStep,
   LIFECYCLE_MESSAGES,
-  type LifecycleAction,
   type LoadConversationMessagesResult,
   loadActiveConversationId,
   loadAvatarIndex,
-  loadChatAvatarVisible,
-  loadChatMode,
-  loadChatVoiceMuted,
-  loadCompanionMessageCutoffTs,
+  loadCompanionAnimateWhenHidden,
+  loadCompanionHalfFramerateMode,
+  loadCompanionVrmPowerMode,
   loadLastNativeTab,
   loadPersistedConnectionMode,
+  loadPersistedOnboardingComplete,
   loadPersistedOnboardingStep,
+  savePersistedOnboardingComplete,
   loadUiLanguage,
   loadUiTheme,
   mergeStreamingText,
   normalizeAvatarIndex,
+  normalizeCompanionHalfFramerateMode,
+  normalizeCompanionVrmPowerMode,
   normalizeCustomActionName,
   normalizeUiShellMode,
   normalizeUiTheme,
@@ -175,23 +169,20 @@ import {
   parseStreamEventEnvelopeEvent,
   type ShellView,
   type StartupErrorState,
-  type StartupPhase,
-  saveActiveConversationId,
   saveAvatarIndex,
-  saveChatAvatarVisible,
-  saveChatMode,
-  saveChatVoiceMuted,
-  saveCompanionMessageCutoffTs,
+  saveCompanionAnimateWhenHidden,
+  saveCompanionHalfFramerateMode,
+  saveCompanionVrmPowerMode,
   saveLastNativeTab,
-  saveOnboardingStep,
   savePersistedConnectionMode,
-  saveUiLanguage,
   saveUiShellMode,
   saveUiTheme,
   shouldApplyFinalStreamText,
+  type TabCommittedDetail,
   type UiShellMode,
   type UiTheme,
 } from "./internal";
+import { NavigationEventHub } from "./navigation-events";
 import {
   deriveDetectedProviderPrefill,
   detectExistingOnboardingConnection,
@@ -201,6 +192,10 @@ import {
   getTabForShellView,
   shouldStartAtCharacterSelectOnLaunch,
 } from "./shell-routing";
+import { TranslationProvider, useTranslation } from "./TranslationContext";
+import { useChatState } from "./useChatState";
+import { useLifecycleState } from "./useLifecycleState";
+import { useOnboardingState } from "./useOnboardingState";
 
 const AGENT_STATUS_POLL_INTERVAL_MS = 500;
 const ONBOARDING_GREETING_READY_TIMEOUT_MS = 15_000;
@@ -216,6 +211,8 @@ export {
   applyUiTheme,
   asApiLikeError,
   type ChatTurnUsage,
+  type CompanionHalfFramerateMode,
+  type CompanionVrmPowerMode,
   computeStreamingDelta,
   formatSearchBullet,
   formatStartupErrorDetail,
@@ -225,7 +222,6 @@ export {
   getVrmPreviewUrl,
   getVrmTitle,
   getVrmUrl,
-  isOfficialVrmIndex,
   LIFECYCLE_MESSAGES,
   type LifecycleAction,
   type LoadConversationMessagesResult,
@@ -233,11 +229,17 @@ export {
   loadChatAvatarVisible,
   loadChatMode,
   loadChatVoiceMuted,
+  loadCompanionAnimateWhenHidden,
+  loadCompanionHalfFramerateMode,
+  loadCompanionVrmPowerMode,
   loadUiLanguage,
   loadUiShellMode,
   loadUiTheme,
   mergeStreamingText,
+  type NavigationEventsApi,
   normalizeAvatarIndex,
+  normalizeCompanionHalfFramerateMode,
+  normalizeCompanionVrmPowerMode,
   normalizeCustomActionName,
   normalizeStreamComparisonText,
   normalizeUiShellMode,
@@ -262,23 +264,29 @@ export {
   saveChatAvatarVisible,
   saveChatMode,
   saveChatVoiceMuted,
+  saveCompanionAnimateWhenHidden,
+  saveCompanionHalfFramerateMode,
+  saveCompanionVrmPowerMode,
   saveUiLanguage,
   saveUiShellMode,
   saveUiTheme,
   shouldApplyFinalStreamText,
+  type TabCommittedDetail,
+  type TranslationContextValue,
   type UiShellMode,
   type UiTheme,
   useApp,
+  useTranslation,
   VRM_COUNT,
 } from "./internal";
 export { AGENT_READY_TIMEOUT_MS } from "./types";
 
 import {
-  ConfirmModal,
-  PromptModal,
+  ConfirmDialog,
+  PromptDialog,
   useConfirm,
   usePrompt,
-} from "../components/ConfirmModal";
+} from "@miladyai/ui";
 import { buildWalletRpcUpdateRequest } from "../wallet-rpc";
 
 const GREETING_EMOTE_DELAY_MS = 1400;
@@ -411,12 +419,12 @@ function normalizeRemoteApiBaseInput(rawValue: string): string {
   return parsed.toString().replace(/\/+$/, "");
 }
 
-function loadSessionApiBase(): string {
+function _loadSessionApiBase(): string {
   if (typeof window === "undefined") return "";
   return window.sessionStorage.getItem("milady_api_base")?.trim() ?? "";
 }
 
-function isRemoteApiBase(baseUrl: string): boolean {
+function _isRemoteApiBase(baseUrl: string): boolean {
   if (!baseUrl || typeof window === "undefined") return false;
   try {
     const parsed = new URL(baseUrl);
@@ -466,59 +474,135 @@ export function AppProvider({
   children: ReactNode;
   branding?: Partial<import("../config/branding").BrandingConfig>;
 }) {
+  const onLanguageSyncError = useCallback((lang: UiLanguage) => {
+    // Notification is deferred until AppProviderInner mounts; this is
+    // only called on language *changes*, never on initial mount.
+    console.warn("[milady] Failed to sync language to server:", lang);
+  }, []);
+  return (
+    <TranslationProvider onLanguageSyncError={onLanguageSyncError}>
+      <AppProviderInner branding={brandingOverride}>
+        {children}
+      </AppProviderInner>
+    </TranslationProvider>
+  );
+}
+
+function AppProviderInner({
+  children,
+  branding: brandingOverride,
+}: {
+  children: ReactNode;
+  branding?: Partial<import("../config/branding").BrandingConfig>;
+}) {
   const [lastNativeTab, setLastNativeTabState] =
     useState<Tab>(loadLastNativeTab);
   // --- Core state ---
-  const [tab, _setTabRawInner] = useState<Tab>("chat");
+  const [tab, _setTabRawInner] = useState<Tab>(
+    COMPANION_ENABLED ? "companion" : "chat",
+  );
   const initialTabSetRef = useRef(false);
   const setTabRaw = useCallback((t: Tab) => {
     _setTabRawInner(t);
   }, []);
-  const [uiLanguage, setUiLanguageState] = useState<UiLanguage>(loadUiLanguage);
+  // uiLanguage + t live in TranslationContext; consumed via useTranslation()
+  const { t, uiLanguage, setUiLanguage } = useTranslation();
   const [uiTheme, setUiThemeState] = useState<UiTheme>(loadUiTheme);
-  const [connected, setConnected] = useState(false);
-  const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
-  const [onboardingComplete, setOnboardingComplete] = useState(false);
-  const [onboardingUiRevealNonce, setOnboardingUiRevealNonce] = useState(0);
-  const [onboardingLoading, setOnboardingLoading] = useState(true);
-  const [startupPhase, setStartupPhase] =
-    useState<StartupPhase>("starting-backend");
-  const [startupError, setStartupError] = useState<StartupErrorState | null>(
-    null,
-  );
-  const [startupRetryNonce, setStartupRetryNonce] = useState(0);
-  const [authRequired, setAuthRequired] = useState(false);
-  const [actionNotice, setActionNoticeState] = useState<ActionNotice | null>(
-    null,
-  );
-  const [lifecycleBusy, setLifecycleBusy] = useState(false);
-  const [lifecycleAction, setLifecycleAction] =
-    useState<LifecycleAction | null>(null);
+  const [companionVrmPowerMode, setCompanionVrmPowerModeState] =
+    useState<CompanionVrmPowerMode>(loadCompanionVrmPowerMode);
+  const [companionAnimateWhenHidden, setCompanionAnimateWhenHiddenState] =
+    useState<boolean>(loadCompanionAnimateWhenHidden);
+  const [companionHalfFramerateMode, setCompanionHalfFramerateModeState] =
+    useState<CompanionHalfFramerateMode>(loadCompanionHalfFramerateMode);
 
-  // --- Deferred restart ---
-  const [pendingRestart, setPendingRestart] = useState(false);
-  const [pendingRestartReasons, setPendingRestartReasons] = useState<string[]>(
-    [],
-  );
-  const [restartBannerDismissed, setRestartBannerDismissed] = useState(false);
+  // ── Lifecycle state (consolidated from 20+ useState hooks) ──
+  const lifecycle = useLifecycleState();
+  const {
+    state: {
+      connected,
+      agentStatus,
+      onboardingComplete,
+      onboardingUiRevealNonce,
+      onboardingLoading,
+      startupPhase,
+      startupError,
+      startupRetryNonce,
+      authRequired,
+      actionNotice,
+      lifecycleBusy,
+      lifecycleAction,
+      pendingRestart,
+      pendingRestartReasons,
+      restartBannerDismissed,
+      backendConnection,
+      backendDisconnectedBannerDismissed,
+      systemWarnings,
+    },
+    setConnected,
+    setAgentStatus,
+    setAgentStatusIfChanged,
+    setOnboardingComplete,
+    incrementOnboardingRevealNonce: setOnboardingUiRevealNonce_increment,
+    setOnboardingLoading,
+    setStartupPhase,
+    setStartupError,
+    setAuthRequired,
+    setActionNotice,
+    beginLifecycleAction,
+    finishLifecycleAction,
+    setPendingRestart: setPendingRestartAction,
+    dismissRestartBanner,
+    showRestartBanner,
+    dismissBackendBanner: dismissBackendDisconnectedBanner,
+    resetBackendConnection,
+    dismissSystemWarning,
+    startupStatus,
+    lifecycleBusyRef,
+    lifecycleActionRef,
+  } = lifecycle;
 
-  // --- Backend connection state (for crash handling) ---
-  const [backendConnection, setBackendConnection] = useState<{
-    state: "connected" | "disconnected" | "reconnecting" | "failed";
-    reconnectAttempt: number;
-    maxReconnectAttempts: number;
-    showDisconnectedUI: boolean;
-  }>({
-    state: "disconnected",
-    reconnectAttempt: 0,
-    maxReconnectAttempts: 15,
-    showDisconnectedUI: false,
-  });
-  const [
-    backendDisconnectedBannerDismissed,
-    setBackendDisconnectedBannerDismissed,
-  ] = useState(false);
-  const [systemWarnings, setSystemWarnings] = useState<string[]>([]);
+  // Compatibility wrappers — old code calls these separately; lifecycle hook combines them.
+  const setPendingRestart = useCallback(
+    (v: boolean | ((prev: boolean) => boolean)) => {
+      const resolved =
+        typeof v === "function" ? v(lifecycle.state.pendingRestart) : v;
+      setPendingRestartAction(resolved);
+    },
+    [lifecycle.state.pendingRestart, setPendingRestartAction],
+  );
+  const setPendingRestartReasons = useCallback(
+    (v: string[] | ((prev: string[]) => string[])) => {
+      const resolved =
+        typeof v === "function" ? v(lifecycle.state.pendingRestartReasons) : v;
+      setPendingRestartAction(lifecycle.state.pendingRestart, resolved);
+    },
+    [
+      lifecycle.state.pendingRestart,
+      lifecycle.state.pendingRestartReasons,
+      setPendingRestartAction,
+    ],
+  );
+  const setOnboardingUiRevealNonce = useCallback(
+    (_fn: (n: number) => number) => setOnboardingUiRevealNonce_increment(),
+    [setOnboardingUiRevealNonce_increment],
+  );
+  const setBackendDisconnectedBannerDismissed = useCallback(
+    (v: boolean) => {
+      if (v) dismissBackendDisconnectedBanner();
+      // Note: only dismissal is supported via the reducer
+    },
+    [dismissBackendDisconnectedBanner],
+  );
+  const setSystemWarnings = useCallback(
+    (v: string[] | ((prev: string[]) => string[])) => {
+      const resolved =
+        typeof v === "function" ? v(lifecycle.state.systemWarnings) : v;
+      lifecycle.setSystemWarnings(resolved);
+    },
+    [lifecycle.state.systemWarnings, lifecycle.setSystemWarnings],
+  );
+  const retryStartup = lifecycle.retryStartup;
+
   const uiShellMode = deriveUiShellModeForTab(tab);
 
   // --- Pairing ---
@@ -528,96 +612,78 @@ export function AppProvider({
   const [pairingError, setPairingError] = useState<string | null>(null);
   const [pairingBusy, setPairingBusy] = useState(false);
 
-  // --- Chat ---
-  const [chatInput, setChatInput] = useState("");
-  const [chatSending, setChatSending] = useState(false);
-  const [chatFirstTokenReceived, setChatFirstTokenReceived] = useState(false);
-  const [chatLastUsage, setChatLastUsage] = useState<ChatTurnUsage | null>(
-    null,
+  // ── Chat state (consolidated from 18+ useState + 10 useEffect hooks) ──
+  const chatState = useChatState();
+  const {
+    state: {
+      chatInput,
+      chatSending,
+      chatFirstTokenReceived,
+      chatLastUsage,
+      chatAvatarVisible,
+      chatAgentVoiceMuted,
+      chatMode,
+      chatAvatarSpeaking,
+      conversations,
+      activeConversationId,
+      companionMessageCutoffTs,
+      conversationMessages,
+      autonomousEvents,
+      autonomousLatestEventId,
+      autonomousRunHealthByRunId,
+      ptySessions,
+      unreadConversations,
+      chatPendingImages,
+    },
+    setChatInput,
+    setChatSending,
+    setChatFirstTokenReceived,
+    setChatLastUsage,
+    setChatAvatarVisible,
+    setChatAgentVoiceMuted,
+    setChatMode,
+    setChatAvatarSpeaking,
+    setConversations,
+    setActiveConversationId,
+    setCompanionMessageCutoffTs,
+    setConversationMessages,
+    setAutonomousEvents,
+    setAutonomousLatestEventId,
+    setAutonomousRunHealthByRunId,
+    setPtySessions,
+    setChatPendingImages,
+    resetDraftState: resetConversationDraftState,
+    activeConversationIdRef,
+    conversationMessagesRef,
+    conversationHydrationEpochRef,
+    chatAbortRef,
+    chatSendBusyRef,
+    chatSendNonceRef,
+    greetingFiredRef,
+    greetingInFlightConversationRef,
+    greetingEmoteTimerRef,
+    companionStaleConversationRefreshRef,
+    autonomousStoreRef,
+    autonomousEventsRef,
+    autonomousLatestEventIdRef,
+    autonomousRunHealthByRunIdRef,
+    autonomousReplayInFlightRef,
+  } = chatState;
+  // Compat: old code sometimes used a separate chatAwaitingGreeting state
+  const [chatAwaitingGreeting, _setChatAwaitingGreeting] = useState(false);
+  // addUnread / removeUnread wrappers for old setUnreadConversations patterns
+  const setUnreadConversations = useCallback(
+    (v: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      if (typeof v === "function") {
+        const nextVal = v(chatState.state.unreadConversations);
+        // Sync back through dispatch
+        for (const id of nextVal) chatState.addUnread(id);
+      } else {
+        // Direct set not supported through reducer — use add/remove
+      }
+    },
+    [chatState],
   );
-  const [chatAvatarVisible, setChatAvatarVisible] = useState(
-    loadChatAvatarVisible,
-  );
-  const [chatAgentVoiceMuted, setChatAgentVoiceMuted] =
-    useState(loadChatVoiceMuted);
-  const [chatMode, setChatMode] = useState<ConversationMode>(loadChatMode);
-  const [chatAvatarSpeaking, setChatAvatarSpeaking] = useState(false);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConversationId, setActiveConversationId] = useState<
-    string | null
-  >(null);
-  const [companionMessageCutoffTs, setCompanionMessageCutoffTs] = useState(
-    loadCompanionMessageCutoffTs,
-  );
-  const [conversationMessages, setConversationMessages] = useState<
-    ConversationMessage[]
-  >([]);
-  const [autonomousEvents, setAutonomousEvents] = useState<
-    StreamEventEnvelope[]
-  >([]);
-  const [autonomousLatestEventId, setAutonomousLatestEventId] = useState<
-    string | null
-  >(null);
-  const [autonomousRunHealthByRunId, setAutonomousRunHealthByRunId] =
-    useState<AutonomyRunHealthMap>({});
-  const [ptySessions, setPtySessions] = useState<CodingAgentSession[]>([]);
-  const [unreadConversations, setUnreadConversations] = useState<Set<string>>(
-    new Set(),
-  );
-  const autonomousStoreRef = useRef<AutonomyEventStore>({
-    eventsById: {},
-    eventOrder: [],
-    runIndex: {},
-    watermark: null,
-  });
-  const autonomousEventsRef = useRef<StreamEventEnvelope[]>([]);
-  const autonomousLatestEventIdRef = useRef<string | null>(null);
-  const autonomousRunHealthByRunIdRef = useRef<AutonomyRunHealthMap>({});
-  const autonomousReplayInFlightRef = useRef(false);
-  const activeConversationIdRef = useRef<string | null>(null);
-  const conversationMessagesRef = useRef<ConversationMessage[]>([]);
-  const conversationsRef = useRef<Conversation[]>([]);
-  const conversationHydrationEpochRef = useRef(0);
-
-  useEffect(() => {
-    autonomousEventsRef.current = autonomousEvents;
-  }, [autonomousEvents]);
-
-  useEffect(() => {
-    autonomousLatestEventIdRef.current = autonomousLatestEventId;
-  }, [autonomousLatestEventId]);
-
-  useEffect(() => {
-    autonomousRunHealthByRunIdRef.current = autonomousRunHealthByRunId;
-  }, [autonomousRunHealthByRunId]);
-
-  useEffect(() => {
-    conversationMessagesRef.current = conversationMessages;
-  }, [conversationMessages]);
-
-  useEffect(() => {
-    conversationsRef.current = conversations;
-  }, [conversations]);
-
-  useEffect(() => {
-    saveChatAvatarVisible(chatAvatarVisible);
-  }, [chatAvatarVisible]);
-
-  useEffect(() => {
-    saveChatVoiceMuted(chatAgentVoiceMuted);
-  }, [chatAgentVoiceMuted]);
-
-  useEffect(() => {
-    saveChatMode(chatMode);
-  }, [chatMode]);
-
-  useEffect(() => {
-    saveActiveConversationId(activeConversationId);
-  }, [activeConversationId]);
-
-  useEffect(() => {
-    saveCompanionMessageCutoffTs(companionMessageCutoffTs);
-  }, [companionMessageCutoffTs]);
 
   // --- Triggers ---
   const [triggers, setTriggers] = useState<TriggerSummary[]>([]);
@@ -723,13 +789,9 @@ export function AppProvider({
   const [mintError, setMintError] = useState<string | null>(null);
   const [mintShiny, setMintShiny] = useState(false);
 
-  // --- Whitelist ---
   const [whitelistStatus, setWhitelistStatus] =
     useState<WhitelistStatus | null>(null);
   const [whitelistLoading, setWhitelistLoading] = useState(false);
-  const [twitterVerifyMessage] = useState<string | null>(null);
-  const [twitterVerifyUrl] = useState("");
-  const [twitterVerifying] = useState(false);
 
   // --- Character ---
   const [characterData, setCharacterData] = useState<CharacterData | null>(
@@ -766,6 +828,10 @@ export function AppProvider({
   const [elizaCloudCreditsLow, setElizaCloudCreditsLow] = useState(false);
   const [elizaCloudCreditsCritical, setElizaCloudCreditsCritical] =
     useState(false);
+  const [elizaCloudAuthRejected, setElizaCloudAuthRejected] = useState(false);
+  const [elizaCloudCreditsError, setElizaCloudCreditsError] = useState<
+    string | null
+  >(null);
   const [elizaCloudTopUpUrl, setElizaCloudTopUpUrl] =
     useState("/cloud/billing");
   const [elizaCloudUserId, setElizaCloudUserId] = useState<string | null>(null);
@@ -848,129 +914,221 @@ export function AppProvider({
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
 
-  // --- Onboarding ---
-  const [onboardingStep, setOnboardingStepRaw] = useState<OnboardingStep>(
-    () => loadPersistedOnboardingStep() ?? "welcome",
-  );
-  const [onboardingMode, setOnboardingMode] =
-    useState<AppState["onboardingMode"]>("basic");
-  const [onboardingActiveGuide, setOnboardingActiveGuide] =
-    useState<AppState["onboardingActiveGuide"]>(null);
-  const [onboardingDeferredTasks, setOnboardingDeferredTasks] = useState<
-    AppState["onboardingDeferredTasks"]
-  >([]);
-  const [
-    postOnboardingChecklistDismissed,
-    setPostOnboardingChecklistDismissed,
-  ] = useState(false);
-  const [onboardingOptions, setOnboardingOptions] =
-    useState<OnboardingOptions | null>(null);
-  const [onboardingName, setOnboardingName] = useState("Eliza");
-  const [onboardingOwnerName, setOnboardingOwnerName] = useState("anon");
-
-  const [onboardingStyle, setOnboardingStyle] = useState("");
-  const [onboardingRunMode, setOnboardingRunMode] = useState<
-    "local" | "cloud" | ""
-  >(brandingOverride?.cloudOnly ? "cloud" : "");
-  const [onboardingCloudProvider, setOnboardingCloudProvider] = useState(
-    brandingOverride?.cloudOnly ? "elizacloud" : "",
-  );
-  const [onboardingSmallModel, setOnboardingSmallModel] = useState(
-    "moonshotai/kimi-k2-turbo",
-  );
-  const [onboardingLargeModel, setOnboardingLargeModel] = useState(
-    "moonshotai/kimi-k2-0905",
-  );
-  const [onboardingProvider, setOnboardingProvider] = useState("");
-  const [onboardingApiKey, setOnboardingApiKey] = useState("");
-  const [
-    onboardingExistingInstallDetected,
-    setOnboardingExistingInstallDetected,
-  ] = useState(false);
-  const [onboardingDetectedProviders, setOnboardingDetectedProviders] =
-    useState<
-      Array<{
-        id: string;
-        source: string;
-        apiKey?: string;
-        authMode?: string;
-        cliInstalled: boolean;
-      }>
-    >([]);
-  const [onboardingRemoteApiBase, setOnboardingRemoteApiBase] =
-    useState(loadSessionApiBase);
-  const [onboardingRemoteToken, setOnboardingRemoteToken] = useState("");
-  const [onboardingRemoteConnecting, setOnboardingRemoteConnecting] =
-    useState(false);
-  const [onboardingRemoteError, setOnboardingRemoteError] = useState<
-    string | null
-  >(null);
-  const [onboardingRemoteConnected, setOnboardingRemoteConnected] = useState(
-    () => isRemoteApiBase(loadSessionApiBase()),
-  );
-  const [onboardingOpenRouterModel, setOnboardingOpenRouterModel] =
-    useState("");
-  const [onboardingPrimaryModel, setOnboardingPrimaryModel] = useState("");
-  const [onboardingTelegramToken, setOnboardingTelegramToken] = useState("");
-  const [onboardingDiscordToken, setOnboardingDiscordToken] = useState("");
-  const [onboardingWhatsAppSessionPath, setOnboardingWhatsAppSessionPath] =
-    useState("");
-  const [onboardingTwilioAccountSid, setOnboardingTwilioAccountSid] =
-    useState("");
-  const [onboardingTwilioAuthToken, setOnboardingTwilioAuthToken] =
-    useState("");
-  const [onboardingTwilioPhoneNumber, setOnboardingTwilioPhoneNumber] =
-    useState("");
-  const [onboardingBlooioApiKey, setOnboardingBlooioApiKey] = useState("");
-  const [onboardingBlooioPhoneNumber, setOnboardingBlooioPhoneNumber] =
-    useState("");
-  const [onboardingGithubToken, setOnboardingGithubToken] = useState("");
-  const [onboardingSubscriptionTab, setOnboardingSubscriptionTab] = useState<
-    "token" | "oauth"
-  >("token");
-  const [onboardingElizaCloudTab, setOnboardingElizaCloudTab] = useState<
-    "login" | "apikey"
-  >("login");
-  const [onboardingSelectedChains, setOnboardingSelectedChains] = useState<
-    Set<string>
-  >(new Set(["evm", "solana"]));
-  const [onboardingRpcSelections, setOnboardingRpcSelections] = useState<
-    Record<string, string>
-  >({});
-  const [onboardingRpcKeys, setOnboardingRpcKeys] = useState<
-    Record<string, string>
-  >({});
-  const [onboardingAvatar, setOnboardingAvatar] = useState(1);
-  const [onboardingRestarting, setOnboardingRestarting] = useState(false);
-
-  const setOnboardingStep = useCallback((step: OnboardingStep) => {
-    setOnboardingStepRaw(step);
-    saveOnboardingStep(step);
-  }, []);
-
-  const startupStatus = useMemo<AppState["startupStatus"]>(() => {
-    if (startupError) return "recoverable-error";
-    if (authRequired) return "auth-blocked";
-    if (onboardingLoading || startupPhase !== "ready") return "loading";
-    if (!onboardingComplete) return "onboarding";
-    return "ready";
-  }, [
-    authRequired,
-    onboardingComplete,
-    onboardingLoading,
-    startupError,
-    startupPhase,
-  ]);
-
-  const addDeferredOnboardingTask = useCallback(
-    (task: NonNullable<AppState["onboardingActiveGuide"]>) => {
-      setOnboardingDeferredTasks((current) =>
-        current.includes(task) ? current : [...current, task],
-      );
-      setPostOnboardingChecklistDismissed(false);
+  // ── Onboarding state (consolidated from 35+ useState hooks) ──
+  const onboarding = useOnboardingState(brandingOverride?.cloudOnly);
+  const {
+    state: {
+      step: onboardingStep,
+      mode: onboardingMode,
+      activeGuide: onboardingActiveGuide,
+      deferredTasks: onboardingDeferredTasks,
+      postChecklistDismissed: postOnboardingChecklistDismissed,
+      options: onboardingOptions,
+      name: onboardingName,
+      ownerName: onboardingOwnerName,
+      style: onboardingStyle,
+      avatar: onboardingAvatar,
+      runMode: onboardingRunMode,
+      cloudProvider: onboardingCloudProvider,
+      provider: onboardingProvider,
+      apiKey: onboardingApiKey,
+      smallModel: onboardingSmallModel,
+      largeModel: onboardingLargeModel,
+      openRouterModel: onboardingOpenRouterModel,
+      primaryModel: onboardingPrimaryModel,
+      existingInstallDetected: onboardingExistingInstallDetected,
+      detectedProviders: onboardingDetectedProviders,
+      connectorTokens,
+      remote: onboardingRemote,
+      remoteApiBase: onboardingRemoteApiBase,
+      remoteToken: onboardingRemoteToken,
+      subscriptionTab: onboardingSubscriptionTab,
+      elizaCloudTab: onboardingElizaCloudTab,
+      selectedChains: onboardingSelectedChains,
+      rpcSelections: onboardingRpcSelections,
+      rpcKeys: onboardingRpcKeys,
+      restarting: onboardingRestarting,
     },
-    [],
+    setStep: setOnboardingStep,
+    setMode: setOnboardingMode,
+    setActiveGuide: setOnboardingActiveGuide,
+    addDeferredTask: addDeferredOnboardingTask,
+    setOptions: setOnboardingOptions,
+    setField: setOnboardingField,
+    setConnectorToken,
+    setRemoteStatus: setOnboardingRemoteStatus,
+    setDetectedProviders: setOnboardingDetectedProviders,
+    finishBusyRef: onboardingFinishBusyRefFromHook,
+    resumeConnectionRef: onboardingResumeConnectionRefFromHook,
+    completionCommittedRef: onboardingCompletionCommittedRefFromHook,
+    forceLocalBootstrapRef: forceLocalBootstrapRefFromHook,
+    finishSavingRef: onboardingFinishSavingRefFromHook,
+  } = onboarding;
+
+  // Compat aliases for old onboarding variable names
+  const onboardingRemoteConnecting = onboardingRemote.status === "connecting";
+  const onboardingRemoteError = onboardingRemote.error;
+  const onboardingRemoteConnected = onboardingRemote.status === "connected";
+
+  // Map connector tokens to old individual variable names
+  const onboardingTelegramToken = connectorTokens.telegramToken;
+  const onboardingDiscordToken = connectorTokens.discordToken;
+  const onboardingWhatsAppSessionPath = connectorTokens.whatsAppSessionPath;
+  const onboardingTwilioAccountSid = connectorTokens.twilioAccountSid;
+  const onboardingTwilioAuthToken = connectorTokens.twilioAuthToken;
+  const onboardingTwilioPhoneNumber = connectorTokens.twilioPhoneNumber;
+  const onboardingBlooioApiKey = connectorTokens.blooioApiKey;
+  const onboardingBlooioPhoneNumber = connectorTokens.blooioPhoneNumber;
+  const onboardingGithubToken = connectorTokens.githubToken;
+
+  // Compat setters for old setState map entries
+  const setOnboardingName = useCallback(
+    (v: string) => setOnboardingField("name", v),
+    [setOnboardingField],
   );
+  const setOnboardingOwnerName = useCallback(
+    (v: string) => setOnboardingField("ownerName", v),
+    [setOnboardingField],
+  );
+  const setOnboardingStyle = useCallback(
+    (v: string) => setOnboardingField("style", v),
+    [setOnboardingField],
+  );
+  const setOnboardingRunMode = useCallback(
+    (v: "local" | "cloud" | "") => setOnboardingField("runMode", v),
+    [setOnboardingField],
+  );
+  const setOnboardingCloudProvider = useCallback(
+    (v: string) => setOnboardingField("cloudProvider", v),
+    [setOnboardingField],
+  );
+  const setOnboardingSmallModel = useCallback(
+    (v: string) => setOnboardingField("smallModel", v),
+    [setOnboardingField],
+  );
+  const setOnboardingLargeModel = useCallback(
+    (v: string) => setOnboardingField("largeModel", v),
+    [setOnboardingField],
+  );
+  const setOnboardingProvider = useCallback(
+    (v: string) => setOnboardingField("provider", v),
+    [setOnboardingField],
+  );
+  const setOnboardingApiKey = useCallback(
+    (v: string) => setOnboardingField("apiKey", v),
+    [setOnboardingField],
+  );
+  const setOnboardingExistingInstallDetected = useCallback(
+    (v: boolean) => setOnboardingField("existingInstallDetected", v),
+    [setOnboardingField],
+  );
+  const setOnboardingRemoteApiBase = useCallback(
+    (v: string) =>
+      onboarding.dispatch({ type: "SET_REMOTE_API_BASE", value: v }),
+    [onboarding.dispatch],
+  );
+  const setOnboardingRemoteToken = useCallback(
+    (v: string) => onboarding.dispatch({ type: "SET_REMOTE_TOKEN", value: v }),
+    [onboarding.dispatch],
+  );
+  const setOnboardingRemoteConnecting = useCallback(
+    (v: boolean) => setOnboardingRemoteStatus(v ? "connecting" : "idle"),
+    [setOnboardingRemoteStatus],
+  );
+  const setOnboardingRemoteError = useCallback(
+    (v: string | null) => setOnboardingRemoteStatus(v ? "error" : "idle", v),
+    [setOnboardingRemoteStatus],
+  );
+  const setOnboardingRemoteConnected = useCallback(
+    (v: boolean) => setOnboardingRemoteStatus(v ? "connected" : "idle"),
+    [setOnboardingRemoteStatus],
+  );
+  const setOnboardingOpenRouterModel = useCallback(
+    (v: string) => setOnboardingField("openRouterModel", v),
+    [setOnboardingField],
+  );
+  const setOnboardingPrimaryModel = useCallback(
+    (v: string) => setOnboardingField("primaryModel", v),
+    [setOnboardingField],
+  );
+  const setOnboardingTelegramToken = useCallback(
+    (v: string) => setConnectorToken("telegramToken", v),
+    [setConnectorToken],
+  );
+  const setOnboardingDiscordToken = useCallback(
+    (v: string) => setConnectorToken("discordToken", v),
+    [setConnectorToken],
+  );
+  const setOnboardingWhatsAppSessionPath = useCallback(
+    (v: string) => setConnectorToken("whatsAppSessionPath", v),
+    [setConnectorToken],
+  );
+  const setOnboardingTwilioAccountSid = useCallback(
+    (v: string) => setConnectorToken("twilioAccountSid", v),
+    [setConnectorToken],
+  );
+  const setOnboardingTwilioAuthToken = useCallback(
+    (v: string) => setConnectorToken("twilioAuthToken", v),
+    [setConnectorToken],
+  );
+  const setOnboardingTwilioPhoneNumber = useCallback(
+    (v: string) => setConnectorToken("twilioPhoneNumber", v),
+    [setConnectorToken],
+  );
+  const setOnboardingBlooioApiKey = useCallback(
+    (v: string) => setConnectorToken("blooioApiKey", v),
+    [setConnectorToken],
+  );
+  const setOnboardingBlooioPhoneNumber = useCallback(
+    (v: string) => setConnectorToken("blooioPhoneNumber", v),
+    [setConnectorToken],
+  );
+  const setOnboardingGithubToken = useCallback(
+    (v: string) => setConnectorToken("githubToken", v),
+    [setConnectorToken],
+  );
+  const setOnboardingSubscriptionTab = useCallback(
+    (v: "token" | "oauth") => setOnboardingField("subscriptionTab", v),
+    [setOnboardingField],
+  );
+  const setOnboardingElizaCloudTab = useCallback(
+    (v: "login" | "apikey") => setOnboardingField("elizaCloudTab", v),
+    [setOnboardingField],
+  );
+  const setOnboardingSelectedChains = useCallback(
+    (v: Set<string>) => setOnboardingField("selectedChains", v),
+    [setOnboardingField],
+  );
+  const setOnboardingRpcSelections = useCallback(
+    (v: Record<string, string>) => setOnboardingField("rpcSelections", v),
+    [setOnboardingField],
+  );
+  const setOnboardingRpcKeys = useCallback(
+    (v: Record<string, string>) => setOnboardingField("rpcKeys", v),
+    [setOnboardingField],
+  );
+  const setOnboardingAvatar = useCallback(
+    (v: number) => setOnboardingField("avatar", v),
+    [setOnboardingField],
+  );
+  const setOnboardingRestarting = useCallback(
+    (v: boolean) => setOnboardingField("restarting", v),
+    [setOnboardingField],
+  );
+  const setPostOnboardingChecklistDismissed = useCallback(
+    (v: boolean) =>
+      onboarding.dispatch({ type: "SET_POST_CHECKLIST_DISMISSED", value: v }),
+    [onboarding.dispatch],
+  );
+  const setOnboardingDeferredTasks = useCallback(
+    (v: string[]) => {
+      // Direct set — used only by reset paths
+      for (const task of v) addDeferredOnboardingTask(task);
+    },
+    [addDeferredOnboardingTask],
+  );
+
+  // startupStatus is now derived in useLifecycleState
 
   // --- Command palette ---
   const [commandPaletteOpen, _setCommandPaletteOpen] = useState(false);
@@ -1006,10 +1164,7 @@ export function AppProvider({
   const [droppedFiles, setDroppedFiles] = useState<string[]>([]);
   const [shareIngestNotice, setShareIngestNotice] = useState("");
 
-  // --- Chat pending images ---
-  const [chatPendingImages, setChatPendingImages] = useState<ImageAttachment[]>(
-    [],
-  );
+  // chatPendingImages now comes from useChatState
 
   // --- Game ---
   const [activeGameApp, setActiveGameApp] = useState("");
@@ -1041,51 +1196,30 @@ export function AppProvider({
   const [configText, setConfigText] = useState("");
 
   // --- Refs for timers ---
-  const actionNoticeTimer = useRef<number | null>(null);
-  /** Session-scoped set of notice texts that have been shown with once=true. */
-  const shownOnceNotices = useRef<Set<string>>(new Set());
+  // actionNoticeTimer, shownOnceNotices, agentStatusRef, lifecycleBusyRef,
+  // lifecycleActionRef, setAgentStatusIfChanged are now in useLifecycleState
   const elizaCloudPollInterval = useRef<number | null>(null);
+  /** While true, ignore stale poll results (in-flight GETs may predate POST /api/cloud/disconnect). */
+  const elizaCloudDisconnectInFlightRef = useRef(false);
+  /**
+   * After the user disconnects, keep the “Connect Eliza Cloud” screen until they start login again,
+   * even if GET /api/cloud/status still reports `connected: true` (laggy snapshot or proxy mismatch).
+   */
+  const elizaCloudPreferDisconnectedUntilLoginRef = useRef(false);
+  /** Last `connected` applied by pollCloudCredits; used when a poll is skipped mid-flight. */
+  const lastElizaCloudPollConnectedRef = useRef(false);
   const elizaCloudLoginPollTimer = useRef<number | null>(null);
   const prevAgentStateRef = useRef<string | null>(null);
-  /** Tracks last agent status to skip no-op updates from WS heartbeats. */
-  const agentStatusRef = useRef<AgentStatus | null>(null);
   const restartNotificationSignatureRef = useRef<string | null>(null);
   const heartbeatNotificationKeyRef = useRef<string | null>(null);
-  /** Only call setAgentStatus when the payload has materially changed. */
-  const setAgentStatusIfChanged = useCallback((next: AgentStatus | null) => {
-    const prev = agentStatusRef.current;
-    if (
-      prev &&
-      next &&
-      prev.state === next.state &&
-      prev.agentName === next.agentName &&
-      prev.model === next.model &&
-      prev.startedAt === next.startedAt
-    ) {
-      return; // identical — skip re-render
-    }
-    agentStatusRef.current = next;
-    setAgentStatus(next);
-  }, []);
-  const lifecycleBusyRef = useRef(false);
-  const lifecycleActionRef = useRef<LifecycleAction | null>(null);
-  /** Synchronous lock for onboarding finish to prevent duplicate same-tick submits. */
-  const onboardingFinishBusyRef = useRef(false);
-  const onboardingResumeConnectionRef = useRef<OnboardingConnection | null>(
-    null,
-  );
+  // Onboarding refs now come from useOnboardingState
+  const onboardingFinishBusyRef = onboardingFinishBusyRefFromHook;
+  const onboardingResumeConnectionRef = onboardingResumeConnectionRefFromHook;
+  const onboardingCompletionCommittedRef =
+    onboardingCompletionCommittedRefFromHook;
+  const forceLocalBootstrapRef = forceLocalBootstrapRefFromHook;
+  const onboardingFinishSavingRef = onboardingFinishSavingRefFromHook;
   const pairingBusyRef = useRef(false);
-  /** Guards against double-greeting when both init and state-transition paths fire. */
-  const greetingFiredRef = useRef(false);
-  const greetingInFlightConversationRef = useRef<string | null>(null);
-  const greetingEmoteTimerRef = useRef<number | null>(null);
-  const companionStaleConversationRefreshRef = useRef<string | null>(null);
-  const onboardingCompletionCommittedRef = useRef(false);
-  const forceLocalBootstrapRef = useRef(false);
-  const chatAbortRef = useRef<AbortController | null>(null);
-  /** Synchronous lock so same-tick chat submits cannot double-send. */
-  const chatSendBusyRef = useRef(false);
-  const chatSendNonceRef = useRef(0);
   /** Synchronous lock for export action to prevent duplicate clicks in the same tick. */
   const exportBusyRef = useRef(false);
   /** Synchronous lock for import action to prevent duplicate clicks in the same tick. */
@@ -1094,54 +1228,34 @@ export function AppProvider({
   const walletApiKeySavingRef = useRef(false);
   /** Synchronous lock for cloud login action to prevent duplicate clicks in the same tick. */
   const elizaCloudLoginBusyRef = useRef(false);
+  const elizaCloudAuthNoticeSentRef = useRef(false);
   /** Forward ref so handleOnboardingNext (defined earlier) can call handleCloudLogin (defined later). */
   const handleCloudLoginRef = useRef<() => Promise<void>>(async () => {});
   /** Synchronous lock for update channel changes to prevent duplicate submits. */
   const updateChannelSavingRef = useRef(false);
-  /** Synchronous lock for onboarding completion submit to prevent duplicate clicks. */
-  const onboardingFinishSavingRef = useRef(false);
 
   // --- Confirm Modal ---
   const { modalProps } = useConfirm();
   const { prompt: promptModal, modalProps: promptModalProps } = usePrompt();
 
-  // ── Action notice ──────────────────────────────────────────────────
+  // setActionNotice is now provided by useLifecycleState
 
-  const setActionNotice = useCallback(
-    (
-      text: string,
-      tone: "info" | "success" | "error" = "info",
-      ttlMs = 2800,
-      once = false,
-      busy = false,
-    ) => {
-      if (once && shownOnceNotices.current.has(text)) return;
-      if (once) shownOnceNotices.current.add(text);
-      setActionNoticeState({ tone, text, ...(busy ? { busy: true } : {}) });
-      if (actionNoticeTimer.current != null) {
-        window.clearTimeout(actionNoticeTimer.current);
+  const scheduleGreetingWave = useCallback(
+    (showOverlay = false) => {
+      if (typeof window === "undefined") return;
+      if (greetingEmoteTimerRef.current != null) {
+        window.clearTimeout(greetingEmoteTimerRef.current);
       }
-      actionNoticeTimer.current = window.setTimeout(() => {
-        setActionNoticeState(null);
-        actionNoticeTimer.current = null;
-      }, ttlMs);
+      greetingEmoteTimerRef.current = window.setTimeout(() => {
+        dispatchAppEmoteEvent({
+          ...GREETING_WAVE_EMOTE,
+          showOverlay,
+        });
+        greetingEmoteTimerRef.current = null;
+      }, GREETING_EMOTE_DELAY_MS);
     },
-    [],
+    [greetingEmoteTimerRef],
   );
-
-  const scheduleGreetingWave = useCallback((showOverlay = false) => {
-    if (typeof window === "undefined") return;
-    if (greetingEmoteTimerRef.current != null) {
-      window.clearTimeout(greetingEmoteTimerRef.current);
-    }
-    greetingEmoteTimerRef.current = window.setTimeout(() => {
-      dispatchAppEmoteEvent({
-        ...GREETING_WAVE_EMOTE,
-        showOverlay,
-      });
-      greetingEmoteTimerRef.current = null;
-    }, GREETING_EMOTE_DELAY_MS);
-  }, []);
 
   const scheduleGreetingWaveForCompanion = useCallback(
     (showOverlay = false) => {
@@ -1160,7 +1274,7 @@ export function AppProvider({
         greetingEmoteTimerRef.current = null;
       }
     };
-  }, []);
+  }, [greetingEmoteTimerRef]);
 
   // ── Clipboard ──────────────────────────────────────────────────────
 
@@ -1168,34 +1282,7 @@ export function AppProvider({
     await copyTextToClipboard(text);
   }, []);
 
-  // ── Language ────────────────────────────────────────────────────────
-
-  const setUiLanguage = useCallback(
-    (language: UiLanguage) => {
-      const nextLanguage = normalizeLanguage(language);
-      setUiLanguageState(nextLanguage);
-      void client.updateConfig({ ui: { language: nextLanguage } }).catch(() => {
-        setActionNotice(
-          translateText(nextLanguage, "settings.languageSyncFailed"),
-          "error",
-          3200,
-        );
-      });
-    },
-    [setActionNotice],
-  );
-
-  useEffect(() => {
-    saveUiLanguage(uiLanguage);
-    if (
-      typeof (client as unknown as { setUiLanguage?: unknown })
-        .setUiLanguage === "function"
-    ) {
-      (
-        client as unknown as { setUiLanguage: (lang: string) => void }
-      ).setUiLanguage(uiLanguage);
-    }
-  }, [uiLanguage]);
+  // Language is managed by TranslationProvider (see useTranslation() above)
 
   useEffect(() => {
     saveUiShellMode(uiShellMode);
@@ -1215,6 +1302,38 @@ export function AppProvider({
     saveUiTheme(uiTheme);
     applyUiTheme(uiTheme);
   }, [uiTheme]);
+
+  const setCompanionVrmPowerMode = useCallback(
+    (mode: CompanionVrmPowerMode) => {
+      setCompanionVrmPowerModeState(normalizeCompanionVrmPowerMode(mode));
+    },
+    [],
+  );
+
+  useEffect(() => {
+    saveCompanionVrmPowerMode(companionVrmPowerMode);
+  }, [companionVrmPowerMode]);
+
+  const setCompanionAnimateWhenHidden = useCallback((enabled: boolean) => {
+    setCompanionAnimateWhenHiddenState(enabled);
+  }, []);
+
+  useEffect(() => {
+    saveCompanionAnimateWhenHidden(companionAnimateWhenHidden);
+  }, [companionAnimateWhenHidden]);
+
+  const setCompanionHalfFramerateMode = useCallback(
+    (mode: CompanionHalfFramerateMode) => {
+      setCompanionHalfFramerateModeState(
+        normalizeCompanionHalfFramerateMode(mode),
+      );
+    },
+    [],
+  );
+
+  useEffect(() => {
+    saveCompanionHalfFramerateMode(companionHalfFramerateMode);
+  }, [companionHalfFramerateMode]);
 
   // Apply theme on initial mount
   useEffect(() => {
@@ -1243,7 +1362,7 @@ export function AppProvider({
         console.warn("[milady][nav] failed to update browser location", err);
       }
     },
-    [activeGameViewerUrl],
+    [activeGameViewerUrl, setTabRaw],
   );
 
   const setUiShellMode = useCallback(
@@ -1294,6 +1413,56 @@ export function AppProvider({
     },
     [lastNativeTab, setTab],
   );
+
+  const navigationHubRef = useRef(new NavigationEventHub());
+  const pendingPostTabCommitRef = useRef<(() => void)[]>([]);
+  const prevTabCommittedRef = useRef<Tab | null>(null);
+  const prevUiShellCommittedRef = useRef<UiShellMode | null>(null);
+  const [tabCommitFlushNonce, setTabCommitFlushNonce] = useState(0);
+
+  const scheduleAfterTabCommit = useCallback((fn: () => void) => {
+    pendingPostTabCommitRef.current.push(fn);
+    if (pendingPostTabCommitRef.current.length === 1) {
+      queueMicrotask(() => {
+        setTabCommitFlushNonce((n) => n + 1);
+      });
+    }
+  }, []);
+
+  const navigation = useMemo(
+    () => ({
+      subscribeTabCommitted: (
+        listener: (detail: TabCommittedDetail) => void,
+      ): (() => void) => navigationHubRef.current.subscribe(listener),
+      scheduleAfterTabCommit,
+    }),
+    [scheduleAfterTabCommit],
+  );
+
+  useLayoutEffect(() => {
+    const tabChanged = prevTabCommittedRef.current !== tab;
+    const shellChanged = prevUiShellCommittedRef.current !== uiShellMode;
+    const pending = pendingPostTabCommitRef.current;
+    pendingPostTabCommitRef.current = [];
+
+    if (tabChanged || shellChanged) {
+      const previousTab = prevTabCommittedRef.current;
+      prevTabCommittedRef.current = tab;
+      prevUiShellCommittedRef.current = uiShellMode;
+      navigationHubRef.current.emit({ tab, previousTab, uiShellMode });
+    }
+
+    for (const task of pending) {
+      try {
+        task();
+      } catch (err) {
+        console.warn(
+          "[milady][navigation] scheduleAfterTabCommit task failed",
+          err,
+        );
+      }
+    }
+  }, [tab, uiShellMode, tabCommitFlushNonce]);
 
   const sortTriggersByNextRun = useCallback(
     (items: TriggerSummary[]): TriggerSummary[] => {
@@ -1542,7 +1711,15 @@ export function AppProvider({
 
       return merged;
     },
-    [],
+    [
+      autonomousEventsRef,
+      autonomousLatestEventIdRef,
+      autonomousRunHealthByRunIdRef,
+      autonomousStoreRef,
+      setAutonomousEvents,
+      setAutonomousLatestEventId,
+      setAutonomousRunHealthByRunId,
+    ],
   );
 
   const fetchAutonomyReplay = useCallback(async () => {
@@ -1596,7 +1773,13 @@ export function AppProvider({
     } finally {
       autonomousReplayInFlightRef.current = false;
     }
-  }, [applyAutonomyEventMerge]);
+  }, [
+    applyAutonomyEventMerge,
+    autonomousReplayInFlightRef,
+    autonomousRunHealthByRunIdRef,
+    autonomousStoreRef.current,
+    setAutonomousRunHealthByRunId,
+  ]);
 
   const appendAutonomousEvent = useCallback(
     (event: StreamEventEnvelope) => {
@@ -1618,7 +1801,7 @@ export function AppProvider({
     } catch {
       return null;
     }
-  }, []);
+  }, [setConversations]);
 
   const loadConversationMessages = useCallback(
     async (convId: string): Promise<LoadConversationMessagesResult> => {
@@ -1658,7 +1841,14 @@ export function AppProvider({
         };
       }
     },
-    [],
+    [
+      activeConversationIdRef,
+      conversationMessagesRef,
+      greetingFiredRef,
+      setActiveConversationId,
+      setConversationMessages,
+      setConversations,
+    ],
   );
 
   const loadWalletConfig = useCallback(async () => {
@@ -1826,71 +2016,98 @@ export function AppProvider({
   }, []);
 
   const pollCloudCredits = useCallback(async (): Promise<boolean> => {
+    if (elizaCloudDisconnectInFlightRef.current) {
+      return lastElizaCloudPollConnectedRef.current;
+    }
     const cloudStatus = await client.getCloudStatus().catch(() => null);
+    if (elizaCloudDisconnectInFlightRef.current) {
+      return lastElizaCloudPollConnectedRef.current;
+    }
     if (!cloudStatus) {
       setElizaCloudConnected(false);
       setElizaCloudCredits(null);
       setElizaCloudCreditsLow(false);
       setElizaCloudCreditsCritical(false);
+      setElizaCloudAuthRejected(false);
+      setElizaCloudCreditsError(null);
+      lastElizaCloudPollConnectedRef.current = false;
       return false;
     }
-    // A cached cloud API key represents a completed login and should be shared
-    // across all views, even before runtime CLOUD_AUTH fully initializes.
-    const isConnected = Boolean(cloudStatus.connected || cloudStatus.hasApiKey);
+    // Trust `connected` from the server snapshot (it already folds in API key + CLOUD_AUTH).
+    const isConnected = Boolean(cloudStatus.connected);
+    if (isConnected && elizaCloudPreferDisconnectedUntilLoginRef.current) {
+      lastElizaCloudPollConnectedRef.current = false;
+      return false;
+    }
+    if (!isConnected) {
+      elizaCloudPreferDisconnectedUntilLoginRef.current = false;
+    }
     setElizaCloudEnabled(Boolean(cloudStatus.enabled ?? false));
     setElizaCloudConnected(isConnected);
     setElizaCloudUserId(cloudStatus.userId ?? null);
     if (cloudStatus.topUpUrl) setElizaCloudTopUpUrl(cloudStatus.topUpUrl);
     if (isConnected) {
       const credits = await client.getCloudCredits().catch(() => null);
-      if (credits && typeof credits.balance === "number") {
-        setElizaCloudCredits(credits.balance);
-        setElizaCloudCreditsLow(credits.low ?? false);
-        setElizaCloudCreditsCritical(credits.critical ?? false);
-        if (credits.topUpUrl) setElizaCloudTopUpUrl(credits.topUpUrl);
-      } else {
+      if (elizaCloudDisconnectInFlightRef.current) {
+        return lastElizaCloudPollConnectedRef.current;
+      }
+      if (credits?.authRejected) {
+        setElizaCloudAuthRejected(true);
+        setElizaCloudCreditsError(null);
         setElizaCloudCredits(null);
         setElizaCloudCreditsLow(false);
         setElizaCloudCreditsCritical(false);
-        if (credits?.topUpUrl) setElizaCloudTopUpUrl(credits.topUpUrl);
+        if (credits.topUpUrl) setElizaCloudTopUpUrl(credits.topUpUrl);
+      } else {
+        setElizaCloudAuthRejected(false);
+        const apiErr =
+          credits &&
+          typeof credits.error === "string" &&
+          credits.error.trim() &&
+          typeof credits.balance !== "number"
+            ? credits.error.trim()
+            : null;
+        setElizaCloudCreditsError(apiErr);
+        if (credits && typeof credits.balance === "number") {
+          setElizaCloudCredits(credits.balance);
+          setElizaCloudCreditsLow(credits.low ?? false);
+          setElizaCloudCreditsCritical(credits.critical ?? false);
+          if (credits.topUpUrl) setElizaCloudTopUpUrl(credits.topUpUrl);
+        } else {
+          setElizaCloudCredits(null);
+          setElizaCloudCreditsLow(false);
+          setElizaCloudCreditsCritical(false);
+          if (credits?.topUpUrl) setElizaCloudTopUpUrl(credits.topUpUrl);
+        }
       }
     } else {
       setElizaCloudCredits(null);
       setElizaCloudCreditsLow(false);
       setElizaCloudCreditsCritical(false);
+      setElizaCloudAuthRejected(false);
+      setElizaCloudCreditsError(null);
+    }
+    lastElizaCloudPollConnectedRef.current = isConnected;
+    // Ensure the recurring poll interval is running whenever cloud is connected.
+    // This covers the case where cloud login happens after the initial mount poll
+    // (e.g. during onboarding) — without this the interval would never start.
+    if (isConnected && !elizaCloudPollInterval.current) {
+      elizaCloudPollInterval.current = window.setInterval(() => {
+        if (
+          typeof document !== "undefined" &&
+          document.visibilityState !== "visible"
+        ) {
+          return;
+        }
+        void pollCloudCredits();
+      }, 60_000);
     }
     return isConnected;
   }, []);
 
   // ── Lifecycle actions ──────────────────────────────────────────────
 
-  const beginLifecycleAction = useCallback(
-    (action: LifecycleAction): boolean => {
-      if (lifecycleBusyRef.current) {
-        const activeAction =
-          lifecycleActionRef.current ?? lifecycleAction ?? action;
-        setActionNotice(
-          `Agent action already in progress (${LIFECYCLE_MESSAGES[activeAction].inProgress}). Please wait.`,
-          "info",
-          2800,
-        );
-        return false;
-      }
-      lifecycleBusyRef.current = true;
-      lifecycleActionRef.current = action;
-      setLifecycleBusy(true);
-      setLifecycleAction(action);
-      return true;
-    },
-    [lifecycleAction, setActionNotice],
-  );
-
-  const finishLifecycleAction = useCallback(() => {
-    lifecycleBusyRef.current = false;
-    lifecycleActionRef.current = null;
-    setLifecycleBusy(false);
-    setLifecycleAction(null);
-  }, []);
+  // beginLifecycleAction / finishLifecycleAction are now provided by useLifecycleState
 
   // ── Chat ───────────────────────────────────────────────────────────
 
@@ -1950,7 +2167,14 @@ export function AppProvider({
       }
       return false;
     },
-    [scheduleGreetingWaveForCompanion, uiLanguage],
+    [
+      scheduleGreetingWaveForCompanion,
+      uiLanguage,
+      activeConversationIdRef.current,
+      greetingFiredRef,
+      greetingInFlightConversationRef,
+      setConversationMessages,
+    ],
   );
 
   const requestGreetingWhenRunning = useCallback(
@@ -1975,7 +2199,7 @@ export function AppProvider({
         );
       }
     },
-    [fetchGreeting],
+    [fetchGreeting, greetingFiredRef.current],
   );
 
   const waitForOnboardingGreetingBootstrap = useCallback(async () => {
@@ -2003,7 +2227,12 @@ export function AppProvider({
         setTimeout(resolve, AGENT_STATUS_POLL_INTERVAL_MS);
       });
     }
-  }, []);
+  }, [
+    setAgentStatus,
+    setConnected,
+    setPendingRestart,
+    setPendingRestartReasons,
+  ]);
 
   const hydrateInitialConversationState = useCallback(async (): Promise<
     string | null
@@ -2072,22 +2301,17 @@ export function AppProvider({
       console.warn("[milady][chat:init] failed to hydrate conversations", err);
       return null;
     }
-  }, []);
+  }, [
+    activeConversationIdRef,
+    conversationHydrationEpochRef,
+    conversationMessagesRef,
+    greetingFiredRef,
+    setActiveConversationId,
+    setConversationMessages,
+    setConversations,
+  ]);
 
-  const resetConversationDraftState = useCallback(() => {
-    conversationHydrationEpochRef.current += 1;
-    greetingFiredRef.current = false;
-    greetingInFlightConversationRef.current = null;
-    setChatInput("");
-    setChatPendingImages([]);
-    setChatSending(false);
-    setChatFirstTokenReceived(false);
-    conversationMessagesRef.current = [];
-    setConversationMessages([]);
-    setActiveConversationId(null);
-    activeConversationIdRef.current = null;
-    setCompanionMessageCutoffTs(Date.now());
-  }, []);
+  // resetConversationDraftState now comes from useChatState (aliased above)
 
   const handleStartDraftConversation = useCallback(async () => {
     resetConversationDraftState();
@@ -2117,7 +2341,12 @@ export function AppProvider({
     } finally {
       finishLifecycleAction();
     }
-  }, [beginLifecycleAction, finishLifecycleAction, setActionNotice]);
+  }, [
+    beginLifecycleAction,
+    finishLifecycleAction,
+    setActionNotice,
+    setAgentStatus,
+  ]);
 
   const handleStop = useCallback(async () => {
     if (!beginLifecycleAction("stop")) return;
@@ -2143,7 +2372,12 @@ export function AppProvider({
     } finally {
       finishLifecycleAction();
     }
-  }, [beginLifecycleAction, finishLifecycleAction, setActionNotice]);
+  }, [
+    beginLifecycleAction,
+    finishLifecycleAction,
+    setActionNotice,
+    setAgentStatus,
+  ]);
 
   const handleRestart = useCallback(async () => {
     if (!beginLifecycleAction("restart")) return;
@@ -2201,34 +2435,26 @@ export function AppProvider({
     setActionNotice,
     hydrateInitialConversationState,
     loadPlugins,
-    requestGreetingWhenRunning,
+    requestGreetingWhenRunning, // Server restart clears in-memory conversations — reset client state
+    setActiveConversationId,
+    setAgentStatus,
+    setConversationMessages,
+    setConversations,
+    setPendingRestart,
+    setPendingRestartReasons,
   ]);
 
-  const dismissRestartBanner = useCallback(() => {
-    setRestartBannerDismissed(true);
-  }, []);
-
-  const showRestartBanner = useCallback(() => {
-    setRestartBannerDismissed(false);
-  }, []);
+  // dismissRestartBanner, showRestartBanner are now provided by useLifecycleState
+  // dismissBackendDisconnectedBanner, dismissSystemWarning are now provided by useLifecycleState
 
   const triggerRestart = useCallback(async () => {
     await handleRestart();
   }, [handleRestart]);
 
-  // Backend disconnection banner actions
-  const dismissBackendDisconnectedBanner = useCallback(() => {
-    setBackendDisconnectedBannerDismissed(true);
-  }, []);
-
   const retryBackendConnection = useCallback(() => {
     setBackendDisconnectedBannerDismissed(false);
     client.resetConnection();
-  }, []);
-
-  const dismissSystemWarning = useCallback((message: string) => {
-    setSystemWarnings((prev) => prev.filter((m) => m !== message));
-  }, []);
+  }, [setBackendDisconnectedBannerDismissed]);
 
   const restartBackend = useCallback(async () => {
     const restarted = await invokeDesktopBridgeRequest({
@@ -2236,18 +2462,10 @@ export function AppProvider({
       ipcChannel: "agent:restart",
     });
     if (restarted === null) {
-      // Fallback for web: call API restart endpoint
       await client.restart();
     }
-    // Reset connection state after restart
-    setBackendConnection((prev) => ({
-      ...prev,
-      state: "disconnected",
-      reconnectAttempt: 0,
-      showDisconnectedUI: false,
-    }));
-    setBackendDisconnectedBannerDismissed(false);
-  }, []);
+    resetBackendConnection();
+  }, [resetBackendConnection]);
 
   const relaunchDesktop = useCallback(async () => {
     const relaunched = await invokeDesktopBridgeRequest<void>({
@@ -2370,13 +2588,7 @@ export function AppProvider({
     });
   }, [pendingRestart, pendingRestartReasons, showDesktopNotification]);
 
-  const retryStartup = useCallback(() => {
-    setStartupError(null);
-    setAuthRequired(false);
-    setOnboardingLoading(true);
-    setStartupPhase("starting-backend");
-    setStartupRetryNonce((prev) => prev + 1);
-  }, []);
+  // retryStartup provided by useLifecycleState (dispatches RETRY_STARTUP)
 
   /**
    * Wipes server-side agent config (`POST /api/agent/reset`) and local UI state.
@@ -2406,11 +2618,14 @@ export function AppProvider({
         setClientBaseUrl: (url) => client.setBaseUrl(url),
         setClientToken: (token) => client.setToken(token),
         clearElizaCloudSessionUi: () => {
+          elizaCloudPreferDisconnectedUntilLoginRef.current = false;
           setElizaCloudEnabled(false);
           setElizaCloudConnected(false);
           setElizaCloudCredits(null);
           setElizaCloudCreditsLow(false);
           setElizaCloudCreditsCritical(false);
+          setElizaCloudAuthRejected(false);
+          setElizaCloudCreditsError(null);
           setElizaCloudTopUpUrl("/cloud/billing");
           setElizaCloudUserId(null);
           setElizaCloudLoginError(null);
@@ -2443,6 +2658,8 @@ export function AppProvider({
       setElizaCloudCredits,
       setElizaCloudCreditsCritical,
       setElizaCloudCreditsLow,
+      setElizaCloudAuthRejected,
+      setElizaCloudCreditsError,
       setElizaCloudConnected,
       setElizaCloudEnabled,
       setElizaCloudLoginError,
@@ -2456,9 +2673,9 @@ export function AppProvider({
       setConversationMessages,
       setActiveConversationId,
       setConversations,
-      setPlugins,
-      setSkills,
-      setLogs,
+      activeConversationIdRef,
+      onboardingCompletionCommittedRef,
+      onboardingResumeConnectionRef,
     ],
   );
 
@@ -2485,6 +2702,8 @@ export function AppProvider({
       finishLifecycleAction,
       setActionNotice,
       completeResetLocalStateAfterServerWipe,
+      lifecycleActionRef.current,
+      lifecycleBusyRef.current,
     ],
   );
 
@@ -2676,8 +2895,9 @@ export function AppProvider({
     beginLifecycleAction,
     finishLifecycleAction,
     setActionNotice,
-    setOnboardingStep,
     completeResetLocalStateAfterServerWipe,
+    lifecycleActionRef.current,
+    lifecycleBusyRef.current,
   ]);
 
   const handleNewConversation = useCallback(
@@ -2692,7 +2912,7 @@ export function AppProvider({
         const { conversation, greeting } = await client.createConversation(
           title,
           {
-            bootstrapGreeting: true,
+            includeGreeting: true,
             lang: uiLanguage,
           },
         );
@@ -2721,6 +2941,9 @@ export function AppProvider({
           greetingFiredRef.current = false;
           conversationMessagesRef.current = [];
           setConversationMessages([]);
+          // Fallback: if inline greeting wasn't returned (e.g. old server),
+          // request one via the dedicated /greeting endpoint.
+          void fetchGreeting(conversation.id);
         }
         client.sendWsMessage({
           type: "active-conversation",
@@ -2741,12 +2964,18 @@ export function AppProvider({
       }
     },
     [
-      characterData,
       companionMessageCutoffTs,
-      requestGreetingWhenRunning,
+      fetchGreeting,
       resetConversationDraftState,
       scheduleGreetingWaveForCompanion,
       uiLanguage,
+      activeConversationIdRef,
+      conversationMessagesRef,
+      greetingFiredRef,
+      setActiveConversationId,
+      setCompanionMessageCutoffTs,
+      setConversationMessages,
+      setConversations,
     ],
   );
 
@@ -2777,6 +3006,7 @@ export function AppProvider({
     handleNewConversation,
     tab,
     uiShellMode,
+    companionStaleConversationRefreshRef,
   ]);
 
   const appendLocalCommandTurn = useCallback(
@@ -2800,7 +3030,7 @@ export function AppProvider({
         },
       ]);
     },
-    [],
+    [setConversationMessages],
   );
 
   const tryHandlePrefixedChatCommand = useCallback(
@@ -3221,6 +3451,10 @@ export function AppProvider({
           } else {
             void loadConversations();
           }
+
+          if (elizaCloudEnabled || elizaCloudConnected) {
+            void pollCloudCredits();
+          }
         } catch (err) {
           const abortError = err as Error;
           if (abortError.name === "AbortError") {
@@ -3292,7 +3526,10 @@ export function AppProvider({
           }
         }
       } finally {
-        if (controller == null && chatSendNonceRef.current === sendNonce) {
+        // Unconditionally clear the busy ref when the nonce matches —
+        // the inner finally may not run if an error is thrown between
+        // controller assignment and the inner try block.
+        if (chatSendNonceRef.current === sendNonce) {
           chatSendBusyRef.current = false;
         }
       }
@@ -3304,6 +3541,24 @@ export function AppProvider({
       loadConversationMessages,
       loadConversations,
       tryHandlePrefixedChatCommand,
+      activeConversationIdRef,
+      chatAbortRef,
+      chatSendBusyRef,
+      chatSendNonceRef,
+      conversationMessagesRef.current.filter,
+      conversations.find,
+      setActiveConversationId,
+      setChatFirstTokenReceived,
+      setChatInput,
+      setChatLastUsage,
+      setChatSending,
+      setCompanionMessageCutoffTs,
+      setConversationMessages,
+      setConversations,
+      uiLanguage,
+      elizaCloudEnabled,
+      elizaCloudConnected,
+      pollCloudCredits,
     ],
   );
 
@@ -3319,10 +3574,10 @@ export function AppProvider({
         clearChatInput: true,
       });
     },
-    [chatInput, chatPendingImages, sendChatText],
+    [chatInput, chatPendingImages, sendChatText, setChatPendingImages],
   );
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: t is stable but defined later
+  // biome-ignore lint/correctness/useExhaustiveDependencies: conversations omitted to limit rerenders
   const sendActionMessage = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
@@ -3439,7 +3694,21 @@ export function AppProvider({
               return changed ? next : prev;
             });
           }
+
+          if (!data.completed && streamedAssistantText.trim()) {
+            setConversationMessages((prev) =>
+              prev.map((message) =>
+                message.id === assistantMsgId
+                  ? { ...message, interrupted: true }
+                  : message,
+              ),
+            );
+          }
+
           void loadConversations();
+          if (elizaCloudEnabled || elizaCloudConnected) {
+            void pollCloudCredits();
+          }
         } catch (err) {
           const abortError = err as Error;
           if (abortError.name === "AbortError") {
@@ -3471,8 +3740,12 @@ export function AppProvider({
     [
       chatMode,
       activeConversationId,
+      elizaCloudEnabled,
+      elizaCloudConnected,
       loadConversationMessages,
       loadConversations,
+      pollCloudCredits,
+      uiLanguage,
     ],
   );
 
@@ -3487,7 +3760,13 @@ export function AppProvider({
     for (const session of ptySessions) {
       client.stopCodingAgent(session.sessionId).catch(() => {});
     }
-  }, [ptySessions]);
+  }, [
+    ptySessions,
+    chatAbortRef,
+    chatSendBusyRef,
+    setChatFirstTokenReceived,
+    setChatSending,
+  ]);
 
   const handleChatRetry = useCallback(
     (assistantMsgId: string) => {
@@ -3520,7 +3799,7 @@ export function AppProvider({
         void sendChatText(retryText);
       }
     },
-    [sendChatText],
+    [sendChatText, setConversationMessages],
   );
 
   const handleChatEdit = useCallback(
@@ -3584,7 +3863,19 @@ export function AppProvider({
         return false;
       }
     },
-    [loadConversationMessages, sendChatText, setActionNotice],
+    [
+      loadConversationMessages,
+      sendChatText,
+      setActionNotice,
+      activeConversationIdRef.current,
+      chatAbortRef,
+      chatSendBusyRef,
+      conversationMessagesRef,
+      setChatFirstTokenReceived,
+      setChatInput,
+      setChatSending,
+      setConversationMessages,
+    ],
   );
 
   const handleChatClear = useCallback(async () => {
@@ -3625,7 +3916,15 @@ export function AppProvider({
         4200,
       );
     }
-  }, [activeConversationId, loadConversations, setActionNotice]);
+  }, [
+    activeConversationId,
+    loadConversations,
+    setActionNotice,
+    activeConversationIdRef,
+    setActiveConversationId,
+    setConversationMessages,
+    setUnreadConversations,
+  ]);
 
   const handleSelectConversation = useCallback(
     async (id: string) => {
@@ -3725,6 +4024,13 @@ export function AppProvider({
       loadConversationMessages,
       loadConversations,
       setActionNotice,
+      activeConversationIdRef,
+      conversationHydrationEpochRef,
+      conversationMessagesRef.current,
+      setActiveConversationId,
+      setConversationMessages,
+      setConversations,
+      setUnreadConversations,
     ],
   );
 
@@ -3802,6 +4108,11 @@ export function AppProvider({
       loadConversationMessages,
       loadConversations,
       setActionNotice,
+      activeConversationIdRef,
+      setActiveConversationId,
+      setConversationMessages,
+      setConversations,
+      setUnreadConversations,
     ],
   );
 
@@ -3835,6 +4146,41 @@ export function AppProvider({
           "error",
           4200,
         );
+      }
+    },
+    [loadConversations, setActionNotice, setConversations],
+  );
+
+  const suggestConversationTitle = useCallback(
+    async (id: string) => {
+      try {
+        const { conversation } = await client.renameConversation(id, "", {
+          generate: true,
+        });
+        setConversations((prev) =>
+          prev.map((existing) =>
+            existing.id === id ? conversation : existing,
+          ),
+        );
+        const next = conversation.title?.trim();
+        return next && next.length > 0 ? next : null;
+      } catch (err) {
+        const status = (err as { status?: number }).status;
+        if (status === 404) {
+          await loadConversations();
+          setActionNotice(
+            "Conversation was not found. Refreshed the conversation list.",
+            "info",
+            3200,
+          );
+          return null;
+        }
+        setActionNotice(
+          `Failed to suggest conversation title: ${err instanceof Error ? err.message : "network error"}`,
+          "error",
+          4200,
+        );
+        return null;
       }
     },
     [loadConversations, setActionNotice],
@@ -4426,7 +4772,13 @@ export function AppProvider({
       throw new Error(finalMessage);
     }
     setCharacterSaving(false);
-  }, [characterDraft, agentStatus, loadCharacter, selectedVrmIndex]);
+  }, [
+    characterDraft,
+    agentStatus,
+    loadCharacter,
+    selectedVrmIndex,
+    setAgentStatus,
+  ]);
 
   const handleCharacterFieldInput = useCallback(
     <K extends keyof CharacterData>(field: K, value: CharacterData[K]) => {
@@ -4639,8 +4991,8 @@ export function AppProvider({
 
       if (isSandboxMode) {
         // Provision a sandbox agent on Eliza Cloud
-        const cloudApiBase = ((window as unknown as Record<string, unknown>)
-          .__ELIZA_CLOUD_API_BASE__ ?? "https://www.elizacloud.ai") as string;
+        const cloudApiBase =
+          getBootConfig().cloudApiBase ?? "https://www.elizacloud.ai";
 
         // Get the auth token from the cloud login state
         const authToken = ((window as unknown as Record<string, unknown>)
@@ -4725,11 +5077,14 @@ export function AppProvider({
         systemPrompt,
         style: style?.style,
         adjectives: style?.adjectives,
+        topics: (style as Record<string, unknown> | undefined)?.topics as
+          | string[]
+          | undefined,
         postExamples: style?.postExamples,
         messageExamples: style?.messageExamples,
         connection,
         walletConfig: nextWalletConfig,
-      });
+      } as Parameters<typeof client.submitOnboarding>[0]);
 
       // Give the backend a moment to finish persisting the config updates
       // (both from our compat interception and upstream ElizaOS core)
@@ -4752,12 +5107,11 @@ export function AppProvider({
       setOnboardingMode("basic");
       setOnboardingActiveGuide(null);
       setPostOnboardingChecklistDismissed(false);
-      setOnboardingDetectedProviders((providers) =>
-        providers.map((provider) => {
-          const nextProvider = { ...provider };
-          delete nextProvider.apiKey;
-          return nextProvider;
-        }),
+      setOnboardingDetectedProviders(
+        onboardingDetectedProviders.map((provider) => {
+          const { apiKey: _, ...rest } = provider;
+          return rest;
+        }) as AppState["onboardingDetectedProviders"],
       );
       setOnboardingComplete(true);
       setTab("character-select");
@@ -4809,7 +5163,6 @@ export function AppProvider({
     onboardingLargeModel,
     onboardingProvider,
     onboardingApiKey,
-    onboardingExistingInstallDetected,
     onboardingDetectedProviders,
     onboardingRemoteApiBase,
     onboardingRemoteConnected,
@@ -4824,6 +5177,32 @@ export function AppProvider({
     requestGreetingWhenRunning,
     waitForOnboardingGreetingBootstrap,
     elizaCloudConnected,
+    onboardingCompletionCommittedRef,
+    onboardingFinishBusyRef,
+    onboardingFinishSavingRef,
+    onboardingResumeConnectionRef,
+    setAgentStatus,
+    setOnboardingActiveGuide,
+    setOnboardingApiKey,
+    setOnboardingCloudProvider,
+    setOnboardingComplete,
+    setOnboardingDeferredTasks,
+    setOnboardingDetectedProviders,
+    setOnboardingLargeModel,
+    setOnboardingMode,
+    setOnboardingName,
+    setOnboardingOpenRouterModel,
+    setOnboardingPrimaryModel,
+    setOnboardingProvider,
+    setOnboardingRemoteApiBase,
+    setOnboardingRemoteConnected,
+    setOnboardingRemoteToken,
+    setOnboardingRestarting,
+    setOnboardingRunMode,
+    setOnboardingSmallModel,
+    setOnboardingStep,
+    setOnboardingStyle,
+    setPostOnboardingChecklistDismissed,
   ]);
 
   // ── Onboarding motion (flow graph: packages/app-core/src/onboarding/flow.ts) ──
@@ -4842,7 +5221,7 @@ export function AppProvider({
           : null,
       );
     },
-    [onboardingMode, setOnboardingStep],
+    [onboardingMode, setOnboardingStep, setOnboardingActiveGuide],
   );
 
   const advanceOnboarding = useCallback(
@@ -4903,6 +5282,9 @@ export function AppProvider({
       onboardingRunMode,
       onboardingStep,
       setOnboardingStep,
+      setOnboardingActiveGuide,
+      setOnboardingApiKey,
+      setOnboardingProvider,
     ],
   );
 
@@ -4920,7 +5302,12 @@ export function AppProvider({
         ? getFlaminaTopicForOnboardingStep(previousStep)
         : null,
     );
-  }, [onboardingMode, onboardingStep, setOnboardingStep]);
+  }, [
+    onboardingMode,
+    onboardingStep,
+    setOnboardingStep,
+    setOnboardingActiveGuide,
+  ]);
 
   const handleOnboardingBack = revertOnboarding;
 
@@ -4934,7 +5321,12 @@ export function AppProvider({
           : null,
       );
     },
-    [onboardingMode, onboardingStep, setOnboardingStep],
+    [
+      onboardingMode,
+      onboardingStep,
+      setOnboardingStep,
+      setOnboardingActiveGuide,
+    ],
   );
 
   const handleOnboardingUseLocalBackend = useCallback(() => {
@@ -4954,7 +5346,18 @@ export function AppProvider({
       3200,
     );
     retryStartup();
-  }, [retryStartup, setActionNotice]);
+  }, [
+    retryStartup,
+    setActionNotice,
+    forceLocalBootstrapRef,
+    setOnboardingCloudProvider,
+    setOnboardingRemoteApiBase,
+    setOnboardingRemoteConnected,
+    setOnboardingRemoteConnecting,
+    setOnboardingRemoteError,
+    setOnboardingRemoteToken,
+    setOnboardingRunMode,
+  ]);
 
   const handleOnboardingRemoteConnect = useCallback(async () => {
     if (onboardingRemoteConnecting) return;
@@ -5004,6 +5407,13 @@ export function AppProvider({
     onboardingRemoteToken,
     retryStartup,
     setActionNotice,
+    setOnboardingCloudProvider,
+    setOnboardingRemoteApiBase,
+    setOnboardingRemoteConnected,
+    setOnboardingRemoteConnecting,
+    setOnboardingRemoteError,
+    setOnboardingRemoteToken,
+    setOnboardingRunMode,
   ]);
 
   // ── Cloud ──────────────────────────────────────────────────────────
@@ -5015,15 +5425,14 @@ export function AppProvider({
     elizaCloudLoginBusyRef.current = true;
     setElizaCloudLoginBusy(true);
     setElizaCloudLoginError(null);
+    elizaCloudPreferDisconnectedUntilLoginRef.current = false;
 
     // Determine if we should use direct cloud auth (no local backend) or
     // go through the local agent's proxy. During sandbox onboarding there is
     // no local backend, so we talk to Eliza Cloud directly.
     const hasBackend = Boolean(client.getBaseUrl());
     const cloudApiBase =
-      ((typeof window !== "undefined" &&
-        (window as unknown as Record<string, unknown>)
-          .__ELIZA_CLOUD_API_BASE__) as string) || "https://www.elizacloud.ai";
+      getBootConfig().cloudApiBase ?? "https://www.elizacloud.ai";
     const useDirectAuth = !hasBackend;
 
     try {
@@ -5120,9 +5529,9 @@ export function AppProvider({
               (
                 window as unknown as Record<string, unknown>
               ).__ELIZA_CLOUD_AUTH_TOKEN__ = poll.token;
-              (
-                window as unknown as Record<string, unknown>
-              ).__ELIZA_CLOUD_API_BASE__ = cloudApiBase;
+              // Also update boot config so subsequent reads use the resolved cloud base.
+              const cfg = getBootConfig();
+              setBootConfig({ ...cfg, cloudApiBase });
             }
 
             setActionNotice(
@@ -5180,23 +5589,129 @@ export function AppProvider({
   handleCloudLoginRef.current = handleCloudLogin;
 
   const handleCloudDisconnect = useCallback(async () => {
-    if (
-      !(await confirmDesktopAction({
-        title: "Disconnect from Eliza Cloud",
-        message: "The agent will need a local AI provider to continue working.",
-        confirmLabel: "Disconnect",
-        cancelLabel: "Cancel",
-        type: "warning",
-      }))
-    )
-      return;
+    const MAIN_CONFIRM_DISCONNECT_MS = 300_000;
+    const MAIN_POST_ONLY_MS = 12_000;
+    const RENDERER_DISCONNECT_MS = 12_000;
+
+    elizaCloudDisconnectInFlightRef.current = true;
     setElizaCloudDisconnecting(true);
+
     try {
-      await client.cloudDisconnect();
+      let needRendererDisconnect = true;
+
+      if (isElectrobunRuntime()) {
+        const combined = await invokeDesktopBridgeRequestWithTimeout<
+          { cancelled: true } | { ok: true } | { ok: false; error?: string }
+        >({
+          rpcMethod: "agentCloudDisconnectWithConfirm",
+          ipcChannel: "agent:cloudDisconnectWithConfirm",
+          params: {
+            apiBase: client.getBaseUrl().trim() || undefined,
+            bearerToken: client.getRestAuthToken() ?? undefined,
+          },
+          timeoutMs: MAIN_CONFIRM_DISCONNECT_MS,
+        });
+
+        if (combined.status === "ok" && combined.value) {
+          const v = combined.value;
+          if ("cancelled" in v && v.cancelled) {
+            return;
+          }
+          if ("ok" in v) {
+            if (
+              v.ok === false &&
+              typeof v.error === "string" &&
+              v.error.trim()
+            ) {
+              throw new Error(v.error.trim());
+            }
+            if (v.ok === true) {
+              needRendererDisconnect = false;
+            }
+          }
+        }
+
+        if (needRendererDisconnect) {
+          if (
+            !(await confirmDesktopAction({
+              title: "Disconnect from Eliza Cloud",
+              message:
+                "The agent will need a local AI provider to continue working.",
+              confirmLabel: "Disconnect",
+              cancelLabel: "Cancel",
+              type: "warning",
+            }))
+          ) {
+            return;
+          }
+          await yieldMiladyHttpAfterNativeMessageBox();
+
+          const postOutcome = await invokeDesktopBridgeRequestWithTimeout<{
+            ok: boolean;
+            error?: string;
+          }>({
+            rpcMethod: "agentPostCloudDisconnect",
+            ipcChannel: "agent:postCloudDisconnect",
+            params: {
+              apiBase: client.getBaseUrl().trim() || undefined,
+              bearerToken: client.getRestAuthToken() ?? undefined,
+            },
+            timeoutMs: MAIN_POST_ONLY_MS,
+          });
+
+          if (postOutcome.status === "ok" && postOutcome.value) {
+            const mr = postOutcome.value;
+            if (mr.ok === true) {
+              needRendererDisconnect = false;
+            } else if (
+              mr.ok === false &&
+              typeof mr.error === "string" &&
+              mr.error.trim()
+            ) {
+              throw new Error(mr.error.trim());
+            }
+          }
+        }
+      } else if (
+        !(await confirmDesktopAction({
+          title: "Disconnect from Eliza Cloud",
+          message:
+            "The agent will need a local AI provider to continue working.",
+          confirmLabel: "Disconnect",
+          cancelLabel: "Cancel",
+          type: "warning",
+        }))
+      ) {
+        return;
+      } else {
+        await yieldMiladyHttpAfterNativeMessageBox();
+      }
+
+      if (needRendererDisconnect) {
+        await Promise.race([
+          client.cloudDisconnect(),
+          new Promise<never>((_, reject) => {
+            window.setTimeout(() => {
+              reject(
+                new Error(
+                  `Disconnect timed out after ${RENDERER_DISCONNECT_MS / 1000}s`,
+                ),
+              );
+            }, RENDERER_DISCONNECT_MS);
+          }),
+        ]);
+      }
+
       setElizaCloudEnabled(false);
       setElizaCloudConnected(false);
       setElizaCloudCredits(null);
+      setElizaCloudCreditsLow(false);
+      setElizaCloudCreditsCritical(false);
+      setElizaCloudAuthRejected(false);
+      setElizaCloudCreditsError(null);
       setElizaCloudUserId(null);
+      lastElizaCloudPollConnectedRef.current = false;
+      elizaCloudPreferDisconnectedUntilLoginRef.current = true;
       setActionNotice("Disconnected from Eliza Cloud.", "success");
     } catch (err) {
       setActionNotice(
@@ -5204,14 +5719,16 @@ export function AppProvider({
         "error",
       );
     } finally {
+      elizaCloudDisconnectInFlightRef.current = false;
       setElizaCloudDisconnecting(false);
+      void pollCloudCredits();
     }
-  }, [setActionNotice]);
+  }, [pollCloudCredits, setActionNotice]);
 
   const handleCloudOnboardingFinish = useCallback(() => {
     setOnboardingComplete(true);
     setTab("chat");
-  }, []);
+  }, [setOnboardingComplete, setTab]);
 
   // ── Updates ────────────────────────────────────────────────────────
 
@@ -5356,7 +5873,12 @@ export function AppProvider({
       setOnboardingProvider(prefill.providerId);
       setOnboardingApiKey(prefill.apiKey);
     },
-    [],
+    [
+      setOnboardingApiKey,
+      setOnboardingDetectedProviders,
+      setOnboardingProvider,
+      setOnboardingRunMode,
+    ],
   );
 
   // ── Generic state setter ───────────────────────────────────────────
@@ -5376,7 +5898,7 @@ export function AppProvider({
         chatAvatarSpeaking: setChatAvatarSpeaking,
         companionMessageCutoffTs: setCompanionMessageCutoffTs,
         uiShellMode: setUiShellMode,
-        uiLanguage: setUiLanguageState,
+        uiLanguage: setUiLanguage as (v: AppState["uiLanguage"]) => void,
         autonomousRunHealthByRunId: setAutonomousRunHealthByRunId,
         startupError: setStartupError,
         pairingCodeInput: setPairingCodeInput,
@@ -5498,7 +6020,56 @@ export function AppProvider({
       const setter = setterMap[key];
       if (setter) setter(value);
     },
-    [setOnboardingStep, setSelectedVrmIndex, setUiShellMode],
+    [
+      setOnboardingStep,
+      setSelectedVrmIndex,
+      setUiLanguage,
+      setUiShellMode,
+      setAutonomousRunHealthByRunId,
+      setChatAgentVoiceMuted,
+      setChatAvatarSpeaking,
+      setChatAvatarVisible,
+      setChatInput,
+      setChatLastUsage,
+      setChatMode,
+      setCompanionMessageCutoffTs,
+      setOnboardingApiKey,
+      setOnboardingAvatar,
+      setOnboardingBlooioApiKey,
+      setOnboardingBlooioPhoneNumber,
+      setOnboardingCloudProvider,
+      setOnboardingDetectedProviders,
+      setOnboardingDiscordToken,
+      setOnboardingElizaCloudTab,
+      setOnboardingExistingInstallDetected,
+      setOnboardingGithubToken,
+      setOnboardingLargeModel,
+      setOnboardingName,
+      setOnboardingOpenRouterModel,
+      setOnboardingOwnerName,
+      setOnboardingPrimaryModel,
+      setOnboardingProvider,
+      setOnboardingRemoteApiBase,
+      setOnboardingRemoteConnected,
+      setOnboardingRemoteConnecting,
+      setOnboardingRemoteError,
+      setOnboardingRemoteToken,
+      setOnboardingRestarting,
+      setOnboardingRpcKeys,
+      setOnboardingRpcSelections,
+      setOnboardingRunMode,
+      setOnboardingSelectedChains,
+      setOnboardingSmallModel,
+      setOnboardingStyle,
+      setOnboardingSubscriptionTab,
+      setOnboardingTelegramToken,
+      setOnboardingTwilioAccountSid,
+      setOnboardingTwilioAuthToken,
+      setOnboardingTwilioPhoneNumber,
+      setOnboardingWhatsAppSessionPath,
+      setStartupError,
+      setTabRaw,
+    ],
   );
 
   // ── Initialization ─────────────────────────────────────────────────
@@ -5666,11 +6237,7 @@ export function AppProvider({
       if (!restoredConnection) {
         // No reusable backend/config was found yet. Show static onboarding
         // immediately so first-run users are not blocked on server startup.
-        const injectedStyles =
-          (typeof window !== "undefined" &&
-            (window as unknown as Record<string, unknown>)
-              .__APP_ONBOARDING_STYLES__) ||
-          [];
+        const injectedStyles = getBootConfig().onboardingStyles || [];
         setOnboardingOptions({
           names: [],
           styles: injectedStyles as StylePreset[],
@@ -5817,11 +6384,7 @@ export function AppProvider({
             const resumeFields = deriveOnboardingResumeFields(resumeConnection);
             onboardingResumeConnectionRef.current = resumeConnection;
 
-            const injectedStyles =
-              (typeof window !== "undefined" &&
-                (window as unknown as Record<string, unknown>)
-                  .__APP_ONBOARDING_STYLES__) ||
-              [];
+            const injectedStyles = getBootConfig().onboardingStyles || [];
 
             setOnboardingOptions({
               ...options,
@@ -6004,6 +6567,7 @@ export function AppProvider({
 
       void loadWorkbench();
       void loadPlugins(); // Hydrate plugin state early so Nav sees streaming-base toggle
+      void loadCharacter(); // Hydrate character data for chat UI agent name + responses
 
       // Hydrate coding agent sessions (also re-called on WS reconnect / server restart)
       const hydratePtySessions = () => {
@@ -6069,11 +6633,12 @@ export function AppProvider({
           const nextStatus = parseAgentStatusEvent(data);
           if (nextStatus) {
             setAgentStatusIfChanged(nextStatus);
-            // Auto-refresh plugins when agent reports a restart
+            // Auto-refresh plugins and cloud status when agent reports a restart
             if (data.restarted) {
               setPendingRestart(false);
               setPendingRestartReasons([]);
               void loadPlugins();
+              void pollCloudCredits();
               hydratePtySessions();
               ptyHydratedViaWs = true;
             }
@@ -6117,7 +6682,7 @@ export function AppProvider({
               data.reasons.filter((el): el is string => typeof el === "string"),
             );
             setPendingRestart(true);
-            setRestartBannerDismissed(false);
+            showRestartBanner();
           }
         },
       );
@@ -6404,17 +6969,10 @@ export function AppProvider({
         }
       }
 
-      // Cloud polling — always run the initial poll unconditionally so we can
-      // discover a pre-existing API key / connection. If connected, start the
-      // recurring interval too.
-      pollCloudCredits().then((connected) => {
-        if (connected) {
-          elizaCloudPollInterval.current = window.setInterval(
-            () => pollCloudCredits(),
-            60_000,
-          );
-        }
-      });
+      // Cloud polling — run the initial poll to discover a pre-existing
+      // connection. The recurring interval is started automatically by
+      // pollCloudCredits whenever it detects a connected state.
+      void pollCloudCredits();
 
       // Load tab from URL — use hash in file:// mode (packaged desktop builds)
       const navPath =
@@ -6426,7 +6984,7 @@ export function AppProvider({
       // If the user navigates directly to /character while onboarding is incomplete,
       // override the persisted step to show them the connection step.
       if (onboardingNeedsOptions && navPath === "/character") {
-        setOnboardingStepRaw("hosting");
+        setOnboardingStep("hosting");
       }
 
       const shouldStartAtCharacterSelect = shouldStartAtCharacterSelectOnLaunch(
@@ -6491,8 +7049,8 @@ export function AppProvider({
       const navPath = isFileProtocol
         ? window.location.hash.replace(/^#/, "") || "/"
         : window.location.pathname;
-      const t = tabFromPath(navPath);
-      if (t) setTabRaw(t);
+      const navTab = tabFromPath(navPath);
+      if (navTab) setTabRaw(navTab);
     };
     const navEvent = isFileProtocol ? "hashchange" : "popstate";
     window.addEventListener(navEvent, handleNavChange);
@@ -6570,11 +7128,28 @@ export function AppProvider({
     conversationMessages.length,
     chatSending,
     fetchGreeting,
+    greetingFiredRef.current,
+    greetingInFlightConversationRef.current,
   ]);
 
   // ── Context value ──────────────────────────────────────────────────
 
-  const t = useMemo(() => createTranslator(uiLanguage), [uiLanguage]);
+  // t is provided by TranslationContext (useTranslation() above)
+
+  useEffect(() => {
+    if (elizaCloudAuthRejected) {
+      if (!elizaCloudAuthNoticeSentRef.current) {
+        elizaCloudAuthNoticeSentRef.current = true;
+        setActionNotice(
+          t("notice.elizaCloudAuthRejected"),
+          "error",
+          14_000,
+        );
+      }
+    } else {
+      elizaCloudAuthNoticeSentRef.current = false;
+    }
+  }, [elizaCloudAuthRejected, setActionNotice, uiLanguage]);
 
   const value: AppContextValue = {
     // Translations
@@ -6584,6 +7159,9 @@ export function AppProvider({
     uiShellMode,
     uiLanguage,
     uiTheme,
+    companionVrmPowerMode,
+    companionAnimateWhenHidden,
+    companionHalfFramerateMode,
     connected,
     agentStatus,
     onboardingComplete,
@@ -6609,6 +7187,7 @@ export function AppProvider({
     chatInput,
     chatSending,
     chatFirstTokenReceived,
+    chatAwaitingGreeting,
     chatLastUsage,
     chatAvatarVisible,
     chatAgentVoiceMuted,
@@ -6684,9 +7263,7 @@ export function AppProvider({
     mintShiny,
     whitelistStatus,
     whitelistLoading,
-    twitterVerifyMessage,
-    twitterVerifyUrl,
-    twitterVerifying,
+
     characterData,
     characterLoading,
     characterSaving,
@@ -6701,6 +7278,8 @@ export function AppProvider({
     elizaCloudCredits,
     elizaCloudCreditsLow,
     elizaCloudCreditsCritical,
+    elizaCloudAuthRejected,
+    elizaCloudCreditsError,
     elizaCloudTopUpUrl,
     elizaCloudUserId,
     cloudDashboardView,
@@ -6824,8 +7403,12 @@ export function AppProvider({
     setUiShellMode,
     switchUiShellMode,
     switchShellView,
+    navigation,
     setUiLanguage,
     setUiTheme,
+    setCompanionVrmPowerMode,
+    setCompanionAnimateWhenHidden,
+    setCompanionHalfFramerateMode,
     handleStart,
     handleStop,
 
@@ -6853,6 +7436,7 @@ export function AppProvider({
     handleSelectConversation,
     handleDeleteConversation,
     handleRenameConversation,
+    suggestConversationTitle,
     sendActionMessage,
     loadTriggers,
     createTrigger,
@@ -6932,8 +7516,8 @@ export function AppProvider({
     <BrandingContext.Provider value={mergedBranding}>
       <AppContext.Provider value={value}>
         {children}
-        <ConfirmModal {...modalProps} />
-        <PromptModal {...promptModalProps} />
+        <ConfirmDialog {...modalProps} />
+        <PromptDialog {...promptModalProps} />
       </AppContext.Provider>
     </BrandingContext.Provider>
   );
