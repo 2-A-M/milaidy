@@ -506,7 +506,6 @@ const WHATSAPP_CLOUD_KEYS = new Set([
   "WHATSAPP_WEBHOOK_VERIFY_TOKEN",
   "WHATSAPP_BUSINESS_ACCOUNT_ID",
   "WHATSAPP_API_VERSION",
-  "WHATSAPP_AUTH_DIR",
 ]);
 
 /** QR/Baileys fields hidden in Cloud API mode. */
