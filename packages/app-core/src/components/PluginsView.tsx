@@ -569,8 +569,27 @@ function WhatsAppPluginConfig({
     hasCloudToken && !hasAuthDir ? "cloudapi" : "qr",
   );
 
-  const hiddenKeys =
-    authMode === "qr" ? WHATSAPP_CLOUD_KEYS : WHATSAPP_BAILEYS_KEYS;
+  // Build hidden keys based on auth mode + policy selections
+  const dmPolicy =
+    pluginConfigs.whatsapp?.WHATSAPP_DM_POLICY ||
+    plugin.parameters?.find((p) => p.key === "WHATSAPP_DM_POLICY")
+      ?.currentValue ||
+    "";
+  const groupPolicy =
+    pluginConfigs.whatsapp?.WHATSAPP_GROUP_POLICY ||
+    plugin.parameters?.find((p) => p.key === "WHATSAPP_GROUP_POLICY")
+      ?.currentValue ||
+    "";
+
+  const hiddenKeys = useMemo(() => {
+    const keys = new Set(
+      authMode === "qr" ? WHATSAPP_CLOUD_KEYS : WHATSAPP_BAILEYS_KEYS,
+    );
+    // Only show allowlist fields when the corresponding policy is "allowlist"
+    if (dmPolicy !== "allowlist") keys.add("WHATSAPP_ALLOWED_USERS");
+    if (groupPolicy !== "allowlist") keys.add("WHATSAPP_ALLOWED_GROUPS");
+    return keys;
+  }, [authMode, dmPolicy, groupPolicy]);
 
   return (
     <>

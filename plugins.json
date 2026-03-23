@@ -6225,13 +6225,25 @@
         },
         "WHATSAPP_DM_POLICY": {
           "type": "string",
-          "description": "DM policy (e.g. allow, deny, allowlist)",
+          "description": "DM policy",
           "required": false,
           "sensitive": false
         },
         "WHATSAPP_GROUP_POLICY": {
           "type": "string",
           "description": "Group message policy",
+          "required": false,
+          "sensitive": false
+        },
+        "WHATSAPP_ALLOWED_USERS": {
+          "type": "string",
+          "description": "JSON-encoded array of phone numbers allowed to message the bot.",
+          "required": false,
+          "sensitive": false
+        },
+        "WHATSAPP_ALLOWED_GROUPS": {
+          "type": "string",
+          "description": "JSON-encoded array of group IDs allowed to interact with the bot.",
           "required": false,
           "sensitive": false
         }
@@ -6245,16 +6257,26 @@
           "type": "select",
           "options": [
             { "value": "open", "label": "Open", "description": "Respond to anyone who messages" },
+            { "value": "allowlist", "label": "Allowlist", "description": "Only respond to allowed numbers" },
             { "value": "disabled", "label": "Disabled", "description": "Don't accept DMs" }
           ]
+        },
+        "WHATSAPP_ALLOWED_USERS": {
+          "label": "Allowed Users",
+          "placeholder": "JSON array of phone numbers, e.g.:\n[\"+5511999999999\", \"+14155551234\"]"
         },
         "WHATSAPP_GROUP_POLICY": {
           "label": "Group Policy",
           "type": "select",
           "options": [
             { "value": "open", "label": "Open", "description": "Respond in any group the bot is in" },
+            { "value": "allowlist", "label": "Allowlist", "description": "Only respond in allowed groups" },
             { "value": "disabled", "label": "Disabled", "description": "Don't respond in groups" }
           ]
+        },
+        "WHATSAPP_ALLOWED_GROUPS": {
+          "label": "Allowed Groups",
+          "placeholder": "JSON array of group IDs, e.g.:\n[\"120363001234567890@g.us\"]"
         }
       },
       "setupGuideUrl": "https://docs.eliza.ai/plugin-setup-guide#whatsapp"
