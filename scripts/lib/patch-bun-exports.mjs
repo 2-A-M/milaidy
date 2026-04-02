@@ -1390,7 +1390,13 @@ export function patchCodexFolderApprovalPromptCompat(root, log = console.log) {
 /**
  * Electrobun's CLI download script passes Windows backslash paths to `tar -xzf`.
  * GNU tar (Git Bash / MSYS2) interprets `A:\...` as a remote host prefix, so
- * extraction fails. Convert backslashes to forward slashes in the tar command.
+ * extraction fails. Replace the absolute tarballPath with a relative filename
+ * since cwd is already the cache directory.
+ *
+ * findPackageFilePaths covers both root node_modules/ and Bun's hoisted
+ * .bun/electrobun@* / cache. The workspace-aware createRequire resolution in
+ * build-patched-electrobun-cli.mjs resolves from a specific workspace, but here
+ * we want to patch every copy found — the simpler lookup is appropriate.
  */
 export function patchElectrobunWindowsTar(root, log = console.log) {
   const candidates = findPackageFilePaths(
