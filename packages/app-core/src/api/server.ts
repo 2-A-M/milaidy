@@ -704,12 +704,21 @@ async function _handleEdgeTtsRoute(
       res.end(JSON.stringify({ error: "Missing text" }));
       return true;
     }
-    const voice =
+    if (text.length > 500) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Text too long" }));
+      return true;
+    }
+    const rawVoice =
       typeof body.voiceId === "string" && body.voiceId.trim()
         ? body.voiceId.trim()
         : typeof body.voice === "string" && body.voice.trim()
           ? body.voice.trim()
           : "en-US-AriaNeural";
+    // Validate Azure Neural voice ID format to prevent SSML injection
+    const voice = /^[a-z]{2}-[A-Z]{2}-[A-Za-z]+Neural$/i.test(rawVoice)
+      ? rawVoice
+      : "en-US-AriaNeural";
 
     // Resolve node-edge-tts from @elizaos/plugin-edge-tts's dependency tree
     const pluginPkg = "@elizaos/plugin-edge-tts/package.json";
