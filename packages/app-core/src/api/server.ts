@@ -681,6 +681,80 @@ function resolveCloudConfig(runtime?: unknown): ElizaConfig {
   return config;
 }
 
+/**
+ * Free Edge TTS endpoint using Microsoft's node-edge-tts. No API key required.
+ * Used as the final fallback for onboarding voice previews when cloud/ElevenLabs
+ * keys are not configured.
+ *
+ * node-edge-tts is a transitive dep of @elizaos/plugin-edge-tts (not hoisted),
+ * so we resolve it via createRequire from the plugin's package.json location.
+ */
+async function _handleEdgeTtsRoute(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+): Promise<boolean> {
+  try {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(chunk as Buffer);
+    const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    const text = typeof body.text === "string" ? body.text.trim() : "";
+    if (!text) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Missing text" }));
+      return true;
+    }
+    const voice =
+      typeof body.voiceId === "string" && body.voiceId.trim()
+        ? body.voiceId.trim()
+        : typeof body.voice === "string" && body.voice.trim()
+          ? body.voice.trim()
+          : "en-US-AriaNeural";
+
+    // Resolve node-edge-tts from @elizaos/plugin-edge-tts's dependency tree
+    const { createRequire } = await import("node:module");
+    const pluginPkg = "@elizaos/plugin-edge-tts/package.json";
+    const pluginRequire = createRequire(
+      createRequire(import.meta.url).resolve(pluginPkg),
+    );
+    const { EdgeTTS } = pluginRequire("node-edge-tts") as {
+      EdgeTTS: new (cfg?: {
+        voice?: string;
+        outputFormat?: string;
+      }) => { ttsPromise(text: string, path: string): Promise<unknown> };
+    };
+
+    // EdgeTTS writes to a file — use a temp path
+    const { mkdtempSync, readFileSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const tmpDir = mkdtempSync(join(tmpdir(), "milady-edge-tts-"));
+    const audioPath = join(tmpDir, "preview.mp3");
+    try {
+      const tts = new EdgeTTS({
+        voice,
+        outputFormat: "audio-24khz-48kbitrate-mono-mp3",
+      });
+      await tts.ttsPromise(text, audioPath);
+      const mp3 = readFileSync(audioPath);
+
+      res.writeHead(200, {
+        "Content-Type": "audio/mpeg",
+        "Content-Length": String(mp3.length),
+      });
+      res.end(mp3);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  } catch (err) {
+    console.error("[api/tts/edge] Error:", err);
+    res.writeHead(500, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({ error: "Edge TTS failed", detail: String(err) }),
+    );
+  }
+  return true;
+}
+
 async function handleMiladyCompatRoute(
   req: http.IncomingMessage,
   res: http.ServerResponse,
@@ -728,6 +802,10 @@ async function handleMiladyCompatRoute(
     // Eliza server handler, not by the Milady API layer. Returning false
     // lets the request fall through to the next handler in the chain.
     return false;
+  }
+
+  if (method === "POST" && url.pathname === "/api/tts/edge") {
+    return await _handleEdgeTtsRoute(req, res);
   }
 
   // Workbench / todos routes — extracted to workbench-compat-routes.ts
