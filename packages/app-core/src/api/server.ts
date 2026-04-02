@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import http from "node:http";
 import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { type AgentRuntime, logger } from "@elizaos/core";
@@ -711,7 +712,6 @@ async function _handleEdgeTtsRoute(
           : "en-US-AriaNeural";
 
     // Resolve node-edge-tts from @elizaos/plugin-edge-tts's dependency tree
-    const { createRequire } = await import("node:module");
     const pluginPkg = "@elizaos/plugin-edge-tts/package.json";
     const pluginRequire = createRequire(
       createRequire(import.meta.url).resolve(pluginPkg),
@@ -723,19 +723,18 @@ async function _handleEdgeTtsRoute(
       }) => { ttsPromise(text: string, path: string): Promise<unknown> };
     };
 
-    // EdgeTTS writes to a file — use a temp path
-    const { mkdtempSync, readFileSync, rmSync } = await import("node:fs");
-    const { tmpdir } = await import("node:os");
-    const { join } = await import("node:path");
-    const tmpDir = mkdtempSync(join(tmpdir(), "milady-edge-tts-"));
-    const audioPath = join(tmpDir, "preview.mp3");
+    // EdgeTTS writes to a file — use a temp path then async-read it back
+    const tmpDir = await fs.promises.mkdtemp(
+      path.join(tmpdir(), "milady-edge-tts-"),
+    );
+    const audioPath = path.join(tmpDir, "preview.mp3");
     try {
       const tts = new EdgeTTS({
         voice,
         outputFormat: "audio-24khz-48kbitrate-mono-mp3",
       });
       await tts.ttsPromise(text, audioPath);
-      const mp3 = readFileSync(audioPath);
+      const mp3 = await fs.promises.readFile(audioPath);
 
       res.writeHead(200, {
         "Content-Type": "audio/mpeg",
@@ -743,14 +742,12 @@ async function _handleEdgeTtsRoute(
       });
       res.end(mp3);
     } finally {
-      rmSync(tmpDir, { recursive: true, force: true });
+      await fs.promises.rm(tmpDir, { recursive: true, force: true });
     }
   } catch (err) {
     console.error("[api/tts/edge] Error:", err);
     res.writeHead(500, { "Content-Type": "application/json" });
-    res.end(
-      JSON.stringify({ error: "Edge TTS failed", detail: String(err) }),
-    );
+    res.end(JSON.stringify({ error: "Edge TTS synthesis failed" }));
   }
   return true;
 }
@@ -805,6 +802,7 @@ async function handleMiladyCompatRoute(
   }
 
   if (method === "POST" && url.pathname === "/api/tts/edge") {
+    if (!ensureCompatApiAuthorized(req, res)) return true;
     return await _handleEdgeTtsRoute(req, res);
   }
 
