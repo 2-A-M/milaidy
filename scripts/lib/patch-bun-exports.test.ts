@@ -29,6 +29,7 @@ import {
   patchBrokenElizaCoreRuntimeDists,
   patchBunExports,
   patchCodexFolderApprovalPromptCompat,
+  patchElectrobunWindowsTar,
   patchElizaCoreStreamingRetryPlaceholder,
   patchElizaCoreStreamingTtsHandlerGuard,
   patchExtensionlessJsExports,
@@ -37,7 +38,6 @@ import {
   patchPluginVisionPermissionHandling,
   patchProperLockfileSignalExitCompat,
   patchPtyManagerCursorPositionCompat,
-  patchElectrobunWindowsTar,
   patchPtyManagerEsmDirnameCompat,
   pruneNestedElizaPluginCoreCopies,
   repairElizaCoreRuntimeDist,
@@ -1707,19 +1707,29 @@ await downloadFile(tarballUrl, tarballPath);
 execSync(\`tar -xzf electrobun-\${platform}-\${arch}.tar.gz\`, { cwd: cacheDir, stdio: 'pipe' });
 unlinkSync(tarballPath);`;
 
+const PLATFORM_PLACEHOLDER = "$" + "{platform}";
+const ARCH_PLACEHOLDER = "$" + "{arch}";
+const TARBALL_PATH_PLACEHOLDER = "$" + "{tarballPath}";
+
 describe("patchElectrobunWindowsTar", () => {
   it("patches the tar command and returns true", () => {
     const tmp = mkdtempSync(join(tmpdir(), "patch-electrobun-tar-"));
     try {
       const cjsPath = join(tmp, "node_modules", "electrobun", "bin");
       mkdirSync(cjsPath, { recursive: true });
-      writeFileSync(join(cjsPath, "electrobun.cjs"), ELECTROBUN_CJS_UNPATCHED, "utf8");
+      writeFileSync(
+        join(cjsPath, "electrobun.cjs"),
+        ELECTROBUN_CJS_UNPATCHED,
+        "utf8",
+      );
 
       expect(patchElectrobunWindowsTar(tmp)).toBe(true);
 
       const patched = readFileSync(join(cjsPath, "electrobun.cjs"), "utf8");
-      expect(patched).toContain("electrobun-${platform}-${arch}.tar.gz`");
-      expect(patched).not.toContain('"${tarballPath}"');
+      expect(patched).toContain(
+        `electrobun-${PLATFORM_PLACEHOLDER}-${ARCH_PLACEHOLDER}.tar.gz\``,
+      );
+      expect(patched).not.toContain(`"${TARBALL_PATH_PLACEHOLDER}"`);
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
@@ -1730,7 +1740,11 @@ describe("patchElectrobunWindowsTar", () => {
     try {
       const cjsPath = join(tmp, "node_modules", "electrobun", "bin");
       mkdirSync(cjsPath, { recursive: true });
-      writeFileSync(join(cjsPath, "electrobun.cjs"), ELECTROBUN_CJS_PATCHED, "utf8");
+      writeFileSync(
+        join(cjsPath, "electrobun.cjs"),
+        ELECTROBUN_CJS_PATCHED,
+        "utf8",
+      );
 
       expect(patchElectrobunWindowsTar(tmp)).toBe(false);
     } finally {
@@ -1743,7 +1757,11 @@ describe("patchElectrobunWindowsTar", () => {
     try {
       const cjsPath = join(tmp, "node_modules", "electrobun", "bin");
       mkdirSync(cjsPath, { recursive: true });
-      writeFileSync(join(cjsPath, "electrobun.cjs"), "// unrelated content", "utf8");
+      writeFileSync(
+        join(cjsPath, "electrobun.cjs"),
+        "// unrelated content",
+        "utf8",
+      );
 
       expect(patchElectrobunWindowsTar(tmp)).toBe(false);
     } finally {
@@ -1756,7 +1774,11 @@ describe("patchElectrobunWindowsTar", () => {
     try {
       const cjsPath = join(tmp, "node_modules", "electrobun", "bin");
       mkdirSync(cjsPath, { recursive: true });
-      writeFileSync(join(cjsPath, "electrobun.cjs"), ELECTROBUN_CJS_UNPATCHED, "utf8");
+      writeFileSync(
+        join(cjsPath, "electrobun.cjs"),
+        ELECTROBUN_CJS_UNPATCHED,
+        "utf8",
+      );
 
       const logs: string[] = [];
       patchElectrobunWindowsTar(tmp, (msg: string) => logs.push(msg));
@@ -1780,12 +1802,16 @@ describe("patchElectrobunWindowsTar", () => {
         "bin",
       );
       mkdirSync(cjsPath, { recursive: true });
-      writeFileSync(join(cjsPath, "electrobun.cjs"), ELECTROBUN_CJS_UNPATCHED, "utf8");
+      writeFileSync(
+        join(cjsPath, "electrobun.cjs"),
+        ELECTROBUN_CJS_UNPATCHED,
+        "utf8",
+      );
 
       expect(patchElectrobunWindowsTar(tmp)).toBe(true);
 
       const patched = readFileSync(join(cjsPath, "electrobun.cjs"), "utf8");
-      expect(patched).not.toContain('"${tarballPath}"');
+      expect(patched).not.toContain(`"${TARBALL_PATH_PLACEHOLDER}"`);
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

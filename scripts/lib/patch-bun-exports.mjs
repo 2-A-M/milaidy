@@ -1399,16 +1399,17 @@ export function patchCodexFolderApprovalPromptCompat(root, log = console.log) {
  * we want to patch every copy found — the simpler lookup is appropriate.
  */
 export function patchElectrobunWindowsTar(root, log = console.log) {
+  const tarballPathPlaceholder = "$" + "{tarballPath}";
+  const platformPlaceholder = "$" + "{platform}";
+  const archPlaceholder = "$" + "{arch}";
   const candidates = findPackageFilePaths(
     root,
     "electrobun",
     "bin/electrobun.cjs",
   );
   let patched = false;
-  const needle =
-    'execSync(`tar -xzf "${tarballPath}"`, { cwd: cacheDir, stdio: \'pipe\' });';
-  const replacement =
-    "execSync(`tar -xzf electrobun-${platform}-${arch}.tar.gz`, { cwd: cacheDir, stdio: 'pipe' });";
+  const needle = `execSync(\`tar -xzf "${tarballPathPlaceholder}"\`, { cwd: cacheDir, stdio: 'pipe' });`;
+  const replacement = `execSync(\`tar -xzf electrobun-${platformPlaceholder}-${archPlaceholder}.tar.gz\`, { cwd: cacheDir, stdio: 'pipe' });`;
   for (const filePath of candidates) {
     if (!existsSync(filePath)) continue;
     const source = readFileSync(filePath, "utf8");
