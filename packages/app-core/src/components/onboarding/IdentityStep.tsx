@@ -70,6 +70,7 @@ export function IdentityStep({
   const previewAbortControllerRef = useRef<AbortController | null>(null);
   const previewRequestIdRef = useRef(0);
   const pendingPreviewEntryRef = useRef<CharacterRosterEntry | null>(null);
+  const hasPlayedInitialPreviewRef = useRef(false);
 
   const stopPreviewAudio = useCallback(() => {
     previewAbortControllerRef.current?.abort();
@@ -209,7 +210,8 @@ export function IdentityStep({
   useEffect(() => {
     if (!onboardingStyle && firstEntry) {
       handleSelect(firstEntry, true);
-    } else if (onboardingStyle) {
+    } else if (onboardingStyle && !hasPlayedInitialPreviewRef.current) {
+      hasPlayedInitialPreviewRef.current = true;
       const entry = entries.find((e) => e.id === onboardingStyle);
       if (entry) {
         void playSelectionPreview(entry);
