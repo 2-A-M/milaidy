@@ -209,8 +209,13 @@ export function IdentityStep({
   useEffect(() => {
     if (!onboardingStyle && firstEntry) {
       handleSelect(firstEntry, true);
+    } else if (onboardingStyle) {
+      const entry = entries.find((e) => e.id === onboardingStyle);
+      if (entry) {
+        void playSelectionPreview(entry);
+      }
     }
-  }, [onboardingStyle, handleSelect, firstEntry]);
+  }, [onboardingStyle, handleSelect, firstEntry, entries, playSelectionPreview]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
