@@ -38,6 +38,7 @@ import {
   patchMissingLifecycleScript,
   patchNobleHashesCompat,
   patchProperLockfileSignalExitCompat,
+  patchElectrobunWindowsTar,
   patchPtyManagerCursorPositionCompat,
   patchPtyManagerEsmDirnameCompat,
   pruneNestedElizaPluginCoreCopies,
@@ -97,6 +98,7 @@ try {
   // Source file may not exist (moved to @miladyai/shared).
 }
 patchAutonomousTypeError(root);
+patchElectrobunWindowsTar(root);
 
 // ---------------------------------------------------------------------------
 // @elizaos/plugin-openrouter — version is pinned in root package.json to

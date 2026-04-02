@@ -1387,6 +1387,35 @@ export function patchCodexFolderApprovalPromptCompat(root, log = console.log) {
   return patched;
 }
 
+/**
+ * Electrobun's CLI download script passes Windows backslash paths to `tar -xzf`.
+ * GNU tar (Git Bash / MSYS2) interprets `A:\...` as a remote host prefix, so
+ * extraction fails. Convert backslashes to forward slashes in the tar command.
+ */
+export function patchElectrobunWindowsTar(root, log = console.log) {
+  const candidates = findPackageFilePaths(
+    root,
+    "electrobun",
+    "bin/electrobun.cjs",
+  );
+  let patched = false;
+  const needle =
+    'execSync(`tar -xzf "${tarballPath}"`, { cwd: cacheDir, stdio: \'pipe\' });';
+  const replacement =
+    "execSync(`tar -xzf electrobun-${platform}-${arch}.tar.gz`, { cwd: cacheDir, stdio: 'pipe' });";
+  for (const filePath of candidates) {
+    if (!existsSync(filePath)) continue;
+    const source = readFileSync(filePath, "utf8");
+    if (!source.includes(needle)) continue;
+    writeFileSync(filePath, source.replace(needle, replacement), "utf8");
+    patched = true;
+    log(
+      "[patch-deps] Patched electrobun: tar extraction uses forward slashes on Windows.",
+    );
+  }
+  return patched;
+}
+
 export function patchAutonomousTypeError(root, log = console.log) {
   const candidates = findPackageFilePaths(
     root,
