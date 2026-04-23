@@ -2036,10 +2036,16 @@ export async function ensurePluginBuildOutputs(
     }
 
     console.log(`[setup-upstreams] Building ${packageJson.name}`);
-    await runCommandImpl("bun", ["run", "build"], {
-      cwd: packageDir,
-      label: `bun run build (${packageJson.name})`,
-    });
+    try {
+      await runCommandImpl("bun", ["run", "build"], {
+        cwd: packageDir,
+        label: `bun run build (${packageJson.name})`,
+      });
+    } catch (err) {
+      console.warn(
+        `[setup-upstreams] Build failed for ${packageJson.name} (non-fatal): ${err.message}`,
+      );
+    }
   }
 }
 
