@@ -1,0 +1,84 @@
+diff --git a/plugins/plugin-elizacloud/models/object.ts b/plugins/plugin-elizacloud/models/object.ts
+index f411045de5..4e161e9eba 100644
+--- a/plugins/plugin-elizacloud/models/object.ts
++++ b/plugins/plugin-elizacloud/models/object.ts
+@@ -36,6 +36,70 @@ function isReasoningModel(modelName: string): boolean {
+   return REASONING_MODEL_PATTERNS.some((pattern) => lower.includes(pattern));
+ }
+ 
++/**
++ * Walk `text` for the first balanced JSON object/array that successfully parses.
++ * Handles prose-prefix ("Here's the JSON: {...}"), bracketed-prefix ("[note] {...}"),
++ * and duplicated-response cases that the basic fence-strip can't handle.
++ * Returns the original text if no balanced JSON is found (caller falls back to
++ * the repair function). Mirrors the helper from elizaos-plugins/plugin-elizacloud#18.
++ */
++export function extractFirstBalancedJsonValue(text: string): string {
++  if (text.length === 0) return text;
++  let searchFrom = 0;
++  while (searchFrom < text.length) {
++    const firstObj = text.indexOf("{", searchFrom);
++    const firstArr = text.indexOf("[", searchFrom);
++    const start =
++      firstObj === -1
++        ? firstArr
++        : firstArr === -1
++          ? firstObj
++          : Math.min(firstObj, firstArr);
++    if (start < 0) break;
++    const open = text[start];
++    const close = open === "{" ? "}" : "]";
++    let depth = 0;
++    let inString = false;
++    let escaped = false;
++    let end = -1;
++    for (let i = start; i < text.length; i++) {
++      const ch = text[i];
++      if (escaped) {
++        escaped = false;
++        continue;
++      }
++      if (ch === "\\") {
++        escaped = true;
++        continue;
++      }
++      if (ch === '"') {
++        inString = !inString;
++        continue;
++      }
++      if (inString) continue;
++      if (ch === open) depth++;
++      else if (ch === close) {
++        depth--;
++        if (depth === 0) {
++          end = i;
++          break;
++        }
++      }
++    }
++    if (end > start) {
++      const candidate = text.slice(start, end + 1).trim();
++      try {
++        JSON.parse(candidate);
++        return candidate;
++      } catch {
++        // not parseable — advance past this opener and try the next one
++      }
++    }
++    searchFrom = start + 1;
++  }
++  return text;
++}
++
+ async function generateObjectByModelType(
+   runtime: IAgentRuntime,
+   params: ObjectGenerationParams,
+@@ -130,6 +194,8 @@ async function generateObjectByModelType(
+     .replace(/\n?```\s*$/i, "")
+     .trim();
+ 
++  jsonText = extractFirstBalancedJsonValue(jsonText);
++
+   try {
+     return JSON.parse(jsonText) as Record<string, JsonValue>;
+   } catch (error) {
