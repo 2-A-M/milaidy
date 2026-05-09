@@ -1498,37 +1498,58 @@ export default defineConfig({
         find: /^@elizaos\/ui\/lib\/(.*)$/,
         replacement: `${uiPkgRoot}/src/lib/$1.ts`,
       },
-      // Dynamic aliases for all eliza/apps/* packages
+      // Dynamic aliases for all eliza/apps/* and eliza/plugins/* packages.
+      // Many app-* packages have moved from eliza/apps/ to eliza/plugins/;
+      // scan both locations so this config keeps working before and after
+      // the move, and so packages whose source lives in only one location
+      // resolve correctly.
       ...(() => {
-        const appsDir = path.resolve(miladyRoot, "eliza/apps");
         const aliases: Alias[] = [];
-        for (const entry of fs.readdirSync(appsDir, { withFileTypes: true })) {
-          if (!entry.isDirectory()) continue;
-          const pkgPath = path.join(appsDir, entry.name, "package.json");
-          if (!fs.existsSync(pkgPath)) continue;
-          const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
-          const pkgName = pkg.name;
-          if (!pkgName) continue;
-          const pkgDir = path.dirname(pkgPath);
-          // Generate export-map aliases
-          for (const [key, value] of Object.entries(pkg.exports || {})) {
-            if (typeof value !== "string") continue;
-            const aliasKey =
-              key === "." ? pkgName : `${pkgName}/${key.replace(/^\.\//, "")}`;
+        for (const dirRel of ["eliza/apps", "eliza/plugins"]) {
+          const dir = path.resolve(miladyRoot, dirRel);
+          if (!fs.existsSync(dir)) continue;
+          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (!entry.isDirectory()) continue;
+            const pkgPath = path.join(dir, entry.name, "package.json");
+            if (!fs.existsSync(pkgPath)) continue;
+            const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+            const pkgName = pkg.name;
+            if (!pkgName) continue;
+            const pkgDir = path.dirname(pkgPath);
+            // Generate export-map aliases. Exports come in two shapes:
+            //   "./foo": "./dist/foo.js"                                     (string)
+            //   "./foo": { types, import, default }                          (conditional)
+            // Resolve both — the alias points at the dev-resolution target
+            // (prefer "import"/"default" so source TSX paths via "types" don't
+            // shadow built dist paths in dev).
+            for (const [key, value] of Object.entries(pkg.exports || {})) {
+              let target: string | undefined;
+              if (typeof value === "string") {
+                target = value;
+              } else if (value && typeof value === "object") {
+                const cond = value as Record<string, unknown>;
+                const pick = cond.import ?? cond.default ?? cond.types;
+                if (typeof pick === "string") target = pick;
+              }
+              if (!target) continue;
+              if (target.includes("*")) continue; // wildcard exports left to Node resolver
+              const aliasKey =
+                key === "." ? pkgName : `${pkgName}/${key.replace(/^\.\//, "")}`;
+              aliases.push({
+                find: new RegExp(
+                  `^${aliasKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+                ),
+                replacement: path.resolve(pkgDir, target),
+              });
+            }
+            // Catch-all subpath for direct src/ access
             aliases.push({
               find: new RegExp(
-                `^${aliasKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+                `^${pkgName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/(.*)`,
               ),
-              replacement: path.resolve(pkgDir, value),
+              replacement: path.resolve(pkgDir, "src/$1"),
             });
           }
-          // Catch-all subpath for direct src/ access
-          aliases.push({
-            find: new RegExp(
-              `^${pkgName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/(.*)`,
-            ),
-            replacement: path.resolve(pkgDir, "src/$1"),
-          });
         }
         return aliases;
       })(),
