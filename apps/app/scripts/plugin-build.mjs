@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   CAPACITOR_PLUGIN_NAMES,
   NATIVE_PLUGINS_ROOT,
+  nativePluginDir,
 } from "./capacitor-plugin-names.mjs";
 
 const scriptFile = fileURLToPath(import.meta.url);
@@ -58,8 +59,8 @@ export function shouldBuildPluginForHost(pkg, hostPlatform) {
   return true;
 }
 
-function readPluginPackageJson(pluginsDir, name) {
-  const pkgPath = path.join(pluginsDir, name, "package.json");
+function readPluginPackageJson(_pluginsDir, name) {
+  const pkgPath = path.join(nativePluginDir(name), "package.json");
   try {
     return JSON.parse(fs.readFileSync(pkgPath, "utf8"));
   } catch {
@@ -125,7 +126,7 @@ async function main() {
   await Promise.all(
     buildablePluginNames.map(async (name) => {
       logVerbose(`[plugin:${name}] building...`);
-      await run("bun", ["run", "build"], path.join(pluginsDir, name));
+      await run("bun", ["run", "build"], nativePluginDir(name));
       logVerbose(`[plugin:${name}] done`);
     }),
   );

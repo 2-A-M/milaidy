@@ -14,15 +14,19 @@ import {
   getUiSourceAliases,
   getWorkspaceAppAliases,
 } from "../../test/vitest/workspace-aliases";
-import { CAPACITOR_PLUGIN_NAMES } from "./scripts/capacitor-plugin-names.mjs";
+import {
+  CAPACITOR_PLUGIN_NAMES,
+  NATIVE_PLUGINS_ROOT,
+  nativePluginDir,
+} from "./scripts/capacitor-plugin-names.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "../..");
 const _require = createRequire(import.meta.url);
-const nativePluginsRoot = path.join(
-  here,
-  "../../eliza/packages/native-plugins",
-);
+// Layout-aware native plugins root: legacy `eliza/packages/native-plugins/`
+// or current `eliza/plugins/plugin-native-<short>/`. See
+// `scripts/capacitor-plugin-names.mjs` for the resolution rule.
+const nativePluginsRoot = NATIVE_PLUGINS_ROOT;
 const appCorePackageRoot = getAppCoreSourceRoot(here);
 const agentSourceRoot = getAutonomousSourceRoot(here);
 const uiSourceRoot = getUiSourceRoot(here);
@@ -31,7 +35,7 @@ const capacitorCoreEntry = _require.resolve("@capacitor/core");
 const nativePluginAliasMap = Object.fromEntries(
   CAPACITOR_PLUGIN_NAMES.map((name) => [
     `@elizaos/capacitor-${name}`,
-    path.join(nativePluginsRoot, `${name}/src/index.ts`),
+    path.join(nativePluginDir(name), "src/index.ts"),
   ]),
 );
 const vitestInlineDeps = [

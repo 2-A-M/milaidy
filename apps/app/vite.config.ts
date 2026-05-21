@@ -11,7 +11,7 @@ import {
   type Plugin,
   transformWithEsbuild,
 } from "vite";
-import { resolveAppBranding } from "../../eliza/packages/app-core/src/config/app-config.ts";
+import { resolveAppBranding } from "../../eliza/packages/shared/src/config/app-config.ts";
 // Keep workspace-relative TS imports in this config so Vite transpiles them
 // while bundling the config instead of asking Node to load package-exported
 // .ts files directly in CI.
@@ -29,17 +29,23 @@ import {
 } from "../../eliza/packages/shared/src/runtime-env.ts";
 import { syncElizaEnvAliases } from "../../scripts/lib/sync-eliza-env-aliases.mjs";
 import appConfig from "./app.config";
-import { CAPACITOR_PLUGIN_NAMES } from "./scripts/capacitor-plugin-names.mjs";
+import {
+  CAPACITOR_PLUGIN_NAMES,
+  NATIVE_PLUGINS_ROOT,
+  nativePluginDir,
+} from "./scripts/capacitor-plugin-names.mjs";
 import { resolveViteDevServerRuntime } from "./vite-dev-origin.ts";
 
 const _require = createRequire(import.meta.url);
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const miladyRoot = path.resolve(here, "../..");
-const nativePluginsRoot = path.join(
-  miladyRoot,
-  "eliza/packages/native-plugins",
-);
+// Native plugin layout: legacy upstreams keep these under
+// `eliza/packages/native-plugins/<short>/`; develop ≥ 2026-05 splits each
+// into `eliza/plugins/plugin-native-<short>/`. The helper hides which one
+// is active and `nativePluginDir(name)` resolves a short name to the
+// correct directory under the active layout.
+const nativePluginsRoot = NATIVE_PLUGINS_ROOT;
 const appCoreSrcRoot = path.join(miladyRoot, "eliza/packages/app-core/src");
 const appCoreNativePluginEntrypoints = path.join(
   appCoreSrcRoot,
@@ -164,7 +170,7 @@ syncElizaEnvAliases({
 
 const NATIVE_PLUGIN_ALIAS_ENTRIES = CAPACITOR_PLUGIN_NAMES.map((name) => ({
   find: new RegExp(`^@elizaos/capacitor-${escapeRegExp(name)}$`),
-  replacement: path.join(nativePluginsRoot, `${name}/src/index.ts`),
+  replacement: path.join(nativePluginDir(name), "src/index.ts"),
 }));
 const CAPACITOR_BUILD_TARGET =
   process.env.MILADY_CAPACITOR_BUILD_TARGET ??
