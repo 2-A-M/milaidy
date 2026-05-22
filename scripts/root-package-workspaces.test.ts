@@ -48,6 +48,9 @@ describe("root package workspace config", () => {
 
     expect(
       tsconfig.compilerOptions?.paths?.["@elizaos/capacitor-llama"],
-    ).toEqual(["./eliza/packages/native-plugins/llama/src/index.ts"]);
+    ).toEqual([
+      "./eliza/plugins/plugin-native-llama/src/index.ts",
+      "./eliza/packages/native-plugins/llama/src/index.ts",
+    ]);
   });
 });

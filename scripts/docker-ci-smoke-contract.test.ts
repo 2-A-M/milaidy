@@ -122,7 +122,7 @@ describe("docker CI smoke contract", () => {
     expect(dockerignore).toContain("!eliza/apps/app-lifeops/src/**");
     expect(dockerignore).toContain("!eliza/apps/app-task-coordinator/src/**");
     expect(linker).toContain("eliza/packages/plugin-browser-bridge");
-    expect(linker).toContain("eliza/packages/native-plugins/activity-tracker");
+    expect(linker).toContain("eliza/plugins/plugin-native-activity-tracker");
     expect(linker).toContain("eliza/plugins/plugin-cron/typescript");
     expect(linker).toContain("eliza/plugins/plugin-telegram");
     expect(linker).toContain("collectWorkspaceMaps");

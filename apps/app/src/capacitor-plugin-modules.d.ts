@@ -1,67 +1,67 @@
 declare module "@elizaos/capacitor-agent" {
-  export { Agent } from "../../../eliza/packages/native-plugins/agent/src/index";
-  export type * from "../../../eliza/packages/native-plugins/agent/src/index";
+  export { Agent } from "../../../eliza/plugins/plugin-native-agent/src/index";
+  export type * from "../../../eliza/plugins/plugin-native-agent/src/index";
 }
 
 declare module "@elizaos/capacitor-appblocker" {
-  export * from "../../../eliza/packages/native-plugins/appblocker/src/index";
+  export * from "../../../eliza/plugins/plugin-native-appblocker/src/index";
 }
 
 declare module "@elizaos/capacitor-camera" {
-  export * from "../../../eliza/packages/native-plugins/camera/src/index";
+  export * from "../../../eliza/plugins/plugin-native-camera/src/index";
 }
 
 declare module "@elizaos/capacitor-canvas" {
-  export * from "../../../eliza/packages/native-plugins/canvas/src/index";
+  export * from "../../../eliza/plugins/plugin-native-canvas/src/index";
 }
 
 declare module "@elizaos/capacitor-contacts" {
-  export * from "../../../eliza/packages/native-plugins/contacts/src/index";
+  export * from "../../../eliza/plugins/plugin-native-contacts/src/index";
 }
 
 declare module "@elizaos/capacitor-desktop" {
-  export { Desktop } from "../../../eliza/packages/native-plugins/desktop/src/index";
-  export type * from "../../../eliza/packages/native-plugins/desktop/src/index";
+  export { Desktop } from "../../../eliza/plugins/plugin-native-desktop/src/index";
+  export type * from "../../../eliza/plugins/plugin-native-desktop/src/index";
 }
 
 declare module "@elizaos/capacitor-gateway" {
-  export * from "../../../eliza/packages/native-plugins/gateway/src/index";
+  export * from "../../../eliza/plugins/plugin-native-gateway/src/index";
 }
 
 declare module "@elizaos/capacitor-location" {
-  export * from "../../../eliza/packages/native-plugins/location/src/index";
+  export * from "../../../eliza/plugins/plugin-native-location/src/index";
 }
 
 declare module "@elizaos/capacitor-messages" {
-  export * from "../../../eliza/packages/native-plugins/messages/src/index";
+  export * from "../../../eliza/plugins/plugin-native-messages/src/index";
 }
 
 declare module "@elizaos/capacitor-mobile-signals" {
-  export * from "../../../eliza/packages/native-plugins/mobile-signals/src/index";
+  export * from "../../../eliza/plugins/plugin-native-mobile-signals/src/index";
 }
 
 declare module "@elizaos/capacitor-phone" {
-  export * from "../../../eliza/packages/native-plugins/phone/src/index";
+  export * from "../../../eliza/plugins/plugin-native-phone/src/index";
 }
 
 declare module "@elizaos/capacitor-screencapture" {
-  export * from "../../../eliza/packages/native-plugins/screencapture/src/index";
+  export * from "../../../eliza/plugins/plugin-native-screencapture/src/index";
 }
 
 declare module "@elizaos/capacitor-swabble" {
-  export * from "../../../eliza/packages/native-plugins/swabble/src/index";
+  export * from "../../../eliza/plugins/plugin-native-swabble/src/index";
 }
 
 declare module "@elizaos/capacitor-system" {
-  export * from "../../../eliza/packages/native-plugins/system/src/index";
+  export * from "../../../eliza/plugins/plugin-native-system/src/index";
 }
 
 declare module "@elizaos/capacitor-talkmode" {
-  export * from "../../../eliza/packages/native-plugins/talkmode/src/index";
+  export * from "../../../eliza/plugins/plugin-native-talkmode/src/index";
 }
 
 declare module "@elizaos/capacitor-websiteblocker" {
-  export * from "../../../eliza/packages/native-plugins/websiteblocker/src/index";
+  export * from "../../../eliza/plugins/plugin-native-websiteblocker/src/index";
 }
 
 declare module "@elizaos/signal-native";
