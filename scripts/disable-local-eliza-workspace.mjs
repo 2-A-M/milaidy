@@ -62,7 +62,11 @@ export const DISABLED_WORKSPACE_GLOBS = [
   PLUGIN_TYPESCRIPT_WORKSPACE_GLOB,
 ];
 export const LOCAL_ONLY_WORKSPACE_GLOBS = [
+  // Legacy capacitor-plugin layout (upstream eliza < 2026-05).
   "eliza/packages/native-plugins/*",
+  // Current capacitor-plugin layout — each plugin is its own workspace.
+  // Both globs ship together so we work pre-bump and post-bump.
+  "eliza/plugins/plugin-native-*",
   "eliza/apps/*",
 ];
 export const LOCAL_ONLY_ELIZA_PACKAGE_PATHS = {
