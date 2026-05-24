@@ -172,6 +172,28 @@ describe("getTemporaryElizaWorkspaceEntries", () => {
     ).toEqual([]);
   });
 
+  it("skips the app-control CI stub when the real plugin workspace exists", () => {
+    const elizaRoot = "/repo/eliza";
+    const existingPaths = new Set([
+      path.join(
+        elizaRoot,
+        "..",
+        "scripts",
+        "ci-stubs",
+        "elizaos-plugin-app-control",
+        "package.json",
+      ),
+      path.join(elizaRoot, "plugins", "plugin-app-control", "package.json"),
+    ]);
+
+    expect(
+      getTemporaryElizaWorkspaceEntries(elizaRoot, {
+        pathExists: (targetPath) => existingPaths.has(targetPath),
+      }),
+    ).toEqual([]);
+  });
+
+
   it("includes cloud billing workspace when the nested package exists", () => {
     const elizaRoot = "/repo/eliza";
     const billingPkg = path.join(

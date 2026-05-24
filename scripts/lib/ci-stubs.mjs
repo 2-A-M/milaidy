@@ -36,7 +36,7 @@ export const CI_STUBS = Object.freeze([
   {
     packageName: "@elizaos/plugin-app-control",
     stubDirName: "elizaos-plugin-app-control",
-    elizaWorkspaceEntry: "plugins/plugin-app-control/typescript",
+    elizaWorkspaceEntry: "plugins/plugin-app-control",
   },
   {
     packageName: "@elizaos/plugin-wechat",
